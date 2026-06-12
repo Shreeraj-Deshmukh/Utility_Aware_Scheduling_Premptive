@@ -1,0 +1,71 @@
+
+The variable | short description
+
+PROCESSOR related: 
+
+N_prc        Number of homogeneous processors in the set P.
+P_x          A specific processor (index x); runs one job at a time (exclusivity).
+N_frq        Number of discrete frequency levels
+F = {f_z}    Normalized frequency set
+f_z          A specific frequency level (index z).
+f_max        Highest frequency, normalized to 1.0 (= f_{N_frq}).
+
+
+TASK related (job related too):
+N_tsk            Number of periodic real-time tasks.
+T_i              Task i in the task set T.
+p_i              Period of task T_i (our periods are harmonic).
+T_{i,j}          The j-th job (activation) of task T_i.
+r_{i,j}          Release/arrival time of job T_{i,j}  =  (j-1)*p_i.
+d_{i,j}          Deadline of job
+h                Hyperperiod 
+N_job_i          Number of jobs of task T_i in one hyper-period  =  h / p_i.
+G_{i,0}          Mandatory segment of task T_i
+G_{i,k}          k-th optional segment of T_i , sequential
+N_seg_i          Number of optional segments task T_i has.
+e_{i,k}          Execution time to run up to the k-th segment at f_max (e_{i,0} = mandatory only).
+e^o_{i,k}        Size (extra execution time) of individual optional segment k
+k_off            Segment count already assigned to a job by the offline schedule (online work adds beyond this).
+
+
+ENERGY related:
+e^eff_{i,j,k,z}  Effective execution time of job T_{i,j} upto k segment
+E_{i,j,k,z}      Energy consumed = alpha*e^eff + beta*(f_z^2)*sum e_{i,q}.
+alpha            Static leakage current
+beta             Dynamic (default 0.5).
+f_opt            Energy-minimizing frequency = (alpha / 2*beta)^(1/3); under defaults equals f_max,
+                 so lowering frequency RAISES energy.
+B                Total energy budget
+E_total          Sum of energy over all jobs in the hyper-period.
+E_slack_init     Initial energy headroom after executions
+
+
+UTILITY calculation
+u_i              Utility gained per unit of optional execution time
+U_job_{i,j}      Utility from a single job's executed optional segments.
+U_tsk_i          Utility of task T_i summed over its jobs.
+Phi              The objective function
+rho_Px(t)        Future utility density on processor P_x 
+
+
+FEASIBILITY/ constraints
+
+DBF(t1,t2,x)     Demand bound function
+A, D             Sets of all arrival times and deadlines (A_x, D_x are the per-processor versions).
+S(t1,t2,x)       Set of jobs active within window [t1, t2] on processor P_x.
+Feasibility      DBF(t1,t2,x) <= t2 - t1 , true or false
+
+
+ONLINE SLACK : dp approcch
+
+WCET                 Worst-case execution time
+ACET                 Actual-case execution time 
+Delta_t (Dt)         Time slack local on processor
+Delta_e (De)         Energy slack: global.
+(a_t, a_e)           Slack allocated to the current job in the DP
+V[j][Dt][De]         DP table
+gain(j,a_t,a_e)      Utility job j gets from a_t extra time and a_e extra energy.
+A[j][Dt][De]         Action table 
+min_window_slack(j)  Binding DBF-window slack for job j
+
+
