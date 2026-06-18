@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>USRT Online DP — Assumptions, Limitations & Compromises</title>
+<style>
+  :root{
+    --bg:#f7f8fa; --card:#fff; --ink:#1f2430; --muted:#5b6472; --accent:#1f4e8c;
+    --crit:#b3261e; --crit-bg:#fdecea; --high:#b35900; --high-bg:#fff4e5;
+    --med:#7a6400; --med-bg:#fffbe5; --low:#1b5e20; --low-bg:#e9f5ea;
+    --code-bg:#f1f3f6; --border:#d8dde5;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;padding:0 0 4rem;font-family:"Segoe UI",system-ui,-apple-system,sans-serif;
+       background:var(--bg);color:var(--ink);line-height:1.6;}
+  header{background:linear-gradient(135deg,#16365c 0%,#1f4e8c 60%,#2b6cb0 100%);
+         color:#fff;padding:2.2rem 2rem 1.8rem;}
+  header h1{margin:0 0 .4rem;font-size:1.65rem;font-weight:650;}
+  header p{margin:.15rem 0;opacity:.92;font-size:.95rem;}
+  main{max-width:1080px;margin:0 auto;padding:1.5rem 1.5rem 0;}
+  h2{color:var(--accent);font-size:1.3rem;margin:2.4rem 0 .8rem;
+     border-bottom:2px solid var(--border);padding-bottom:.35rem;}
+  h3{font-size:1.05rem;margin:1.3rem 0 .5rem;}
+  section.card{background:var(--card);border:1px solid var(--border);border-radius:10px;
+               padding:1.1rem 1.4rem;margin:1rem 0;box-shadow:0 1px 3px rgba(20,30,50,.06);}
+  .badge{display:inline-block;font-size:.72rem;font-weight:700;letter-spacing:.04em;
+         text-transform:uppercase;border-radius:4px;padding:.15rem .5rem;margin-right:.55rem;
+         vertical-align:middle;}
+  .badge.crit{background:var(--crit-bg);color:var(--crit);border:1px solid var(--crit);}
+  .badge.high{background:var(--high-bg);color:var(--high);border:1px solid var(--high);}
+  .badge.med{background:var(--med-bg);color:var(--med);border:1px solid var(--med);}
+  .badge.low{background:var(--low-bg);color:var(--low);border:1px solid var(--low);}
+  .badge.ok{background:var(--low-bg);color:var(--low);border:1px solid var(--low);}
+  .loc{font-family:Consolas,"Cascadia Code",monospace;font-size:.82rem;color:var(--muted);
+       background:var(--code-bg);border-radius:4px;padding:.08rem .4rem;}
+  code{font-family:Consolas,"Cascadia Code",monospace;font-size:.86em;background:var(--code-bg);
+       border-radius:4px;padding:.07rem .32rem;}
+  pre{background:#20242c;color:#dde3ec;border-radius:8px;padding:.9rem 1.1rem;overflow-x:auto;
+      font-size:.82rem;line-height:1.5;font-family:Consolas,"Cascadia Code",monospace;}
+  pre .cm{color:#7f8a9d;} pre .bad{color:#ff8a80;font-weight:600;} pre .good{color:#9ccc8d;}
+  table{border-collapse:collapse;width:100%;margin:.8rem 0;font-size:.9rem;background:var(--card);}
+  th,td{border:1px solid var(--border);padding:.45rem .7rem;text-align:left;vertical-align:top;}
+  th{background:#eef2f7;font-weight:650;}
+  .fix{border-left:4px solid var(--low);background:var(--low-bg);padding:.55rem .9rem;
+       border-radius:0 6px 6px 0;margin:.7rem 0;font-size:.92rem;}
+  .fix strong{color:var(--low);}
+  .evidence{border-left:4px solid var(--accent);background:#eef3fa;padding:.55rem .9rem;
+            border-radius:0 6px 6px 0;margin:.7rem 0;font-size:.92rem;}
+  .evidence strong{color:var(--accent);}
+  .formula{background:var(--code-bg);border-radius:6px;padding:.6rem 1rem;
+           font-family:"Cambria Math",Cambria,serif;font-size:1.02rem;margin:.6rem 0;overflow-x:auto;}
+  nav.toc{background:var(--card);border:1px solid var(--border);border-radius:10px;
+          padding:1rem 1.4rem;margin-top:1rem;font-size:.93rem;}
+  nav.toc ul{margin:.3rem 0;padding-left:1.2rem;} nav.toc a{color:var(--accent);text-decoration:none;}
+  nav.toc a:hover{text-decoration:underline;}
+  .muted{color:var(--muted);font-size:.9rem;}
+  footer{text-align:center;color:var(--muted);font-size:.82rem;margin-top:3rem;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>USRT Online DP — Assumptions, Limitations &amp; Compromises</h1>
+  <p>Subject: <code style="background:rgba(255,255,255,.15);color:#fff">usrt/online/</code> — joint (time, energy) slack-distribution DP (paper Section VI)</p>
+  <p>Reference design: <em>usrt_online_dp_doc.pdf</em> &nbsp;•&nbsp; Energy model: α=1.0, β=0.5</p>
+  <p>Status: DP core verified against every table/trace in the design document; demo on <code style="background:rgba(255,255,255,.15);color:#fff">testcase.py</code> feasible (+55.3 utility).</p>
+</header>
+
+<main>
+
+<nav class="toc">
+  <strong>Contents</strong>
+  <ul>
+    <li><a href="#approach">0. The DP approach in one screen</a></li>
+    <li><a href="#assumptions">1. Assumptions (A1–A9)</a></li>
+    <li><a href="#limitations">2. Limitations (L1–L10)</a></li>
+    <li><a href="#compromises">3. Compromises (C1–C5)</a></li>
+    <li><a href="#modules">4. Important functions &amp; modules</a></li>
+    <li><a href="#api">5. The "API" from the document → code map</a></li>
+  </ul>
+</nav>
+
+<!-- ───────────────────────────── APPROACH ───────────────────────────── -->
+<h2 id="approach">0. The DP Approach in One Screen</h2>
+<section class="card">
+  <p>At each early completion, a job that finished before its WCET frees a time
+  windfall Δt (processor-local) and an energy windfall Δe (global). A precomputed
+  dynamic program decides, optimally, how to spread that windfall over the
+  downstream jobs to maximise added optional-segment utility.</p>
+
+  <div class="formula">
+    V[j][Δt][Δe] = max<sub>(a<sub>t</sub>, a<sub>e</sub>)</sub> &nbsp;{ gain(j, a<sub>t</sub>, a<sub>e</sub>) + V[j+1][Δt − a<sub>t</sub>][Δe − a<sub>e</sub>] }
+  </div>
+
+  <p><strong>Exact breakpoint representation.</strong> Each value-function level is
+  stored not as a dense grid but as the Pareto frontier of
+  <code>(req_t, req_e, value)</code> tuples — the finite set of reachable
+  cumulative cost vectors. This is exact (no quantisation) and naturally
+  "aggregated."</p>
+  <p><strong>Per-processor + global energy.</strong> Time slack is local, so one DP
+  is built per processor; the single global energy pool is arbitrated across
+  processors by future utility density.</p>
+  <p><strong>Full 4-option actions.</strong> Each downstream job may re-pick
+  <code>(k′ ≥ k_off, z′)</code>; signed (a<sub>t</sub>, a<sub>e</sub>) deltas encode
+  spend / save / time→energy / energy→time.</p>
+  <div class="evidence"><strong>Validation:</strong> all 7 published tables
+  (V[1]–V[4] across both worked examples) and all 3 traces (19.0 / 17.0 / 10.0)
+  reproduce cell-for-cell — see <span class="loc">usrt/online/worked_examples.py</span>.</div>
+</section>
+
+<!-- ───────────────────────────── ASSUMPTIONS ───────────────────────────── -->
+<h2 id="assumptions">1. Assumptions</h2>
+
+<section class="card">
+  <table>
+    <tr><th>#</th><th>Assumption</th><th>Where / why</th></tr>
+    <tr><td><b>A1</b></td>
+        <td><b>Online only ADDS segments</b> (k′ ≥ k_off). Offline-committed
+            optional segments are never dropped online.</td>
+        <td><span class="loc">actions.py</span> — the action loop starts at
+            <code>k_off</code>. Matches the paper's "execute <em>additional</em>
+            optional segments." Removing committed utility is out of scope.</td></tr>
+    <tr><td><b>A2</b></td>
+        <td><b>Δt is a scalar planning budget</b> per processor chain; the DP
+            does not model the full preemptive-DBF window lattice during planning.</td>
+        <td>Doc Issue 4. The exact constraint is re-imposed at commit time by the
+            dynamic DBF (see A6), so the scalar is a <em>planning proxy</em>, never
+            the feasibility authority.</td></tr>
+    <tr><td><b>A3</b></td>
+        <td><b>Global energy contention is resolved by proportional future-
+            utility-density share</b> (parameter-free default); strict priority
+            optional.</td>
+        <td><span class="loc">density.py</span>. The doc's Approach C; it is
+            explicitly a heuristic ordering, not a joint optimum (see L3).</td></tr>
+    <tr><td><b>A4</b></td>
+        <td><b>Costs come from the paper's energy model; gain depends only on k′.</b>
+            a<sub>t</sub>, a<sub>e</sub> are signed deltas vs the offline baseline;
+            utility is earned on f<sub>max</sub>-normalised work (paper Eq. 8).</td>
+        <td><span class="loc">actions.build_job_actions</span> via
+            <span class="loc">models.energy_val / e_eff_val</span>.</td></tr>
+    <tr><td><b>A5</b></td>
+        <td><b>Frequency may be re-selected online before a job starts.</b></td>
+        <td>The paper forbids changing frequency <em>once a job starts</em>; the
+            online decision is taken at the prior completion, before start — so
+            this is consistent, not a violation.</td></tr>
+    <tr><td><b>A6</b></td>
+        <td><b>Feasibility binds on REALISED execution, not worst-case.</b> The
+            commit-time DBF credits each completed job's actual (reduced) effective
+            time; energy binds on the realised pool (B − actual_consumed ≥ 0).</td>
+        <td><span class="loc">controller._timing_ok_dynamic</span>,
+            <span class="loc">controller.energy_pool</span>. This is the correct
+            notion for an online phase (see L1-note and Compromise C1).</td></tr>
+    <tr><td><b>A7</b></td>
+        <td><b>Time is genuinely per-processor; energy is the only cross-processor
+            coupling.</b></td>
+        <td>Doc Section 5. Justifies independent per-processor time DPs +
+            centralised energy arbitration (avoids the T<sup>m</sup> blow-up).</td></tr>
+    <tr><td><b>A8</b></td>
+        <td><b>Simulator ACET model:</b> actual = ratio × committed effective time;
+            energy freed proportionally (Δe = (1−ratio)·E<sub>committed</sub>).</td>
+        <td><span class="loc">simulator._windfall</span>. A modelling choice for the
+            <em>demo</em>; the DP/controller are agnostic to how (Δt, Δe) arise.</td></tr>
+    <tr><td><b>A9</b></td>
+        <td><b>EDF execution order, deterministic tie-break</b> (deadline, release,
+            task, job); periodic tasks over one hyper-period.</td>
+        <td><span class="loc">dp._edf_order</span>. Inherits the offline model.</td></tr>
+  </table>
+</section>
+
+<!-- ───────────────────────────── LIMITATIONS ───────────────────────────── -->
+<h2 id="limitations">2. Limitations</h2>
+
+<section class="card">
+  <span class="badge crit">Material</span>
+  <h3>L1. Frequency-conversion options are inert under α=1, β=0.5</h3>
+  <p>Energy per unit work α/f + βf² is minimised at f* = (α/2β)<sup>⅓</sup> = 1.0 =
+  f<sub>max</sub>. So Option 3 (lower freq to save energy) never saves energy and
+  Option 4 cannot exceed f<sub>max</sub>. The 4-option action set is fully coded and
+  correct, but under these constants Pareto pruning discards every conversion
+  action — the DP collapses to Save + Spend.</p>
+  <div class="fix"><strong>Consequence / fix:</strong> the implementation is already
+  general; choosing leakage-dominated constants (e.g. α=0.15, β=1.0 → f*≈0.42)
+  activates Options 3/4 with <em>zero code change</em>. Until then, the DVFS axis
+  is exercised only structurally, not numerically.</div>
+</section>
+
+<section class="card">
+  <span class="badge high">High</span>
+  <h3>L2. Scalar-Δt planning vs exact preemptive DBF (achieved ≤ DP value)</h3>
+  <p>The DP threads time as one scalar budget along the per-processor chain. When
+  a completion frees time in window W and the DP funds additions to several
+  downstream jobs that do <em>not</em> all share W, the scalar model can be
+  optimistic. The commit-time dynamic DBF then trims the infeasible subset.</p>
+  <div class="evidence"><strong>Net effect:</strong> the result is always feasible
+  (constraint safety wins), but the achieved utility can be ≤ the raw DP table
+  value in those cases. For single-windfall sequential chains — including both
+  worked examples — there is no gap (achieved = DP value, verified).</div>
+</section>
+
+<section class="card">
+  <span class="badge high">High</span>
+  <h3>L3. Energy arbitration is greedy, not jointly optimal</h3>
+  <p>Proportional (or strict) density share resolves cross-processor energy
+  contention cheaply but can mis-prioritise — e.g. one processor with a single
+  very-high-density job vs another with several medium jobs whose combined value
+  is larger (the doc's own caveat). The exact joint state
+  V[j][Δt<sub>P0</sub>]…[Δt<sub>Pm−1</sub>][Δe] is exponential in m and was
+  deliberately not built.</p>
+  <div class="evidence">Observed in the demo: strict arbitration yielded +20.3
+  vs proportional +55.3 on the same offline schedule — the split rule materially
+  changes the outcome.</div>
+</section>
+
+<section class="card">
+  <span class="badge med">Medium</span>
+  <h3>L4. "Precompute once" holds per event, not for the whole run</h3>
+  <p>A single completion is a pure lookup. But once a windfall upgrades downstream
+  baselines, the affected processor's DP is <em>rebuilt</em> so later completions
+  stay exact (<span class="loc">controller._build_dp</span> after each commit). It
+  is cheap (chain length × actions), but it is a rebuild, not one frozen table for
+  the hyper-period.</p>
+  <div class="fix"><strong>Future work:</strong> incremental DP update (patch only
+  the changed suffix) instead of full per-processor rebuild.</div>
+</section>
+
+<section class="card">
+  <span class="badge med">Medium</span>
+  <h3>L5. Simultaneous completions are serialised</h3>
+  <p>The "two early completions sharing Δe" question (doc Section 5 / Improvements)
+  is handled by processing events in release order and arbitrating the pool at each
+  — an approximation of true concurrency, not a simultaneous joint decision.</p>
+</section>
+
+<section class="card">
+  <span class="badge med">Medium</span>
+  <h3>L6. No proven polynomial bound on the Pareto frontier</h3>
+  <p>Frontier size is bounded in practice by pruning (segments × frequencies per
+  job, then Pareto-dominated points removed) and the prune is O(n²). Worst-case
+  growth along a long chain is not formally bounded, and the prune is not the
+  asymptotically optimal 3-D Pareto algorithm.</p>
+</section>
+
+<section class="card">
+  <span class="badge low">Low</span>
+  <h3>L7. Doc Issue-5 bounds &amp; Lazy DP not implemented</h3>
+  <p>Exact breakpoints make the table sparse, so I rely on that sparsity rather
+  than explicitly clipping by schedule-derived ceilings (∆t ≤ min-window-slack,
+  ∆e ≤ E<sup>slack</sup><sub>init</sub>) or doing Lazy DP. For very large optional-
+  work sets the frontier could be larger than strictly necessary.</p>
+</section>
+
+<section class="card">
+  <span class="badge low">Low</span>
+  <h3>L8. Reconstruction follows the precomputed split, not realised downstream ACETs</h3>
+  <p>A completion distributes its windfall using the precomputed optimal split;
+  it does not re-optimise against the <em>actual</em> ACETs the downstream jobs
+  will later realise (those are captured by their own subsequent completion
+  events). Within a single event this is exact; across events it is event-greedy.</p>
+</section>
+
+<section class="card">
+  <span class="badge low">Low</span>
+  <h3>L9. Time perishability is enforced structurally, not on an explicit timeline</h3>
+  <p>"Use-it-now-or-lose-it" time slack is enforced by the dynamic DBF (a window's
+  demand can never exceed its length) rather than by an explicit expiry clock. We
+  do not model partial carry-forward of unused Δt across non-adjacent windows.</p>
+</section>
+
+<section class="card">
+  <span class="badge low">Low</span>
+  <h3>L10. Online quality is capped by the offline schedule</h3>
+  <p>The controller consumes a fixed offline schedule (v5b) as its baseline. It can
+  only <em>add</em> on top of it; a poor offline mapping/segment choice limits the
+  ceiling of online gains. The online phase does not re-map or re-balance.</p>
+</section>
+
+<!-- ───────────────────────────── COMPROMISES ───────────────────────────── -->
+<h2 id="compromises">3. Compromises (deliberate trade-offs)</h2>
+
+<section class="card">
+  <table>
+    <tr><th>#</th><th>Compromise</th><th>Chose</th><th>Gave up</th></tr>
+    <tr><td><b>C1</b></td>
+        <td>Feasibility model</td>
+        <td><b>Dynamic DBF</b> (credits realised early completions) — produces real
+            online gains and is the honest online notion.</td>
+        <td>Worst-case robustness of the <em>final</em> schedule: a static WCET
+            re-check of the end state will look over-full, by design.</td></tr>
+    <tr><td><b>C2</b></td>
+        <td>Multi-processor energy</td>
+        <td><b>Per-processor time DP + heuristic density arbitration</b> — each
+            table is N×T×E.</td>
+        <td>The exact joint optimum over a shared Δe (intractable: T<sup>m</sup>).</td></tr>
+    <tr><td><b>C3</b></td>
+        <td>State after upgrades</td>
+        <td><b>Lazy per-processor rebuild</b> on baseline change.</td>
+        <td>A truly incremental DP patch (more code, marginal payoff here).</td></tr>
+    <tr><td><b>C4</b></td>
+        <td>Input schedule</td>
+        <td><b>Reuse the v5b offline pipeline</b> — clean integration, one command.</td>
+        <td>Joint offline+online co-optimisation; online is strictly a top-up.</td></tr>
+    <tr><td><b>C5</b></td>
+        <td>DP/DBF disagreement</td>
+        <td><b>Trim to a feasible subset</b> (constraint safety first).</td>
+        <td>Matching the raw DP table value in the rare optimistic case (L2).</td></tr>
+  </table>
+  <p class="muted">None of these are probabilistic: every decision is the DP optimum,
+  committed only if it provably satisfies the dynamic DBF and the energy pool — per
+  the explicit "never drop a constraint" requirement.</p>
+</section>
+
+<!-- ───────────────────────────── MODULES ───────────────────────────── -->
+<h2 id="modules">4. Important Functions &amp; Modules</h2>
+
+<section class="card">
+  <h3>New package — <span class="loc">usrt/online/</span></h3>
+  <table>
+    <tr><th>Module</th><th>Key functions / types</th><th>Role</th></tr>
+    <tr><td><span class="loc">value_function.py</span></td>
+        <td><code>Entry</code>, <code>prune()</code>, <code>compose()</code>,
+            <code>query()</code>, <code>base_level()</code></td>
+        <td><b>DP core.</b> Exact breakpoint step-function; <code>compose</code> is
+            the right-to-left recurrence, <code>query</code> the online lookup.</td></tr>
+    <tr><td><span class="loc">actions.py</span></td>
+        <td><code>Action</code> (namedtuple), <code>build_job_actions()</code></td>
+        <td>Per-job 4-option action set with signed (a<sub>t</sub>, a<sub>e</sub>, gain)
+            and the timing gate.</td></tr>
+    <tr><td><span class="loc">dp.py</span></td>
+        <td><code>build_processor_dp()</code>, <code>ProcessorDP.distribute()</code>,
+            <code>ProcessorDP.best_value()</code>, <code>_edf_order()</code>,
+            <code>JobSlot</code>, <code>PlannedAction</code></td>
+        <td>Per-processor precompute over every EDF suffix + decision reconstruction.</td></tr>
+    <tr><td><span class="loc">density.py</span></td>
+        <td><code>future_utility_density()</code>, <code>arbitrate_energy()</code></td>
+        <td>ρ<sub>x</sub>(t) and the global-energy split (proportional / strict).</td></tr>
+    <tr><td><span class="loc">controller.py</span></td>
+        <td><code>OnlineController</code>, <code>on_completion()</code>,
+            <code>_commit_with_guarantee()</code>, <code>_timing_ok_dynamic()</code>,
+            <code>_eff()</code>, <code>JobDecision</code></td>
+        <td>Runtime owner: energy pool, arbitration, DP lookup, <b>hard dynamic-DBF
+            + energy guarantee</b>, lazy rebuild.</td></tr>
+    <tr><td><span class="loc">simulator.py</span></td>
+        <td><code>OnlineSimulator</code>, <code>SimConfig</code>, <code>run()</code>,
+            <code>verify_single()</code>, <code>_windfall()</code></td>
+        <td>Discrete-event ACET≤WCET driver + single-event validator (achieved = DP).</td></tr>
+    <tr><td><span class="loc">worked_examples.py</span></td>
+        <td><code>verify()</code>, <code>build_levels()</code>, <code>table()</code>,
+            <code>reconstruct()</code></td>
+        <td>Encodes the doc's two examples; asserts every table cell + trace.</td></tr>
+  </table>
+
+  <h3>Reused existing modules</h3>
+  <table>
+    <tr><th>Module</th><th>Used for</th></tr>
+    <tr><td><span class="loc">usrt/models.py</span></td>
+        <td><code>energy_val</code>, <code>e_eff_val</code>, <code>total_energy</code>,
+            <code>total_utility</code>, <code>ALPHA</code>, <code>BETA</code> — cost/utility model.</td></tr>
+    <tr><td><span class="loc">usrt/utils.py</span></td>
+        <td><code>lcm_list</code>, <code>gcd_list</code>, <code>build_cum</code>,
+            <code>build_job_times</code>, <code>build_proc_jobs</code>.</td></tr>
+    <tr><td><span class="loc">usrt/dbf/slack.py</span></td>
+        <td><code>min_slack_for_job</code> — the <em>default</em> per-job time cap in
+            <code>build_processor_dp</code> (the controller overrides it with the
+            deadline-interval cap at runtime — see note).</td></tr>
+    <tr><td><span class="loc">usrt/mapping/*, usrt/phases/*</span></td>
+        <td><code>quantum_sps_mapping</code>, <code>refine_mapping_2b</code>,
+            <code>phase_aggressive_scaling</code>, <code>phase_optional_segments</code>,
+            <code>phase_swap_local_search</code> — to build the offline input schedule
+            in <span class="loc">solvers/online_demo.py</span>.</td></tr>
+    <tr><td><span class="loc">run.py</span></td>
+        <td>Registered solver key <code>"online"</code>; added a UTF-8 stdout
+            reconfigure (also fixes the prior cp1252 console crash).</td></tr>
+  </table>
+  <div class="fix"><strong>Accuracy note:</strong> at runtime the controller passes an
+  explicit <code>time_caps</code> = deadline-interval per job, so
+  <code>min_slack_for_job</code> (the static window slack) is the library default in
+  <code>build_processor_dp</code> but is <em>bypassed</em> in the live online path —
+  because the binding limiter online is the observed windfall plus the dynamic DBF,
+  not the offline-exhausted static slack. (This was the fix that turned a 0-gain
+  result into +55.3.)</div>
+</section>
+
+<!-- ───────────────────────────── API ───────────────────────────── -->
+<h2 id="api">5. The "API" From the Document → Code Map</h2>
+
+<section class="card">
+  <p>No external or third-party API/service is used by the online phase — it is pure
+  Python standard library (<code>collections.namedtuple</code>, <code>random</code>)
+  plus the repo's own modules. The design document defines no <em>code</em> API; its
+  "API" is mathematical notation, mapped to functions as follows:</p>
+  <table>
+    <tr><th>Document concept</th><th>Implementation</th></tr>
+    <tr><td>The table <code>V[j][Δt][Δe]</code></td>
+        <td><code>list[Entry]</code> per level, built by <code>compose()</code>
+            (<span class="loc">value_function.py</span>)</td></tr>
+    <tr><td>Right-to-left recurrence</td>
+        <td><code>build_processor_dp()</code> (<span class="loc">dp.py</span>)</td></tr>
+    <tr><td><code>gain(j, a_t, a_e)</code> + the four options</td>
+        <td><code>build_job_actions()</code> → <code>Action(a_t, a_e, gain, k, z)</code>
+            (<span class="loc">actions.py</span>)</td></tr>
+    <tr><td>Online lookup at completion</td>
+        <td><code>query()</code> / <code>OnlineController.on_completion()</code></td></tr>
+    <tr><td>Action table <code>A</code> (reconstruction)</td>
+        <td><code>Entry.nxt</code> chain + <code>ProcessorDP.distribute()</code></td></tr>
+    <tr><td>Utility-density arbitration <code>ρ_x(t)</code></td>
+        <td><code>future_utility_density()</code> / <code>arbitrate_energy()</code></td></tr>
+  </table>
+  <p class="muted">Entry point for the whole flow: <code>python run.py testcase.py online</code>.</p>
+</section>
+
+<footer>
+  Generated from a source-level analysis of <code>C:\homogenous\V2\usrt\online</code>
+  against <em>usrt_online_dp_doc.pdf</em>.
+</footer>
+
+</main>
+</body>
+</html>

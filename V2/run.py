@@ -14,6 +14,7 @@ Usage
     heuristic_v5a — Quantum SPS + Refine Mapping 2a (linear doublet scan) + Phases 2-6
     heuristic_v5b — Quantum SPS + Refine Mapping 2b (one-swap-one-scan)  + Phases 2-6
     heuristic_claudeoptimal — Phases 1-6 + double-giver swap + iterated greedy
+    online        — Offline v5b schedule + online slack-distribution DP (Section VI)
 
 Examples
 --------
@@ -21,10 +22,17 @@ Examples
   python run.py testcase.py heuristic_v5a
   python run.py testcase.py heuristic_v5b
   python run.py testcase.py ilp_v2
+  python run.py testcase.py online
 """
 
 import sys
 import os
+
+# Force UTF-8 console output (Windows cp1252 cannot encode the α/β/box glyphs).
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+except (AttributeError, ValueError):
+    pass
 
 # Make sure the V2 directory is on the path when running as a script
 _here = os.path.dirname(os.path.abspath(__file__))
@@ -42,6 +50,7 @@ SOLVERS = {
     "heuristic_v5a":          "usrt.solvers.heuristic_v5a",
     "heuristic_v5b":          "usrt.solvers.heuristic_v5b",
     "heuristic_claudeoptimal":"usrt.solvers.heuristic_claudeoptimal",
+    "online":                 "usrt.solvers.online_demo",
 }
 
 DEFAULT_SOLVER = "heuristic_v4"
