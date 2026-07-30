@@ -24,14 +24,15 @@ from ..models     import energy_val, e_eff_val
 from .controller  import OnlineController
 
 SimConfig = namedtuple("SimConfig", [
-    "acet_ratio",   # fixed ratio in (0,1], or None to draw per job
-    "ratio_min",    # lower bound when drawing
-    "ratio_max",    # upper bound when drawing
-    "seed",         # RNG seed (reproducible)
-    "arbitration",  # "proportional" | "strict"
+    "acet_ratio",    # fixed ratio in (0,1], or None to draw per job
+    "ratio_min",     # lower bound when drawing
+    "ratio_max",     # upper bound when drawing
+    "seed",          # RNG seed (reproducible)
+    "arbitration",   # "proportional" | "strict"
     "verbose",
+    "max_frontier",  # per-level Pareto-frontier cap (aggregate states)
 ])
-SimConfig.__new__.__defaults__ = (0.7, 0.5, 0.9, 12345, "proportional", True)
+SimConfig.__new__.__defaults__ = (0.7, 0.5, 0.9, 12345, "proportional", True, 256)
 
 _S  = "=" * 76
 _S2 = "-" * 76
@@ -43,7 +44,8 @@ class OnlineSimulator:
         self.config = config or SimConfig()
         self.ctrl = OnlineController(
             processors, tasks, B, seg_k, freq_idx, mapping,
-            arbitration=self.config.arbitration)
+            arbitration=self.config.arbitration,
+            max_frontier=self.config.max_frontier)
         self._rng = random.Random(self.config.seed)
         self.offline_utility = self.ctrl.total_utility()
         self.offline_energy  = self.ctrl.total_energy()
@@ -82,7 +84,7 @@ class OnlineSimulator:
             print(_S2)
             print(f"  Offline utility : {self.offline_utility:.6f}")
             print(f"  Offline energy  : {self.offline_energy:.4f}  "
-                  f"(budget={cfg.B}  pool={cfg.energy_pool:.4f})")
+                  f"(budget={cfg.B}  pool={cfg.pool.level():.4f})")
             print(_S2)
             print(f"  {'event':>5}  {'job':>10}  {'dt':>8}  {'de':>8}  "
                   f"{'+util':>9}  {'#chg':>5}  {'pool':>9}")
@@ -99,12 +101,13 @@ class OnlineSimulator:
             if self.config.verbose and (added > 1e-9 or committed):
                 print(f"  {n_event:>5}  T{self.ctrl.tasks[i]['id']},j{j:<5}  "
                       f"{dt:>8.4f}  {de:>8.4f}  {added:>9.4f}  "
-                      f"{len(committed):>5}  {cfg.energy_pool:>9.4f}")
+                      f"{len(committed):>5}  {cfg.pool.level():>9.4f}")
 
         final_u  = cfg.total_utility()
         wcet_e   = cfg.total_energy()          # conservative WCET commitment
-        actual_e = cfg.B - cfg.energy_pool     # realised consumption (C3 binds here)
+        actual_e = cfg.B - cfg.pool.level()    # realised consumption (C3 binds here)
         feasible = cfg.is_feasible()
+        pstats   = cfg.pool.stats()
 
         if self.config.verbose:
             print(_S2)
@@ -114,8 +117,12 @@ class OnlineSimulator:
                   f"+{final_u - self.offline_utility:.6f})")
             print(f"  Energy (WCET commit) : {wcet_e:.4f}   (budget={cfg.B})")
             print(f"  Energy (realised)    : {actual_e:.4f}   "
-                  f"pool/slack={cfg.energy_pool:.4f}   [C3 binds on realised]")
+                  f"pool/slack={cfg.pool.level():.4f}   [C3 binds on realised]")
             print(f"  Feasible (dyn-DBF + energy pool >= 0): {feasible}")
+            print(f"  Shared pool (semaphore): {pstats['acquisitions']} lock "
+                  f"acquisitions, spent={pstats['spent_total']:.4f}, "
+                  f"refunded={pstats['refunded_total']:.4f}, "
+                  f"denied={pstats['denied']}")
             print(_S)
 
         return {
@@ -124,7 +131,8 @@ class OnlineSimulator:
             "final_utility":   final_u,
             "wcet_energy":     wcet_e,
             "actual_energy":   actual_e,
-            "energy_pool":     cfg.energy_pool,
+            "energy_pool":     cfg.pool.level(),
+            "pool_stats":      pstats,
             "feasible":        feasible,
         }
 
@@ -137,15 +145,18 @@ class OnlineSimulator:
         """
         x = self.ctrl.proc_jobs_map[(i, j)]
         c = self.ctrl.pos_of[(i, j)]
-        # Arbitrated energy budget the controller would grant.
-        self.ctrl.energy_pool += de
+        # Arbitrated energy budget the controller would grant.  Probe the pool
+        # through its atomic API, then undo so on_completion redoes it cleanly.
+        pool_now = self.ctrl.pool.refund(de)          # atomic += de
         densities = self.ctrl._densities(self.ctrl.job_r[(i, j)])
         from .density import arbitrate_energy
-        caps = arbitrate_energy(self.ctrl.energy_pool, densities,
-                                self.config.arbitration)
-        de_budget = min(self.ctrl.energy_pool, max(0.0, caps.get(x, 0.0)))
+        caps = arbitrate_energy(pool_now, densities, self.config.arbitration)
+        de_budget = min(pool_now, max(0.0, caps.get(x, 0.0)))
         dp_value = self.ctrl.dps[x].best_value(c + 1, dt, de_budget)
-        self.ctrl.energy_pool -= de   # undo; on_completion will redo cleanly
+        self.ctrl.pool.try_spend(de)                  # atomic -= de (undo the probe)
         added, _ = self.ctrl.on_completion(i, j, dt, de)
-        ok = abs(added - dp_value) <= 1e-6
+        # NOTE: distribute()'s dp_value is an optimistic ceiling; the committed
+        # `added` may be less if the per-processor DBF trims a shared-window
+        # conflict.  Assert <= (not ==) — see online_phase_explained_2 §I1.
+        ok = added <= dp_value + 1e-6
         return added, dp_value, ok

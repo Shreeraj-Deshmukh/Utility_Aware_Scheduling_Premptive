@@ -92,7 +92,55 @@ def prune(entries, tol=_TOL):
     return kept
 
 
-def compose(actions, downstream, tol=_TOL):
+def _aggregate(entries, max_frontier, tol=_TOL):
+    """
+    Cap a value-function level to ~max_frontier entries ("aggregate states",
+    design doc §7.2).  Bucket the (req_t, req_e) plane onto a G×G grid
+    (G = floor(sqrt(max_frontier))) and keep the best-VALUE entry per bucket.
+
+    Dropping entries is always feasibility-SAFE: query() reports the max value
+    among the entries it can afford, so removing options can only LOWER the
+    reported value — it can never overstate a value that is not achievable, and
+    every kept entry carries its own true (req_t, req_e).  The trade-off is
+    bounded sub-optimality, not any constraint violation.
+
+    The exact zero-requirement entry is always preserved so query(0,0) — the
+    "save everything" baseline — never fails.
+    """
+    if max_frontier is None or len(entries) <= max_frontier:
+        return entries
+
+    ts = [e.req_t for e in entries]
+    es = [e.req_e for e in entries]
+    t0, e0  = min(ts), min(es)
+    span_t  = (max(ts) - t0) or 1.0
+    span_e  = (max(es) - e0) or 1.0
+    G       = max(1, int(max_frontier ** 0.5))
+    eps_t   = span_t / G
+    eps_e   = span_e / G
+
+    best = {}
+    for e in entries:
+        bt = int((e.req_t - t0) / eps_t) if eps_t > 0 else 0
+        be = int((e.req_e - e0) / eps_e) if eps_e > 0 else 0
+        key = (bt, be)
+        cur = best.get(key)
+        if cur is None or e.value > cur.value:
+            best[key] = e
+    result = list(best.values())
+
+    # Guarantee the (0,0) entry survives so query(0,0) always succeeds.
+    if not any(r.req_t <= tol and r.req_e <= tol for r in result):
+        zero = None
+        for e in entries:
+            if e.req_t <= tol and e.req_e <= tol and (zero is None or e.value > zero.value):
+                zero = e
+        if zero is not None:
+            result.append(zero)
+    return result
+
+
+def compose(actions, downstream, tol=_TOL, max_frontier=None):
     """
     Build one value-function level from this job's `actions` and the already
     -pruned `downstream` level (a list of Entry, index-stable).
@@ -100,6 +148,11 @@ def compose(actions, downstream, tol=_TOL):
     `actions` is an iterable of Action tuples (a_t, a_e, gain, k, z); see
     actions.py.  Returns a pruned list of Entry whose `nxt` indexes into
     `downstream`.
+
+    `max_frontier` (optional) caps the level size via `_aggregate` — needed at
+    runtime when DVFS is active (many frequencies give genuinely non-dominated
+    (time, energy) points, so the exact frontier can blow up).  Leave it None
+    for an EXACT level (used by the worked-example verification).
     """
     cand = []
     for (a_t, a_e, gain, k, z) in actions:
@@ -112,7 +165,10 @@ def compose(actions, downstream, tol=_TOL):
                 req_e = 0.0
             cand.append(Entry(req_t, req_e, gain + d.value,
                               k=k, z=z, a_t=a_t, a_e=a_e, nxt=d_idx))
-    return prune(cand, tol)
+    pruned = prune(cand, tol)
+    if max_frontier is not None and len(pruned) > max_frontier:
+        pruned = prune(_aggregate(pruned, max_frontier, tol), tol)
+    return pruned
 
 
 def query(level, dt, de, tol=_TOL):

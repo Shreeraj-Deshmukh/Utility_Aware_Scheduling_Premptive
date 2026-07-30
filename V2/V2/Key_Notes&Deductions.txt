@@ -1,0 +1,7 @@
+_. L & L only for SPS mapping. opt_k messes the U<= Condition, so DBF is the way.
+
+-> Premption wrt opt_k blocks only. no in between cutoff. limited premption windows only.- Preemption is NOT allowed mid-segment. Optional segments are atomic blocks
+
+-> Mapping is Job Level. SPS does the mapping for us. 
+
+-> Heuristic does the tuple ({1,2} , {4,7}) shuffle to get a better utility density 

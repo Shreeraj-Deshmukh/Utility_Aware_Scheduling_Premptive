@@ -38,6 +38,7 @@ from .value_function import Entry, prune, compose, query
 from .actions        import Action, build_job_actions
 from .dp             import ProcessorDP, build_processor_dp
 from .density        import future_utility_density, arbitrate_energy
+from .energy_pool    import SharedEnergyPool
 from .controller     import OnlineController, JobDecision
 from .simulator      import OnlineSimulator, SimConfig
 
@@ -46,6 +47,7 @@ __all__ = [
     "Action", "build_job_actions",
     "ProcessorDP", "build_processor_dp",
     "future_utility_density", "arbitrate_energy",
+    "SharedEnergyPool",
     "OnlineController", "JobDecision",
     "OnlineSimulator", "SimConfig",
 ]

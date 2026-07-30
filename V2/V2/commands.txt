@@ -1,0 +1,17 @@
+# Heuristics
+python run.py testcase.py heuristic_v1     # Single-pass SPS + ScheduleState + freq scaling + greedy
+python run.py testcase.py heuristic_v2     # Quantum SPS + left-shift greedy (3-step cases)
+python run.py testcase.py heuristic_v3     # Quantum SPS + DBF window-slack greedy, Phases 1-5
+python run.py testcase.py heuristic_v4     # + swap, Phases 1-6   (DEFAULT)
+python run.py testcase.py heuristic_v5a    # + Refine Mapping 2a (linear doublet scan)
+python run.py testcase.py heuristic_v5b    # + Refine Mapping 2b (one-swap-one-scan)
+python run.py testcase.py heuristic_claudeoptimal   # Phases 1-6 + double-giver swap + iterated greedy
+
+# ILP (needs Gurobi + gurobipy installed, and a license)
+python run.py testcase.py ilp_v2           # Quantum SPS mapping + Gurobi ILP (freq + optional seg)
+
+# Online phase (offline v5b schedule + shared-energy slack-distribution DP)
+python run.py testcase.py online
+
+# No solver name → runs the default (heuristic_v4)
+python run.py testcase.py

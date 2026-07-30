@@ -1,0 +1,30 @@
+{
+  "_comment": "USRT ILP v1 testcase — harmonic periods, job-level mapping",
+
+  "tasks": [
+    {
+      "_name"     : "T1",
+      "period"    : 4,
+      "exec_times": [1.0, 0.5, 0.3],
+      "utility"   : 3.0
+    },
+    {
+      "_name"     : "T2",
+      "period"    : 8,
+      "exec_times": [1.5, 0.8],
+      "utility"   : 2.0
+    },
+    {
+      "_name"     : "T3",
+      "period"    : 16,
+      "exec_times": [0.8, 0.4, 0.2],
+      "utility"   : 4.0
+    }
+  ],
+
+  "processors"    : 2,
+  "frequencies"   : [0.5, 0.75, 1.0],
+  "energy_budget" : 80.0,
+  "alpha"         : 1.0,
+  "beta"          : 0.5
+}

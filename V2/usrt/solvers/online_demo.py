@@ -50,7 +50,8 @@ def offline_schedule(processors, tasks, B_BUDGET):
     seg_k    = {(i, j): 0         for i in range(N_tsk) for j in range(N_job[i])}
 
     phase_aggressive_scaling(seg_k, freq_idx, freq_set, N_frq, cum,
-                             N_tsk, N_job, proc_jobs, job_r, job_d, N_prc)
+                             N_tsk, N_job, proc_jobs, job_r, job_d, N_prc,
+                             B_BUDGET)
     phase_optional_segments(seg_k, freq_idx, freq_set, N_frq, cum, N_seg,
                             N_tsk, N_job, proc_jobs, proc_jobs_map,
                             job_r, job_d, tasks, N_prc, B_BUDGET)

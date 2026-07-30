@@ -90,9 +90,10 @@ def run(processors, tasks, B_BUDGET):
     print(f"  PHASE 4 : AGGRESSIVE SCALING  (freq ↓ + energy guard)")
     print(_S2)
     n_sc = phase_aggressive_scaling(seg_k, freq_idx, freq_set, N_frq, cum,
-                                     N_tsk, N_job, proc_jobs, job_r, job_d, N_prc)
+                                     N_tsk, N_job, proc_jobs, job_r, job_d, N_prc,
+                                     B_BUDGET)
     if n_sc == 0:
-        print(f"  No reductions (α={ALPHA}, β={BETA} → min energy at f_max → no-op).")
+        print(f"  No reductions (α={ALPHA}, β={BETA}): already energy-feasible at f_max → no-op.")
     else:
         Ea = total_energy(seg_k, freq_idx, freq_set, cum, N_tsk, N_job)
         print(f"  {n_sc} job(s) reduced.  E_consumed={Ea:.4f}  E_slack={B_BUDGET-Ea:.4f}")

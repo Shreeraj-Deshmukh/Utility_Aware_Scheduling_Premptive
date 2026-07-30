@@ -30,10 +30,11 @@ committed only if it provably satisfies every constraint.
 
 from collections import namedtuple
 
-from ..models   import total_energy, total_utility
-from ..utils    import lcm_list, build_cum, build_job_times, build_proc_jobs
-from .dp        import build_processor_dp
-from .density   import future_utility_density, arbitrate_energy
+from ..models     import total_energy, total_utility
+from ..utils      import lcm_list, build_cum, build_job_times, build_proc_jobs
+from .dp          import build_processor_dp
+from .density     import future_utility_density, arbitrate_energy
+from .energy_pool import SharedEnergyPool
 
 _TOL = 1e-9
 
@@ -48,10 +49,11 @@ class OnlineController:
     """Runtime owner of the committed schedule + per-processor DPs + energy pool."""
 
     def __init__(self, processors, tasks, B, seg_k, freq_idx, mapping,
-                 arbitration="proportional"):
+                 arbitration="proportional", max_frontier=256):
         self.processors = processors
         self.tasks      = tasks
         self.B          = B
+        self.max_frontier = max_frontier
         self.N_tsk      = len(tasks)
         self.N_prc      = len(processors)
         self.freq_set   = processors[0]['frequencies']
@@ -73,8 +75,11 @@ class OnlineController:
         self.eff_override = {}
 
         # Global energy pool = remaining budget after the committed schedule.
-        # Grows as jobs complete using less than budgeted; shrinks as we spend.
-        self.energy_pool = B - self.total_energy()
+        # Shared by ALL per-processor DPs, guarded by a binary semaphore.  Grows
+        # (refund) as jobs complete under budget; shrinks (try_spend) as any
+        # processor commits optional segments.  This is the ONLY cross-processor
+        # shared variable — timing is per-processor and lock-free.
+        self.pool = SharedEnergyPool(B - self.total_energy())
 
         # Per-processor DP precompute (one per processor; covers all suffixes).
         self.dps = {}
@@ -100,7 +105,8 @@ class OnlineController:
         return build_processor_dp(
             x, self.proc_jobs, self.seg_k, self.freq_idx,
             self.job_r, self.job_d, self.cum, self.N_seg,
-            self.freq_set, self.tasks, time_caps=time_caps)
+            self.freq_set, self.tasks, time_caps=time_caps,
+            max_frontier=self.max_frontier)
 
     # ── metrics ──────────────────────────────────────────────────────────────
     def _eff(self, i, j):
@@ -119,17 +125,24 @@ class OnlineController:
 
     def is_feasible(self):
         """Honest verdict: dynamic DBF (credits completed jobs) + energy pool >= 0."""
-        return self._timing_ok_dynamic() and self.energy_pool >= -1e-6
+        return self._timing_ok_dynamic() and self.pool.level() >= -1e-6
 
     # ── dynamic DBF feasibility ───────────────────────────────────────────────
-    def _timing_ok_dynamic(self):
+    def _timing_ok_dynamic(self, only_x=None):
         """
-        Preemptive-EDF DBF across all processors, using each job's ACTUAL
-        effective time (reduced for already-completed jobs).  Adding work to a
-        downstream job in a window where an earlier job finished early keeps the
-        window demand at or below its original, already-feasible value.
+        Preemptive-EDF DBF using each job's ACTUAL effective time (reduced for
+        already-completed jobs).  Adding work to a downstream job in a window
+        where an earlier job finished early keeps the window demand at or below
+        its original, already-feasible value.
+
+        Timing is per-processor once the mapping is fixed (paper II), so when
+        committing on processor `only_x` we check ONLY that processor — this is
+        both cheaper and lock-free: it never reads another processor's live
+        state, so it is safe to run while other processors commit concurrently.
+        `only_x=None` checks all processors (used by is_feasible()).
         """
-        for x in range(self.N_prc):
+        xs = (only_x,) if only_x is not None else range(self.N_prc)
+        for x in xs:
             jobs = self.proc_jobs[x]
             if not jobs:
                 continue
@@ -168,25 +181,30 @@ class OnlineController:
         c = self.pos_of[(i, j)]
 
         # 1) record the completed job's ACTUAL (reduced) execution + free energy.
+        #    refund() is atomic under the semaphore: the freed energy is visible
+        #    to every other processor's next pool read.
         committed_eff = self.cum[i][self.seg_k[(i, j)]] / self.freq_set[self.freq_idx[(i, j)]]
         self.eff_override[(i, j)] = max(0.0, committed_eff - observed_dt)
-        self.energy_pool += observed_de
+        self.pool.refund(observed_de)
 
-        # 2) arbitrate the global pool across processors by future density.
+        # 2) arbitrate this processor's claim on the shared pool by future
+        #    utility density.  We read a LIVE snapshot of the pool level under
+        #    the lock; the value is advisory (another processor may spend before
+        #    we commit) — the hard guarantee is the atomic try_spend in step 4.
         t = self.job_r[(i, j)]
+        pool_now  = self.pool.level()
         densities = self._densities(t)
-        caps = arbitrate_energy(self.energy_pool, densities, self.arbitration)
-        de_budget = min(self.energy_pool, max(0.0, caps.get(x, 0.0)))
+        caps      = arbitrate_energy(pool_now, densities, self.arbitration)
+        de_budget = min(pool_now, max(0.0, caps.get(x, 0.0)))
 
         # 3) DP lookup + reconstruction for the downstream chain jobs[c+1:].
         _, planned = self.dps[x].distribute(c + 1, observed_dt, de_budget)
 
-        # 4) hard-verify (dynamic DBF + energy pool), trimming if necessary.
-        committed = self._commit_with_guarantee(planned)
+        # 4) hard-verify (per-processor dynamic DBF + atomic pool spend), trimming
+        #    if necessary.  All energy is deducted through pool.try_spend inside.
+        committed = self._commit_with_guarantee(x, planned)
 
-        # 5) update energy pool by net energy actually spent, rebuild DP for x.
-        spent = sum(d.a_e for d in committed)
-        self.energy_pool -= spent
+        # 5) rebuild this processor's DP so later completions stay exact.
         self.dps[x] = self._build_dp(x)
         for slot in self.dps[x].slots:
             self.pos_of[(slot.i, slot.j)] = slot.pos
@@ -197,12 +215,19 @@ class OnlineController:
         self.applied.extend(out)
         return sum(d.gain for d in committed), out
 
-    def _commit_with_guarantee(self, planned):
+    def _commit_with_guarantee(self, x, planned):
         """
-        Apply `planned`, verify dynamic DBF + energy pool.  If the full set is
-        feasible, keep it; else revert and re-apply greedily (highest gain
-        first), keeping only decisions that preserve feasibility.  The committed
-        schedule always satisfies every constraint.
+        Apply `planned` on processor `x`, verifying the per-processor dynamic DBF
+        (lock-free) and deducting energy through the shared pool's ATOMIC
+        try_spend (semaphore-guarded).  If the whole set is feasible it is kept;
+        otherwise it is reverted and re-applied greedily (highest gain first),
+        keeping only decisions that preserve both constraints.  The committed
+        schedule always satisfies timing and the global energy budget.
+
+        Ordering per decision: timing is checked FIRST (cheap, lock-free); only
+        if timing passes do we touch the pool — so a rejected decision never
+        needs an energy refund.  The fast path spends the batch atomically and
+        refunds it if the batch fails the timing check.
         """
         if not planned:
             return []
@@ -210,32 +235,31 @@ class OnlineController:
         backup_seg  = {(d.i, d.j): self.seg_k[(d.i, d.j)]    for d in planned}
         backup_freq = {(d.i, d.j): self.freq_idx[(d.i, d.j)] for d in planned}
 
-        # Fast path: the whole set.
-        spent = 0.0
+        # ── Fast path: the whole set at once. ────────────────────────────────
         for d in planned:
             self.seg_k[(d.i, d.j)]    = d.k
             self.freq_idx[(d.i, d.j)] = d.z
-            spent += d.a_e
-        if self._timing_ok_dynamic() and (self.energy_pool - spent) >= -1e-6:
-            return list(planned)
+        if self._timing_ok_dynamic(only_x=x):
+            # Timing holds; try to claim the batch energy atomically.
+            if self.pool.try_spend_batch([d.a_e for d in planned]):
+                return list(planned)
+            # Not enough shared energy for the whole batch → fall through.
 
-        # Revert.
+        # ── Revert and try greedily. ─────────────────────────────────────────
         for ij, kv in backup_seg.items():
             self.seg_k[ij] = kv
         for ij, zv in backup_freq.items():
             self.freq_idx[ij] = zv
 
-        # Greedy re-apply with per-step verification.
-        committed, run_spent = [], 0.0
+        committed = []
         for d in sorted(planned, key=lambda p: -p.gain):
             prev_k = self.seg_k[(d.i, d.j)]
             prev_z = self.freq_idx[(d.i, d.j)]
             self.seg_k[(d.i, d.j)]    = d.k
             self.freq_idx[(d.i, d.j)] = d.z
-            if (self._timing_ok_dynamic() and
-                    (self.energy_pool - (run_spent + d.a_e)) >= -1e-6):
+            # Timing first (lock-free); only then claim energy atomically.
+            if self._timing_ok_dynamic(only_x=x) and self.pool.try_spend(d.a_e):
                 committed.append(d)
-                run_spent += d.a_e
             else:
                 self.seg_k[(d.i, d.j)]    = prev_k
                 self.freq_idx[(d.i, d.j)] = prev_z

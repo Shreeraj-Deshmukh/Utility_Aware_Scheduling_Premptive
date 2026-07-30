@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>USRT Online Phase — How It Is Implemented</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --card:#fff; --ink:#1e2430; --muted:#5b6472; --accent:#0d5c63;
+    --accent2:#12808a; --crit:#b3261e; --high:#b35900; --med:#7a6400; --low:#1b5e20;
+    --code-bg:#eef2f4; --border:#d7dde2; --purp:#5a3a8c;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;padding:0 0 4rem;font-family:"Segoe UI",system-ui,-apple-system,sans-serif;
+       background:var(--bg);color:var(--ink);line-height:1.62;}
+  header{background:linear-gradient(135deg,#08343a 0%,#0d5c63 55%,#12808a 100%);
+         color:#fff;padding:2.2rem 2rem 1.8rem;}
+  header h1{margin:0 0 .4rem;font-size:1.7rem;font-weight:650;}
+  header p{margin:.15rem 0;opacity:.93;font-size:.95rem;}
+  main{max-width:1120px;margin:0 auto;padding:1.5rem 1.5rem 0;}
+  h2{color:var(--accent);font-size:1.32rem;margin:2.6rem 0 .7rem;
+     border-bottom:2px solid var(--border);padding-bottom:.35rem;}
+  h3{font-size:1.08rem;margin:1.4rem 0 .45rem;color:#08343a;}
+  h4{font-size:.96rem;margin:1rem 0 .3rem;color:var(--accent2);}
+  section.card{background:var(--card);border:1px solid var(--border);border-radius:10px;
+               padding:1.1rem 1.4rem;margin:1rem 0;box-shadow:0 1px 3px rgba(20,30,50,.06);}
+  code{font-family:Consolas,"Cascadia Code",monospace;font-size:.86em;background:var(--code-bg);
+       border-radius:4px;padding:.06rem .3rem;}
+  .file{font-family:Consolas,"Cascadia Code",monospace;font-size:.8rem;color:#fff;
+        background:var(--accent);border-radius:4px;padding:.1rem .5rem;font-weight:600;}
+  pre{background:#1c2128;color:#dde3ec;border-radius:8px;padding:.9rem 1.1rem;overflow-x:auto;
+      font-size:.8rem;line-height:1.5;font-family:Consolas,"Cascadia Code",monospace;}
+  pre .cm{color:#7f8a9d;} pre .kw{color:#c9a0ff;} pre .fn{color:#7fd0e0;}
+  pre .st{color:#9ccc8d;} pre .nu{color:#f3c07b;} pre .hl{color:#ffd479;font-weight:600;}
+  table{border-collapse:collapse;width:100%;margin:.8rem 0;font-size:.87rem;background:var(--card);}
+  th,td{border:1px solid var(--border);padding:.42rem .62rem;text-align:left;vertical-align:top;}
+  th{background:#e9f1f2;font-weight:650;}
+  td.mono,th.mono{font-family:Consolas,"Cascadia Code",monospace;font-size:.86em;}
+  .note{border-left:4px solid var(--accent2);background:#e7f4f5;padding:.55rem .9rem;
+        border-radius:0 6px 6px 0;margin:.7rem 0;font-size:.92rem;}
+  .note strong{color:var(--accent);}
+  .key{border-left:4px solid var(--purp);background:#f1ecf8;padding:.55rem .9rem;
+       border-radius:0 6px 6px 0;margin:.7rem 0;font-size:.93rem;}
+  .key strong{color:var(--purp);}
+  .flow{background:#0f2a2e;color:#d6e8ea;border-radius:8px;padding:1rem 1.2rem;margin:.8rem 0;
+        font-family:Consolas,"Cascadia Code",monospace;font-size:.8rem;line-height:1.7;overflow-x:auto;}
+  .flow .a{color:#7fd0e0;} .flow .b{color:#ffd479;} .flow .c{color:#9ccc8d;}
+  nav.toc{background:var(--card);border:1px solid var(--border);border-radius:10px;
+          padding:1rem 1.4rem;margin-top:1rem;font-size:.93rem;column-count:2;column-gap:2rem;}
+  nav.toc a{color:var(--accent);text-decoration:none;display:block;padding:.11rem 0;}
+  nav.toc a:hover{text-decoration:underline;}
+  .muted{color:var(--muted);font-size:.9rem;}
+  .pill{display:inline-block;font-size:.72rem;font-weight:700;border-radius:4px;padding:.1rem .45rem;
+        background:#e7f4f5;color:var(--accent);border:1px solid var(--accent2);margin-left:.4rem;}
+  footer{text-align:center;color:var(--muted);font-size:.82rem;margin-top:3rem;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>USRT Online Phase — How It Is Implemented</h1>
+  <p>An implementation walkthrough of <code>usrt/online/</code>: the modules, data structures, and value flow.</p>
+  <p>Reflects the current code, including the shared global energy pool guarded by a semaphore ("Two DP with shared Energy").</p>
+  <p>Paper Section VI · design doc <code>usrt_online_dp_doc.pdf</code> · verified on <code>testcase.py</code>.</p>
+</header>
+
+<main>
+
+<nav class="toc">
+  <strong>Contents</strong>
+  <a href="#arch">1. Architecture at a glance</a>
+  <a href="#modules">2. Module map (8 files)</a>
+  <a href="#types">3. The data structures</a>
+  <a href="#vf">4. DP core — exact breakpoint value function</a>
+  <a href="#actions">5. The 4-option action set</a>
+  <a href="#dp">6. Per-processor DP build &amp; reconstruction</a>
+  <a href="#pool">7. Shared energy pool + semaphore</a>
+  <a href="#density">8. Density arbitration</a>
+  <a href="#controller">9. The runtime controller</a>
+  <a href="#acet">10. ACET model &amp; simulator</a>
+  <a href="#verify">11. Worked-example verification</a>
+  <a href="#flow">12. End-to-end value flow (real trace)</a>
+  <a href="#run">13. How to run</a>
+</nav>
+
+<!-- ══════════════ 1 ══════════════ -->
+<h2 id="arch">1. Architecture at a Glance</h2>
+<section class="card">
+  <p>The online phase sits on top of a finished offline schedule and reacts to jobs completing early.
+  It is split into a one-time <strong>precompute</strong> and a per-event <strong>runtime</strong>:</p>
+
+  <div class="flow">
+<span class="cm"># OFFLINE (once)</span>
+v5b pipeline  ──►  (seg_k, freq_idx, mapping)        <span class="cm"># the schedule to protect + improve</span>
+                        │
+                        ▼
+   <span class="a">build_processor_dp(x)</span> for each processor x   <span class="cm"># exact breakpoint value fn, all EDF suffixes</span>
+                        │
+<span class="cm"># RUNTIME (per early completion, microseconds for the lookup)</span>
+   job (i,j) finishes at ACET &lt; WCET
+                        │  windfall (Δt local, Δe global)
+                        ▼
+   <span class="b">OnlineController.on_completion(i,j,Δt,Δe)</span>
+       1 refund Δe to the shared pool  (atomic)
+       2 arbitrate this proc's energy claim by future utility density
+       3 DP lookup + reconstruct downstream (k,z) decisions
+       4 commit-with-guarantee: per-processor DBF + atomic pool spend
+       5 rebuild this processor's DP
+                        │
+                        ▼
+              committed [JobDecision...]
+  </div>
+
+  <div class="key"><strong>Two resources, two regimes.</strong> <em>Time</em> slack is
+  <strong>processor-local</strong> — each processor's DP and DBF touch only its own jobs, so no
+  locking is needed. <em>Energy</em> slack is a <strong>single global pool</strong> shared by every
+  processor's DP, so it — and only it — is guarded by a semaphore.</p>
+</section>
+
+<!-- ══════════════ 2 ══════════════ -->
+<h2 id="modules">2. Module Map — <span class="file">usrt/online/</span></h2>
+<section class="card">
+  <table>
+    <tr><th>File</th><th>Responsibility</th><th>Key names</th></tr>
+    <tr><td class="mono">value_function.py</td><td>The DP itself: exact step-function representation, recurrence, lookup.</td>
+        <td class="mono">Entry, prune, compose, query, base_level</td></tr>
+    <tr><td class="mono">actions.py</td><td>Per-job online moves (add segments / change freq) as signed cost deltas.</td>
+        <td class="mono">Action, build_job_actions</td></tr>
+    <tr><td class="mono">dp.py</td><td>Builds one value function per EDF suffix of a processor; reconstructs decisions.</td>
+        <td class="mono">ProcessorDP, build_processor_dp, JobSlot, PlannedAction</td></tr>
+    <tr><td class="mono">energy_pool.py</td><td><span class="pill">shared</span> The global energy slack + binary semaphore; atomic spend/refund.</td>
+        <td class="mono">SharedEnergyPool</td></tr>
+    <tr><td class="mono">density.py</td><td>Future utility density ρ<sub>x</sub>(t) and the global-energy split.</td>
+        <td class="mono">future_utility_density, arbitrate_energy</td></tr>
+    <tr><td class="mono">controller.py</td><td>Runtime owner: live schedule, per-processor DPs, the pool, the hard guarantees.</td>
+        <td class="mono">OnlineController, JobDecision</td></tr>
+    <tr><td class="mono">simulator.py</td><td>Synthesises ACET, drives the controller over a hyper-period, validates.</td>
+        <td class="mono">OnlineSimulator, SimConfig</td></tr>
+    <tr><td class="mono">worked_examples.py</td><td>Reproduces the design doc's tables/traces to pin the DP to the paper.</td>
+        <td class="mono">verify, build_levels, table</td></tr>
+  </table>
+  <p class="muted">Wiring: <span class="file">usrt/solvers/online_demo.py</span> builds the offline schedule
+  (Quantum SPS + Refine 2b + greedy + swap) and runs the simulator; <span class="file">run.py</span> registers
+  the <code>online</code> key. Everything is pure Python stdlib (<code>collections</code>,
+  <code>threading</code>, <code>random</code>) plus the existing <code>usrt</code> modules.</p>
+</section>
+
+<!-- ══════════════ 3 ══════════════ -->
+<h2 id="types">3. The Data Structures</h2>
+<section class="card">
+  <table>
+    <tr><th>Type</th><th>Where</th><th>Fields</th><th>Meaning</th></tr>
+    <tr><td class="mono">Entry</td><td class="mono">value_function</td>
+        <td class="mono">req_t, req_e, value, k, z, a_t, a_e, nxt</td>
+        <td>One Pareto point of a value-function level: "with ≥ req_t time &amp; ≥ req_e energy here,
+            gain <code>value</code> by giving this job (k,z) and continuing at downstream index nxt."</td></tr>
+    <tr><td class="mono">Action</td><td class="mono">actions</td>
+        <td class="mono">a_t, a_e, gain, k, z</td>
+        <td>One admissible online move for a job: signed time/energy deltas vs the offline baseline, utility gain, target (k,z).</td></tr>
+    <tr><td class="mono">JobSlot</td><td class="mono">dp</td>
+        <td class="mono">pos, i, j, k_off, z_off, time_cap</td>
+        <td>Static metadata for a job in a processor's EDF chain.</td></tr>
+    <tr><td class="mono">PlannedAction</td><td class="mono">dp</td>
+        <td class="mono">pos,i,j,k_off,z_off,k,z,a_t,a_e,gain</td>
+        <td>A reconstructed (not-yet-committed) decision from <code>distribute()</code>.</td></tr>
+    <tr><td class="mono">JobDecision</td><td class="mono">controller</td>
+        <td class="mono">x,i,j,k_off,z_off,k,z,a_t,a_e,gain</td>
+        <td>A committed decision the controller actually applied.</td></tr>
+    <tr><td class="mono">SharedEnergyPool</td><td class="mono">energy_pool</td>
+        <td class="mono">_level, _sem, counters…</td>
+        <td>The single global energy slack + its mutex; all access atomic.</td></tr>
+    <tr><td class="mono">ProcessorDP</td><td class="mono">dp</td>
+        <td class="mono">x, slots, V_levels</td>
+        <td>Precomputed value functions for every suffix of processor x's chain.</td></tr>
+    <tr><td class="mono">SimConfig</td><td class="mono">simulator</td>
+        <td class="mono">acet_ratio, ratio_min/max, seed, arbitration, verbose</td>
+        <td>How ACET is drawn + which arbitration rule to use.</td></tr>
+  </table>
+  <p class="muted"><code>Entry</code> uses <code>__slots__</code> (many are created during
+  <code>compose</code>); the rest are <code>namedtuple</code>s for cheap, readable immutability.</p>
+</section>
+
+<!-- ══════════════ 4 ══════════════ -->
+<h2 id="vf">4. DP Core — Exact Breakpoint Value Function</h2>
+<section class="card">
+  <p>The paper's table <code>V[j][Δt][Δe]</code> is, for fixed j, a step function: non-decreasing in
+  both axes, with jumps only at reachable cost vectors. Instead of a dense grid (which would force
+  quantising float costs), a level is stored as its <strong>Pareto frontier of requirement tuples</strong>
+  — the list of <code>Entry</code>. This is exact and naturally sparse.</p>
+
+  <h4>The recurrence — <code>compose()</code></h4>
+  <pre><span class="kw">def</span> <span class="fn">compose</span>(actions, downstream, tol=_TOL):
+    cand = []
+    <span class="kw">for</span> (a_t, a_e, gain, k, z) <span class="kw">in</span> actions:
+        <span class="kw">for</span> d_idx, d <span class="kw">in</span> enumerate(downstream):
+            req_t = a_t + d.req_t
+            req_e = a_e + d.req_e
+            <span class="kw">if</span> req_t &lt; 0.0: req_t = 0.0        <span class="cm"># clamp: surplus this job frees is unusable by the sub-chain</span>
+            <span class="kw">if</span> req_e &lt; 0.0: req_e = 0.0
+            cand.append(Entry(req_t, req_e, gain + d.value, k=k, z=z, a_t=a_t, a_e=a_e, nxt=d_idx))
+    <span class="kw">return</span> prune(cand, tol)</pre>
+  <p>Each candidate = "this job takes action (a_t,a_e,gain), then the rest of the chain achieves
+  <code>d.value</code> needing <code>d.req_t/d.req_e</code>." The <strong>signed</strong> deltas let a
+  frequency change <em>reduce</em> the requirement (Option 4 frees time; Option 3 frees energy) —
+  that is how conversion enters. The <code>max(0, …)</code> clamp is correct because the downstream
+  level already encodes the <em>minimal</em> requirement per value level.</p>
+
+  <h4>Pareto pruning — <code>prune()</code></h4>
+  <p>Sort by <code>(req_t↑, req_e↑, value↓)</code>; keep an entry only if no kept entry dominates it
+  (≤ on both requirements and ≥ on value), and drop any kept entry the newcomer dominates. The
+  <code>(0,0,0)</code> "do-nothing" entry always survives, so a query never fails.</p>
+
+  <h4>Online lookup — <code>query()</code></h4>
+  <pre><span class="kw">def</span> <span class="fn">query</span>(level, dt, de):
+    <span class="cm"># best value among entries with req_t ≤ dt and req_e ≤ de; tie → smallest requirement</span></pre>
+  <p>Building each level is <code>compose</code>; answering a completion is one <code>query</code>
+  (O(frontier size)) plus a pointer walk.</p>
+</section>
+
+<!-- ══════════════ 5 ══════════════ -->
+<h2 id="actions">5. The 4-Option Action Set — <span class="file">actions.py</span></h2>
+<section class="card">
+  <p>For a job whose offline decision is <code>(k_off, z_off)</code>, an online action re-selects a
+  target <code>(k′ ≥ k_off, z′)</code>. Relative to the baseline:</p>
+  <div class="note" style="font-family:Cambria,serif;font-size:1.02rem">
+    a_t = e_eff(cum[k′], f<sub>z′</sub>) − e_eff(cum[k_off], f<sub>z_off</sub>) &nbsp;&nbsp;•&nbsp;&nbsp;
+    a_e = E(cum[k′], f<sub>z′</sub>) − E(cum[k_off], f<sub>z_off</sub>) &nbsp;&nbsp;•&nbsp;&nbsp;
+    gain = u<sub>i</sub> · (cum[k′] − cum[k_off]) ≥ 0
+  </div>
+  <table>
+    <tr><th>Sign pattern</th><th>Paper option</th></tr>
+    <tr><td class="mono">k′&gt;k_off, z′=z_off &nbsp;(a_t&gt;0, a_e&gt;0, gain&gt;0)</td><td>2 — spend on segments</td></tr>
+    <tr><td class="mono">k′=k_off, z′=z_off &nbsp;(0,0,0)</td><td>1 — save (the mandatory no-op)</td></tr>
+    <tr><td class="mono">k′=k_off, z′&lt;z_off &nbsp;(a_t&gt;0, a_e&lt;0)</td><td>3 — time→energy (slower)</td></tr>
+    <tr><td class="mono">k′=k_off, z′&gt;z_off &nbsp;(a_t&lt;0, a_e&gt;0)</td><td>4 — energy→time (faster)</td></tr>
+  </table>
+  <p><code>build_job_actions</code> enumerates all <code>(k, z)</code>, keeps only actions whose added
+  effective time fits the job's <code>time_cap</code> (the timing gate; a negative <code>a_t</code>
+  always passes), and returns them baseline-first. Energy is <em>not</em> gated here — it is global
+  and handled by the DP state <code>req_e</code> and the pool.</p>
+  <div class="key"><strong>Note on the current constants.</strong> With α=1, β=0.5 energy is minimised
+  at f<sub>max</sub>, so every Option-3/4 conversion action has gain 0 and a non-improving
+  <code>(req_t, req_e)</code> — it is dominated by <code>(0,0,0)</code> and pruned away. The machinery
+  is general; on this instance it collapses to Save + Spend.</p>
+</section>
+
+<!-- ══════════════ 6 ══════════════ -->
+<h2 id="dp">6. Per-Processor DP Build &amp; Reconstruction — <span class="file">dp.py</span></h2>
+<section class="card">
+  <h4>Building every suffix, right to left</h4>
+  <pre><span class="cm"># build_processor_dp(x, ...)</span>
+jobs_x = _edf_order(...)              <span class="cm"># sort by (deadline, release, i, j)</span>
+V_levels[N] = base_level()            <span class="cm"># no jobs left → single zero entry</span>
+<span class="kw">for</span> s <span class="kw">in</span> range(N-1, -1, -1):
+    acts = build_job_actions(slot.i, slot.k_off, slot.z_off, cum, N_seg[slot.i],
+                             freq_set, u_i, slot.time_cap)
+    V_levels[s] = compose(acts, V_levels[s+1])</pre>
+  <p><code>V_levels[s]</code> is the value function over <code>jobs[s:]</code>. Because it is built for
+  <em>every</em> suffix, one precompute answers <em>every</em> future completion point: when the job
+  at position <code>c</code> completes, distribute its windfall over <code>jobs[c+1:]</code> using
+  <code>V_levels[c+1]</code>.</p>
+
+  <h4>The time cap that matters at runtime</h4>
+  <p>The controller passes <code>time_caps = {(i,j): d − r}</code> (the deadline interval). At the
+  offline-committed state the static <code>min_slack_for_job</code> is ≈ 0 (Phase 5 ate it), so using
+  it would let nothing through. The deadline interval is the loosest structural cap; the true
+  per-window feasibility is enforced later at commit.</p>
+
+  <h4>Reconstruction — <code>ProcessorDP.distribute()</code></h4>
+  <p>Query <code>V_levels[start]</code> at (dt, de), then follow <code>Entry.nxt</code> down the
+  chain, emitting a <code>PlannedAction</code> for every job whose chosen <code>(k, z)</code> differs
+  from its baseline. Returns <code>(total_value, [PlannedAction…])</code>.</p>
+</section>
+
+<!-- ══════════════ 7 ══════════════ -->
+<h2 id="pool">7. Shared Energy Pool + Semaphore — <span class="file">energy_pool.py</span></h2>
+<section class="card">
+  <p>The one variable shared by all per-processor DPs. It is wrapped so that every read-modify-write
+  is atomic under a binary semaphore (<code>threading.Lock</code> == a mutex).</p>
+  <pre><span class="kw">class</span> <span class="fn">SharedEnergyPool</span>:
+    <span class="kw">def</span> <span class="fn">refund</span>(self, amount):           <span class="cm"># atomic += (a job finished under budget)</span>
+        <span class="kw">with</span> self._sem:
+            self._level += amount; <span class="kw">return</span> self._level
+
+    <span class="kw">def</span> <span class="fn">try_spend</span>(self, amount, tol=1e-6):  <span class="hl"># the hard energy gate</span>
+        <span class="kw">with</span> self._sem:
+            <span class="kw">if</span> self._level - amount &gt;= -tol:  <span class="cm"># atomic check-AND-deduct</span>
+                self._level -= amount; <span class="kw">return</span> <span class="st">True</span>
+            <span class="kw">return</span> <span class="st">False</span>
+
+    <span class="kw">def</span> <span class="fn">try_spend_batch</span>(self, amounts):    <span class="cm"># all-or-nothing for the commit fast path</span>
+        <span class="kw">return</span> self.try_spend(sum(amounts))
+
+    <span class="kw">def</span> <span class="fn">level</span>(self): ...   <span class="cm"># guarded snapshot read</span>
+    <span class="kw">def</span> <span class="fn">stats</span>(self): ...   <span class="cm"># acquisitions / spent / refunded / denied</span></pre>
+
+  <div class="key"><strong>Why fine-grained.</strong> Only the pool's check-and-deduct/refund is inside
+  the lock. Arbitration, DP lookup, the per-processor DBF, and applying <code>seg_k/freq_idx</code>
+  stay outside it — maximising concurrency and keeping contention to the single float.</div>
+
+  <div class="note"><strong>Why <code>try_spend</code> is the correctness gate.</strong> Arbitration
+  reads a pool <em>snapshot</em> (advisory). Between that snapshot and the commit, another processor
+  could spend. Because the check and the deduction happen together under the lock,
+  <code>try_spend</code> can never let global consumption exceed the budget — so C3 (total energy ≤ B)
+  is race-proof. In the current deterministic single-thread driver there is no interleaving
+  (<code>denied = 0</code>), but the guarantee already holds if you switch to one thread per
+  processor.</div>
+
+  <p class="muted">Instrumentation (<code>stats()</code>) proves the guard is exercised — the demo
+  reports the acquisition count, total spent/refunded, and how many spends were denied.</p>
+</section>
+
+<!-- ══════════════ 8 ══════════════ -->
+<h2 id="density">8. Density Arbitration — <span class="file">density.py</span></h2>
+<section class="card">
+  <p>When several processors could spend the same energy, priority goes to the one with more valuable
+  upcoming work (the paper's "higher density in the future"):</p>
+  <div class="note" style="font-family:Cambria,serif;font-size:1.02rem">
+    ρ<sub>x</sub>(t) = Σ<sub>(i,j) on x, r<sub>i,j</sub> ≥ t</sub> &nbsp; u<sub>i</sub> ·
+    (cum[i][N_seg] − cum[i][seg_k]) / p<sub>i</sub>
+  </div>
+  <p><code>future_utility_density</code> uses the <em>current committed</em> <code>seg_k</code>, so it
+  reflects what is still addable. <code>arbitrate_energy(pool, densities, mode)</code> then splits the
+  pool: <code>"proportional"</code> gives each processor <code>pool · ρ<sub>x</sub> / Σρ</code> (the
+  default), <code>"strict"</code> gives the whole pool to the top-ρ processor. If all densities are
+  ~0 the pool is shared equally.</p>
+</section>
+
+<!-- ══════════════ 9 ══════════════ -->
+<h2 id="controller">9. The Runtime Controller — <span class="file">controller.py</span></h2>
+<section class="card">
+  <p>Owns the live <code>seg_k/freq_idx/mapping</code>, one <code>ProcessorDP</code> per processor, the
+  <code>SharedEnergyPool</code>, and <code>eff_override</code> (actual effective times of completed
+  jobs). The whole event is these five steps:</p>
+  <pre><span class="kw">def</span> <span class="fn">on_completion</span>(self, i, j, observed_dt, observed_de):
+    x = self.proc_jobs_map[(i,j)]; c = self.pos_of[(i,j)]
+
+    <span class="cm"># 1) record the completed job's ACTUAL (reduced) execution + free energy</span>
+    committed_eff = cum[i][seg_k[(i,j)]] / freq_set[freq_idx[(i,j)]]
+    self.eff_override[(i,j)] = max(0.0, committed_eff - observed_dt)
+    self.pool.refund(observed_de)                          <span class="hl"># atomic</span>
+
+    <span class="cm"># 2) arbitrate this processor's claim from a LIVE pool snapshot</span>
+    pool_now  = self.pool.level()
+    caps      = arbitrate_energy(pool_now, self._densities(t), self.arbitration)
+    de_budget = min(pool_now, max(0.0, caps.get(x, 0.0)))
+
+    <span class="cm"># 3) DP lookup + reconstruction for jobs[c+1:]</span>
+    _, planned = self.dps[x].distribute(c+1, observed_dt, de_budget)
+
+    <span class="cm"># 4) hard-verify + commit (per-processor DBF + atomic spend), trimming if needed</span>
+    committed = self._commit_with_guarantee(x, planned)
+
+    <span class="cm"># 5) rebuild this processor's DP so later completions stay exact</span>
+    self.dps[x] = self._build_dp(x)</pre>
+
+  <h4>Per-processor dynamic DBF</h4>
+  <p><code>_timing_ok_dynamic(only_x=x)</code> checks the preemptive-EDF windows of <em>only</em> the
+  committing processor, charging each job its <code>_eff</code> — the reduced actual time for
+  completed jobs, full committed time for the rest. Because timing is per-processor once the mapping
+  is fixed, this is both cheaper and lock-free (it never reads another processor's live state).</p>
+
+  <h4>Commit-with-guarantee</h4>
+  <pre><span class="kw">def</span> <span class="fn">_commit_with_guarantee</span>(self, x, planned):
+    <span class="cm"># FAST PATH: apply all; if per-proc DBF holds, claim the batch atomically</span>
+    apply all (seg_k, freq_idx)
+    <span class="kw">if</span> self._timing_ok_dynamic(only_x=x) <span class="kw">and</span> self.pool.try_spend_batch([d.a_e ...]):
+        <span class="kw">return</span> list(planned)
+    revert all
+    <span class="cm"># GREEDY: highest-gain first; timing FIRST (lock-free), then atomic spend</span>
+    <span class="kw">for</span> d <span class="kw">in</span> sorted(planned, key=<span class="kw">lambda</span> p: -p.gain):
+        apply d
+        <span class="kw">if</span> self._timing_ok_dynamic(only_x=x) <span class="kw">and</span> self.pool.try_spend(d.a_e):
+            keep d
+        <span class="kw">else</span>:
+            revert d          <span class="cm"># timing checked before spending → nothing to refund</span></pre>
+  <div class="key"><strong>Ordering is deliberate:</strong> timing (cheap, lock-free) is checked
+  before touching the pool, so a rejected decision never spends energy and never needs a refund. The
+  committed schedule always satisfies timing and the global energy budget. Nothing is probabilistic —
+  every decision is the DP optimum, committed only if it provably holds.</div>
+
+  <h4>The two energy numbers</h4>
+  <p><code>total_energy()</code> is the WCET commitment; <code>B − pool.level()</code> is the realised
+  consumption. They diverge by the freed energy: <code>pool + total_energy() = B + Σδe</code>. C3 binds
+  on the realised number, which is always ≤ B; the WCET number may print above B (a bookkeeping
+  artifact of pretending early-finishers ran to WCET).</p>
+</section>
+
+<!-- ══════════════ 10 ══════════════ -->
+<h2 id="acet">10. ACET Model &amp; Simulator — <span class="file">simulator.py</span></h2>
+<section class="card">
+  <p><code>testcase.py</code> holds only WCET, so the simulator <strong>synthesises</strong> ACET:</p>
+  <pre><span class="cm"># ACET = ratio × committed effective time  →  windfall is the freed (1-ratio) fraction</span>
+ratio = acet_ratio <span class="kw">or</span> rng.uniform(ratio_min, ratio_max)   <span class="cm"># default 0.7; seeded</span>
+dt = (1 - ratio) * e_eff(cum[i][k], f_z)      <span class="cm"># local time slack</span>
+de = (1 - ratio) * E   (cum[i][k], f_z)       <span class="cm"># energy returned to the pool</span></pre>
+  <p><code>run()</code> processes jobs in release order, calls <code>on_completion</code> for each, and
+  prints a per-event line plus a summary (added utility, realised vs WCET energy, feasibility, and the
+  semaphore stats). <code>verify_single</code> checks one windfall against the DP value, asserting
+  <code>added ≤ dp_value</code> (the DP value is an optimistic ceiling; the commit may trim a
+  shared-window conflict). The controller is agnostic to <em>how</em> (dt, de) arise — feed it real
+  measured slack and nothing else changes.</p>
+</section>
+
+<!-- ══════════════ 11 ══════════════ -->
+<h2 id="verify">11. Worked-Example Verification — <span class="file">worked_examples.py</span></h2>
+<section class="card">
+  <p>The DP core is model-agnostic (it consumes raw <code>Action</code> tuples). This module feeds it
+  the design document's own two examples (3-job and 4-job, single frequency, energy = time) and asserts
+  that <em>every cell</em> of <em>every published table</em> <code>V[1]…V[4]</code> and all three
+  traces (19.0 / 17.0 / 10.0) reproduce exactly. It runs first in the demo, so one command proves both
+  that the DP matches the paper and that the online phase improves a real schedule.</p>
+</section>
+
+<!-- ══════════════ 12 ══════════════ -->
+<h2 id="flow">12. End-to-End Value Flow (a Real Trace)</h2>
+<section class="card">
+  <p>From <code>python run.py testcase.py online</code> (offline utility 227.33, budget 400, pool starts 42.40):</p>
+  <pre>  event         job        dt        de      +util   #chg       pool
+      2  T1,j0        2.1514    3.2272     6.7555      2    43.7660
+      5  T4,j0        7.0369   10.5553    19.1984      4    57.1296
+      9  T1,j1        2.1514    3.2272     3.1367      1    76.0093
+     ...
+     24  T2,j4        1.2317    1.8476     2.4153      1   107.2225
+  --------------------------------------------------------------
+  Online added utility : 55.338481
+  Final utility        : 282.666723  (offline 227.328242, +55.338481)
+  Energy (WCET commit) : 388.7087   (budget=400)
+  Energy (realised)    : 272.0961   pool/slack=127.9039   [C3 binds on realised]
+  Feasible (dyn-DBF + energy pool >= 0): <span class="st">True</span>
+  Shared pool (semaphore): 82 lock acquisitions, spent=31.1074, refunded=116.6126, denied=0</pre>
+
+  <p>Reading event 2 (<code>T1,j0</code>): it completes at 70% WCET → frees <code>dt=2.15</code>,
+  <code>de=3.23</code>. Step 1 refunds 3.23 to the pool (atomic). Step 2 reads the live pool and caps
+  this processor's claim by its density share. Step 3 the DP reconstructs 2 downstream changes worth
+  <code>+6.76</code>. Step 4 both survive the per-processor DBF and are spent atomically. Over the
+  hyper-period: <strong>+55.34 utility</strong>, realised energy <strong>272.10 ≤ 400</strong>, the
+  semaphore taken 82 times with <strong>0 denials</strong> (expected for the single-thread driver).</p>
+</section>
+
+<!-- ══════════════ 13 ══════════════ -->
+<h2 id="run">13. How to Run</h2>
+<section class="card">
+  <pre><span class="cm"># Full online phase: verify DP vs paper → build offline (v5b) → simulate online</span>
+python run.py testcase.py online
+
+<span class="cm"># Just the DP core vs the design document's worked examples</span>
+python -m usrt.online.worked_examples</pre>
+  <p>Configuration knobs live in <code>SimConfig</code> (in <span class="file">online_demo.py</span>):
+  <code>acet_ratio</code> (fixed 0.7, or <code>None</code> to draw from
+  <code>[ratio_min, ratio_max]</code> with <code>seed</code>), and <code>arbitration</code>
+  (<code>"proportional"</code> or <code>"strict"</code>).</p>
+</section>
+
+<footer>
+  Implementation walkthrough of <code>C:\homogenous\V2\usrt\online</code> (current, with shared energy
+  pool). Companions: <code>dp_assumptions.html</code>, <code>online_phase_explained_2.html</code>,
+  <code>usrt_code_review_report.html</code>.
+</footer>
+
+</main>
+</body>
+</html>

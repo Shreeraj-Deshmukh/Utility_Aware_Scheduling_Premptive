@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>USRT Online Phase — How the Code Actually Works</title>
+<style>
+  :root{
+    --bg:#f7f8fa; --card:#fff; --ink:#1f2430; --muted:#5b6472; --accent:#1f4e8c;
+    --crit:#b3261e; --crit-bg:#fdecea; --high:#b35900; --high-bg:#fff4e5;
+    --med:#7a6400; --med-bg:#fffbe5; --low:#1b5e20; --low-bg:#e9f5ea;
+    --code-bg:#f1f3f6; --border:#d8dde5; --purp:#5a3a8c; --purp-bg:#f1ecf8;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;padding:0 0 4rem;font-family:"Segoe UI",system-ui,-apple-system,sans-serif;
+       background:var(--bg);color:var(--ink);line-height:1.62;}
+  header{background:linear-gradient(135deg,#16365c 0%,#1f4e8c 60%,#2b6cb0 100%);
+         color:#fff;padding:2.2rem 2rem 1.8rem;}
+  header h1{margin:0 0 .4rem;font-size:1.7rem;font-weight:650;}
+  header p{margin:.15rem 0;opacity:.93;font-size:.95rem;}
+  main{max-width:1120px;margin:0 auto;padding:1.5rem 1.5rem 0;}
+  h2{color:var(--accent);font-size:1.32rem;margin:2.6rem 0 .8rem;
+     border-bottom:2px solid var(--border);padding-bottom:.35rem;}
+  h3{font-size:1.08rem;margin:1.5rem 0 .5rem;color:#16365c;}
+  h4{font-size:.98rem;margin:1.1rem 0 .35rem;color:var(--purp);}
+  section.card{background:var(--card);border:1px solid var(--border);border-radius:10px;
+               padding:1.1rem 1.4rem;margin:1rem 0;box-shadow:0 1px 3px rgba(20,30,50,.06);}
+  code{font-family:Consolas,"Cascadia Code",monospace;font-size:.86em;background:var(--code-bg);
+       border-radius:4px;padding:.07rem .32rem;}
+  .file{font-family:Consolas,"Cascadia Code",monospace;font-size:.8rem;color:#fff;
+        background:var(--accent);border-radius:4px;padding:.1rem .5rem;font-weight:600;}
+  pre{background:#20242c;color:#dde3ec;border-radius:8px;padding:.9rem 1.1rem;overflow-x:auto;
+      font-size:.82rem;line-height:1.5;font-family:Consolas,"Cascadia Code",monospace;}
+  pre .cm{color:#7f8a9d;} pre .bad{color:#ff8a80;font-weight:600;}
+  pre .good{color:#9ccc8d;} pre .kw{color:#c9a0ff;} pre .num{color:#f3c07b;}
+  pre .str{color:#9ccc8d;}
+  table{border-collapse:collapse;width:100%;margin:.8rem 0;font-size:.88rem;background:var(--card);}
+  th,td{border:1px solid var(--border);padding:.45rem .65rem;text-align:left;vertical-align:top;}
+  th{background:#eef2f7;font-weight:650;}
+  td.mono,th.mono{font-family:Consolas,"Cascadia Code",monospace;font-size:.85em;}
+  .note{border-left:4px solid var(--accent);background:#eef3fa;padding:.55rem .9rem;
+        border-radius:0 6px 6px 0;margin:.7rem 0;font-size:.92rem;}
+  .note strong{color:var(--accent);}
+  .key{border-left:4px solid var(--purp);background:var(--purp-bg);padding:.55rem .9rem;
+       border-radius:0 6px 6px 0;margin:.7rem 0;font-size:.94rem;}
+  .key strong{color:var(--purp);}
+  .badge{display:inline-block;font-size:.72rem;font-weight:700;letter-spacing:.04em;
+         text-transform:uppercase;border-radius:4px;padding:.13rem .5rem;margin-right:.5rem;
+         vertical-align:middle;}
+  .badge.crit{background:var(--crit-bg);color:var(--crit);border:1px solid var(--crit);}
+  .badge.high{background:var(--high-bg);color:var(--high);border:1px solid var(--high);}
+  .badge.med{background:var(--med-bg);color:var(--med);border:1px solid var(--med);}
+  .badge.low{background:var(--low-bg);color:var(--low);border:1px solid var(--low);}
+  nav.toc{background:var(--card);border:1px solid var(--border);border-radius:10px;
+          padding:1rem 1.4rem;margin-top:1rem;font-size:.93rem;column-count:2;column-gap:2rem;}
+  nav.toc a{color:var(--accent);text-decoration:none;display:block;padding:.12rem 0;}
+  nav.toc a:hover{text-decoration:underline;}
+  .flow{font-family:Consolas,"Cascadia Code",monospace;font-size:.8rem;background:#fbfcfe;
+        border:1px solid var(--border);border-radius:8px;padding:1rem;overflow-x:auto;
+        white-space:pre;line-height:1.45;color:#2a3340;}
+  .muted{color:var(--muted);font-size:.9rem;}
+  .pill{font-family:Consolas,monospace;font-size:.8rem;background:var(--purp-bg);color:var(--purp);
+        border:1px solid #d9c9f0;border-radius:10px;padding:.05rem .5rem;white-space:nowrap;}
+  footer{text-align:center;color:var(--muted);font-size:.82rem;margin-top:3rem;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>USRT Online Phase — How the Code Actually Works</h1>
+  <p>Scope: <span class="file">usrt/online/</span> only — the joint (time, energy) slack-distribution DP (paper §VI / <em>usrt_online_dp_doc.pdf</em>).</p>
+  <p>Audience: you already know the DP theory; this explains the <em>code</em> — datatypes, functions, structures, and exactly how values move.</p>
+  <p>Energy model: α=1.0, β=0.5 &nbsp;•&nbsp; Entry point: <code>python run.py testcase.py online</code></p>
+</header>
+
+<main>
+
+<nav class="toc">
+  <strong>Contents</strong>
+  <a href="#why-strange">1. Why the code looks "strange": requirements, not a table</a>
+  <a href="#trace">2. A real trace through compose() &amp; query()</a>
+  <a href="#types">3. Every datatype, with its fields</a>
+  <a href="#vf">4. value_function.py — the DP engine</a>
+  <a href="#actions">5. actions.py — the 4-option action set</a>
+  <a href="#dp">6. dp.py — per-processor precompute &amp; reconstruction</a>
+  <a href="#density">7. density.py — global energy arbitration</a>
+  <a href="#controller">8. controller.py — the runtime owner</a>
+  <a href="#sim">9. simulator.py &amp; worked_examples.py</a>
+  <a href="#flow">10. End-to-end value flow (one event)</a>
+  <a href="#options">11. The four paper options ↔ signed deltas</a>
+  <a href="#concerns">12. Concerns &amp; edge cases</a>
+</nav>
+
+<!-- ════════════════════════════ 1 ════════════════════════════ -->
+<h2 id="why-strange">1. Why the Code Looks "Strange": It Stores Requirements, Not a Table</h2>
+<section class="card">
+  <p>The design doc draws the value function as a dense grid you index by slack:
+  <code>V[j][Δt][Δe] = value</code>. The natural expectation is a 2-D array. <strong>The
+  code never builds that array.</strong> That is the one decision behind almost everything
+  that looks unfamiliar.</p>
+
+  <div class="key"><strong>The inversion.</strong> For a fixed job <code>j</code>, the table
+  <code>V[j][Δt][Δe]</code> is a <em>step function</em>: non-decreasing in both Δt and Δe, flat
+  except at a handful of jumps. Instead of storing the value at every (Δt, Δe), the code stores
+  only the jump points — and it stores them <em>inverted</em>: for each achievable
+  <code>value</code>, the <strong>minimum slack required</strong> to reach it. That pair of
+  minimums is <code>(req_t, req_e)</code>. One such jump point is an <code>Entry</code>.</p>
+
+  <table>
+    <tr><th>Doc's mental model (dense)</th><th>The code's model (sparse, inverted)</th></tr>
+    <tr>
+      <td class="mono">V[j] = 2-D array indexed by (Δt, Δe).<br>Lookup = <code>V[j][dt][de]</code>.</td>
+      <td class="mono">V_levels[j] = <code>list[Entry]</code>, each Entry = one jump:<br>
+          "you need ≥ req_t and ≥ req_e to get <code>value</code>."<br>
+          Lookup = <code>query()</code>: best value whose req fits.</td>
+    </tr>
+  </table>
+
+  <p>Why do it this way? Three reasons, all visible in the code:</p>
+  <ul>
+    <li><strong>Float costs.</strong> Real execution times/energies are floats
+      (<code>e_m = 2.451382…</code>). A dense table would force you to quantise the axes and
+      eat rounding error. The breakpoint set is exact at any float (doc Issue 5 / §7.2
+      "aggregate states" — here it falls out for free).</li>
+    <li><strong>Sparsity.</strong> A chain of jobs with a few segments each has only a few
+      reachable cost vectors. The frontier is tiny; a dense grid would be mostly duplicated
+      flats.</li>
+    <li><strong>Reconstruction.</strong> Each <code>Entry</code> carries a back-pointer
+      <code>nxt</code> to the downstream entry it was built from, so the optimal per-job plan is
+      recovered by following pointers — no second pass over a table.</li>
+  </ul>
+
+  <div class="note"><strong>If you remember one thing:</strong> an <code>Entry</code>'s
+  <code>(req_t, req_e)</code> is "how much slack this costs," and <code>value</code> is "how much
+  utility you get." <code>query(dt, de)</code> = "of all entries I can afford, give me the most
+  valuable." That is the whole engine.</div>
+</section>
+
+<!-- ════════════════════════════ 2 ════════════════════════════ -->
+<h2 id="trace">2. A Real Trace Through <code>compose()</code> and <code>query()</code></h2>
+<section class="card">
+  <p>This is the design document's Example 1 (3 jobs, single processor), run through the actual
+  functions. It shows how the Pareto entries <em>are</em> the table.</p>
+
+  <h4>Inputs — the action lists (from <span class="file">worked_examples.py</span>)</h4>
+  <pre><span class="cm"># Action(a_t, a_e, gain, k, z)   — energy == time in the doc's simplification</span>
+J1 = [Action(0,0,0.0,0,0), Action(2,2,6.0,1,0), Action(3,3,9.0,2,0)]
+J2 = [Action(0,0,0.0,0,0), Action(3,3,3.0,1,0)]
+J3 = [Action(0,0,0.0,0,0), Action(1,1,2.0,1,0), Action(4,4,8.0,2,0)]</pre>
+
+  <h4>Step A — build the last level <code>V[3]</code> = <code>compose(J3, base_level())</code></h4>
+  <p><code>base_level()</code> is a single <code>Entry(req_t=0, req_e=0, value=0, nxt=None)</code>.
+  <code>compose</code> takes the Cartesian product (each action × each downstream entry), adds
+  costs and values, clamps negatives to 0, then <code>prune()</code>s to the Pareto frontier:</p>
+  <pre><span class="cm"># action × the one base entry → candidate Entry(req_t, req_e, value, k, nxt=0)</span>
+(0,0,0.0,k0) → Entry(req_t=0, req_e=0, value=0, k=0)
+(1,1,2.0,k1) → Entry(req_t=1, req_e=1, value=2, k=1)
+(4,4,8.0,k2) → Entry(req_t=4, req_e=4, value=8, k=2)
+<span class="good"># none dominates another (more slack buys more value) → all 3 kept</span>
+V_levels[2] = [ (0,0,v0), (1,1,v2), (4,4,v8) ]   <span class="cm"># this list IS the V[3] table</span></pre>
+
+  <p>Now <code>query()</code> reconstructs any table cell on demand:</p>
+  <table>
+    <tr><th class="mono">query(V[3], dt, de)</th><th>entries affordable (req_t≤dt, req_e≤de)</th><th>best value</th><th>doc cell</th></tr>
+    <tr><td class="mono">dt=3, de=3</td><td class="mono">(0,0,0), (1,1,2)</td><td class="mono">2</td><td class="mono">V3[3][3]=2 ✓</td></tr>
+    <tr><td class="mono">dt=4, de=4</td><td class="mono">(0,0,0), (1,1,2), (4,4,8)</td><td class="mono">8</td><td class="mono">V3[4][4]=8 ✓</td></tr>
+  </table>
+
+  <h4>Step B — build <code>V[2]</code> = <code>compose(J2, V[3])</code> (this is where lookahead appears)</h4>
+  <p>Each J2 action is paired with <em>each</em> downstream entry of V[3]. The downstream entry's
+  <code>req</code> is added to the action's cost; its <code>value</code> is added to the gain;
+  <code>nxt</code> records which downstream entry was used:</p>
+  <pre>action (0,0,0.0) "skip J2"  × V3(0,0,0) → Entry(0,0, 0)   nxt→V3(0,0,0)
+                            × V3(1,1,2) → Entry(1,1, 2)   nxt→V3(1,1,2)
+                            × V3(4,4,8) → Entry(4,4, 8)   nxt→V3(4,4,8)
+action (3,3,3.0) "do  J2"  × V3(0,0,0) → Entry(3,3, 3)   nxt→V3(0,0,0)
+                            × V3(1,1,2) → Entry(4,4, 5)   nxt→V3(1,1,2)
+                            × V3(4,4,8) → Entry(7,7,11)   nxt→V3(4,4,8)
+<span class="cm"># prune: (4,4,5) is dominated by (4,4,8) — same req, less value — DROPPED</span>
+V_levels[1] = [ (0,0,0), (1,1,2), (3,3,3), (4,4,8), (7,7,11) ]</pre>
+
+  <div class="key"><strong>The non-greedy decision, made by pruning.</strong> At <code>query(V[2],
+  4, 4)</code> the affordable entries are <code>(0,0,0),(1,1,2),(3,3,3),(4,4,8)</code> → best is
+  <strong>8</strong>, which is the <code>(4,4,8)</code> entry whose <code>nxt</code> points to
+  J3's big segment. That entry came from the <em>"skip J2"</em> action. So the code decides "skip
+  J2, give all slack to J3" purely because the dominated <code>(4,4,5)</code> "do J2" candidate was
+  pruned — exactly the doc's V2[4][4]=8 result, reached with no special-case logic.</div>
+</section>
+
+<!-- ════════════════════════════ 3 ════════════════════════════ -->
+<h2 id="types">3. Every Datatype, With Its Fields</h2>
+<section class="card">
+  <p>The whole subsystem is built from one class with a back-pointer plus five namedtuples and two
+  owner classes. Knowing these makes every function readable.</p>
+
+  <table>
+    <tr><th>Type</th><th>Defined in</th><th>Kind</th><th>Fields</th><th>Role</th></tr>
+    <tr><td class="mono">Entry</td><td class="file">value_function</td><td>class, <code>__slots__</code></td>
+        <td class="mono">req_t, req_e, value, k, z, a_t, a_e, nxt</td>
+        <td>One Pareto jump of a value-function level. <code>nxt</code> = index into the
+            downstream level (or None at base).</td></tr>
+    <tr><td class="mono">Action</td><td class="file">actions</td><td>namedtuple</td>
+        <td class="mono">a_t, a_e, gain, k, z</td>
+        <td>One candidate online choice for a job: signed time/energy deltas vs the offline
+            baseline, the utility gain, and the target (k, z).</td></tr>
+    <tr><td class="mono">JobSlot</td><td class="file">dp</td><td>namedtuple</td>
+        <td class="mono">pos, i, j, k_off, z_off, time_cap</td>
+        <td>Static metadata for one job in a processor's EDF chain (its position, offline
+            decision, and time-slack cap).</td></tr>
+    <tr><td class="mono">PlannedAction</td><td class="file">dp</td><td>namedtuple</td>
+        <td class="mono">pos, i, j, k_off, z_off, k, z, a_t, a_e, gain</td>
+        <td>A reconstructed decision returned by <code>distribute()</code> (before the controller
+            verifies it).</td></tr>
+    <tr><td class="mono">JobDecision</td><td class="file">controller</td><td>namedtuple</td>
+        <td class="mono">x, i, j, k_off, z_off, k, z, a_t, a_e, gain</td>
+        <td>A <em>committed</em> decision (same as PlannedAction + processor <code>x</code>),
+            appended to <code>OnlineController.applied</code>.</td></tr>
+    <tr><td class="mono">SimConfig</td><td class="file">simulator</td><td>namedtuple (defaults)</td>
+        <td class="mono">acet_ratio, ratio_min, ratio_max, seed, arbitration, verbose</td>
+        <td>Knobs for the ACET windfall model and the run.</td></tr>
+    <tr><td class="mono">ProcessorDP</td><td class="file">dp</td><td>class</td>
+        <td class="mono">x, slots, V_levels, _cum, _freq, _tasks</td>
+        <td>The precomputed DP for one processor: <code>slots[s]</code> is a JobSlot,
+            <code>V_levels[s]</code> covers <code>jobs[s:]</code>.</td></tr>
+    <tr><td class="mono">OnlineController</td><td class="file">controller</td><td>class</td>
+        <td class="mono">seg_k, freq_idx, mapping, energy_pool, dps, eff_override, pos_of, …</td>
+        <td>Owns the live committed schedule, one ProcessorDP per processor, and the global
+            energy pool.</td></tr>
+  </table>
+
+  <div class="note"><strong>Naming map to the paper:</strong> <code>req_t/req_e</code> ↔ the (Δt,
+  Δe) axes; <code>value</code> ↔ V; <code>a_t/a_e</code> ↔ (a<sub>t</sub>, a<sub>e</sub>)
+  allocation; <code>gain</code> ↔ gain(j, a<sub>t</sub>, a<sub>e</sub>); <code>nxt</code> ↔ the
+  action table A; <code>k_off/z_off</code> ↔ the offline-committed ⟨k, f<sub>z</sub>⟩.</div>
+</section>
+
+<!-- ════════════════════════════ 4 ════════════════════════════ -->
+<h2 id="vf">4. <span class="file">value_function.py</span> — the DP Engine (model-agnostic)</h2>
+<section class="card">
+  <p>This module knows nothing about tasks, processors, or energy models. It only manipulates
+  <code>Entry</code> lists and <code>Action</code> tuples. That is deliberate — it's why the same
+  code reproduces the doc's integer tables <em>and</em> drives the float-cost real schedule.</p>
+
+  <table>
+    <tr><th>Function</th><th>Signature</th><th>What it does / value flow</th></tr>
+    <tr><td class="mono">base_level()</td><td class="mono">() → [Entry]</td>
+        <td>Terminal level V[N]: one <code>Entry(0,0,0, k=None, nxt=None)</code>. Seeds the
+            right-to-left recurrence and guarantees a "do-nothing" fallback so
+            <code>query</code> never returns None.</td></tr>
+    <tr><td class="mono">compose()</td><td class="mono">(actions, downstream) → [Entry]</td>
+        <td>The recurrence. For every <code>(a_t,a_e,gain,k,z)</code> × every downstream
+            <code>Entry d</code>: <code>req_t = max(0, a_t + d.req_t)</code>,
+            <code>req_e = max(0, a_e + d.req_e)</code>, <code>value = gain + d.value</code>,
+            <code>nxt = index(d)</code>. Then <code>prune</code>. Output indexes into
+            <code>downstream</code>.</td></tr>
+    <tr><td class="mono">prune()</td><td class="mono">(entries) → [Entry]</td>
+        <td>Pareto filter. Sort by <code>(req_t↑, req_e↑, value↓)</code>; keep an entry only if no
+            kept entry already needs ≤ both resources for ≥ value; drop kept entries the new one
+            dominates. O(n²), fine for tiny frontiers.</td></tr>
+    <tr><td class="mono">query()</td><td class="mono">(level, dt, de) → Entry</td>
+        <td>The online lookup. Among entries with <code>req_t ≤ dt</code> and
+            <code>req_e ≤ de</code>, return max <code>value</code>; ties broken toward the
+            smaller <code>req_t+req_e</code> (leave more slack for later).</td></tr>
+  </table>
+
+  <h4>The clamp <code>max(0, a_t + d.req_t)</code> — the part that looks wrong but isn't</h4>
+  <p>When a job runs <em>faster</em> than baseline (Option 4), its <code>a_t</code> is
+  <strong>negative</strong> — it returns time to the pool. Adding it to the downstream requirement
+  lowers what the upstream must supply. The clamp at 0 says: a job cannot create usable surplus
+  beyond what the downstream actually needs, because <code>d.req_t</code> is already the
+  <em>minimal</em> requirement for that value level. Without the clamp you would record a negative
+  requirement and over-credit the chain. This is precisely how the conversion options enter the
+  table (module docstring spells it out).</p>
+</section>
+
+<!-- ════════════════════════════ 5 ════════════════════════════ -->
+<h2 id="actions">5. <span class="file">actions.py</span> — the 4-Option Action Set</h2>
+<section class="card">
+  <p>One function, <code>build_job_actions()</code>, turns a job's offline decision into the list
+  of online moves the DP may pick. This is the only place the energy model
+  (<code>energy_val</code>, <code>e_eff_val</code> from <span class="file">usrt/models.py</span>)
+  is touched per job.</p>
+
+  <pre><span class="kw">def</span> build_job_actions(i, k_off, z_off, cum, N_seg_i, freq_set, u_i, time_cap):
+    base_eff = e_eff_val(cum[i][k_off], freq_set[z_off])   <span class="cm"># offline effective time</span>
+    base_en  = energy_val(cum[i][k_off], freq_set[z_off])  <span class="cm"># offline energy</span>
+    <span class="kw">for</span> k <span class="kw">in</span> range(k_off, N_seg_i+1):        <span class="cm"># only ADD segments (A1)</span>
+        gain = u_i * (cum[i][k] - cum[i][k_off])     <span class="cm"># utility at f_max work</span>
+        <span class="kw">for</span> z <span class="kw">in</span> range(len(freq_set)):           <span class="cm"># any target frequency</span>
+            a_t = e_eff_val(cum[i][k], fz) - base_eff
+            <span class="kw">if</span> a_t &gt; time_cap: <span class="kw">continue</span>          <span class="cm"># timing gate (A2)</span>
+            a_e = energy_val(cum[i][k], fz) - base_en
+            actions.append(Action(a_t, a_e, gain, k, z))</pre>
+
+  <ul>
+    <li><strong>Baseline-relative.</strong> Every <code>a_t</code>, <code>a_e</code> is measured
+      against the offline <code>(k_off, z_off)</code>, so the <code>(k_off, z_off)</code> action is
+      always present as <code>Action(0, 0, 0, …)</code> — the paper's Option 1 (save).</li>
+    <li><strong>gain depends only on <code>k</code>.</strong> Utility is earned on
+      f<sub>max</sub>-normalised work (paper Eq. 8), so several <code>(k, z)</code> share a gain;
+      pruning later keeps only the energy/time-efficient ones.</li>
+    <li><strong>Timing gate only.</strong> Energy is <em>not</em> filtered here — it's a global,
+      replenishable pool handled by <code>req_e</code> in the DP and by the controller. Only the
+      local time cap is applied at action-build time.</li>
+    <li>Result is sorted with the baseline action first, for stable, readable reconstruction.</li>
+  </ul>
+</section>
+
+<!-- ════════════════════════════ 6 ════════════════════════════ -->
+<h2 id="dp">6. <span class="file">dp.py</span> — Per-Processor Precompute &amp; Reconstruction</h2>
+<section class="card">
+  <p>Wraps the engine for one processor and adds the back-pointer walk.</p>
+
+  <h4><code>build_processor_dp(x, …)</code> → <code>ProcessorDP</code></h4>
+  <ol>
+    <li><code>_edf_order()</code> sorts the processor's jobs by <code>(deadline, release, i, j)</code>
+      into <code>jobs_x</code>.</li>
+    <li>Builds a <code>JobSlot</code> per job: position, offline <code>(k_off, z_off)</code>, and a
+      <code>time_cap</code>. The cap is <code>time_caps[(i,j)]</code> if the caller passed one
+      (the controller does), else <code>min_slack_for_job(...)</code> from
+      <span class="file">usrt/dbf/slack.py</span>.</li>
+    <li>Right-to-left loop: <code>V_levels[N]=base_level()</code>, then for
+      <code>s = N-1 … 0</code>: <code>V_levels[s] = compose(build_job_actions(slot s), V_levels[s+1])</code>.</li>
+  </ol>
+  <div class="key"><strong>Why "precompute once" works.</strong> <code>V_levels[s]</code> is the
+  value function over <em>every suffix</em> <code>jobs[s:]</code>. So when the job at position
+  <code>c</code> completes early, the downstream chain is <code>jobs[c+1:]</code> and the answer is
+  already sitting in <code>V_levels[c+1]</code> — the online step is a lookup, not a rebuild.</div>
+
+  <h4><code>ProcessorDP.distribute(start_pos, dt, de)</code> → <code>(total_value, [PlannedAction])</code></h4>
+  <p>This is the reconstruction — it turns the chosen <code>Entry</code> into concrete per-job
+  decisions by following <code>nxt</code>:</p>
+  <pre>e = query(V_levels[start_pos], dt, de)        <span class="cm"># best affordable entry</span>
+total = e.value
+<span class="kw">while</span> e.nxt <span class="kw">is not None</span>:                   <span class="cm"># walk the back-pointer chain</span>
+    <span class="kw">if</span> e.k != slot.k_off <span class="kw">or</span> e.z != slot.z_off:  <span class="cm"># job actually changed?</span>
+        decisions.append(PlannedAction(... k=e.k, z=e.z, a_t=e.a_t, a_e=e.a_e ...))
+    e = V_levels[s+1][e.nxt]                   <span class="cm"># hop to the downstream entry it used</span>
+    s += 1</pre>
+  <p>Only jobs whose <code>(k, z)</code> differs from their offline baseline are emitted (a job that
+  the DP decided to leave alone produces nothing). <code>best_value()</code> is the same lookup
+  without reconstruction, used by the validator.</p>
+
+  <div class="note"><strong>Code smell flagged honestly:</strong> after the <code>while</code> loop
+  there is a trailing "last consumed level" block. Given <code>base_level</code>'s entry has
+  <code>k=None</code> and every <em>composed</em> entry carries an integer <code>nxt</code>, that
+  block is effectively defensive/unreachable in the current construction — see §12.</div>
+</section>
+
+<!-- ════════════════════════════ 7 ════════════════════════════ -->
+<h2 id="density">7. <span class="file">density.py</span> — Global Energy Arbitration</h2>
+<section class="card">
+  <p>Time is processor-local (separate DPs). Energy is one shared pool, so when several processors
+  could spend it, the code resolves contention with the paper's "higher future density wins"
+  rule.</p>
+  <table>
+    <tr><th>Function</th><th>Returns</th><th>Logic</th></tr>
+    <tr><td class="mono">future_utility_density(x, t, …)</td><td class="mono">float ρ_x(t)</td>
+        <td>Σ over jobs on <code>x</code> released at/after <code>t</code> of
+            <code>u_i · (cum[i][N_seg_i] − cum[i][seg_k]) / p_i</code> — i.e. still-<em>addable</em>
+            optional utility per period, using the <em>current committed</em> <code>seg_k</code>.</td></tr>
+    <tr><td class="mono">arbitrate_energy(pool, densities, mode)</td><td class="mono">{x: energy_cap}</td>
+        <td><b>proportional</b> (default): <code>cap_x = pool · ρ_x / Σρ</code>.
+            <b>strict</b>: the single highest-ρ processor gets the whole pool. If all ρ≈0, split
+            equally.</td></tr>
+  </table>
+  <div class="note"><strong>Advisory, not a hard cap.</strong> The returned cap only limits what
+  <code>distribute()</code> is allowed to <em>plan</em> on this processor. The hard guarantee
+  (never exceed B) is enforced separately by the controller against the whole pool.</div>
+</section>
+
+<!-- ════════════════════════════ 8 ════════════════════════════ -->
+<h2 id="controller">8. <span class="file">controller.py</span> — the Runtime Owner</h2>
+<section class="card">
+  <p>The only stateful, model-aware object. It holds the live schedule (<code>seg_k</code>,
+  <code>freq_idx</code>, <code>mapping</code>), one <code>ProcessorDP</code> per processor, the
+  <code>energy_pool</code>, and <code>eff_override</code> (actual effective times of jobs that
+  already completed early).</p>
+
+  <h4>Construction</h4>
+  <ul>
+    <li>Copies the offline schedule into mutable dicts; builds <code>proc_jobs</code>.</li>
+    <li><code>energy_pool = B − total_energy()</code> — the starting slack.</li>
+    <li>Builds <code>dps[x]</code> for each processor via <code>_build_dp(x)</code>, which passes a
+      <code>time_caps</code> of <strong>deadline-interval</strong> <code>(d − r)</code> per job
+      (not <code>min_slack_for_job</code>).</li>
+    <li><code>pos_of[(i,j)]</code> records each job's EDF position.</li>
+  </ul>
+
+  <div class="key"><strong>The <code>time_caps</code> override — the single most important runtime
+  subtlety.</strong> At build time the static <code>min_slack_for_job</code> is ~0 (the offline
+  greedy already consumed all static slack), which would make the DP propose nothing. The
+  controller deliberately replaces it with the loose deadline-interval cap and relies on the
+  <em>dynamic</em> DBF at commit time as the real limiter. This is the change that turns a
+  0-utility online phase into a real gain.</div>
+
+  <h4><code>on_completion(i, j, observed_dt, observed_de)</code> — the event handler (5 steps)</h4>
+  <div class="flow">x = proc of (i,j);  c = pos_of[(i,j)]
+
+1. RECORD     eff_override[(i,j)] = max(0, committed_eff - observed_dt)   # job ran short
+              energy_pool += observed_de                                  # energy returned
+
+2. ARBITRATE  densities = ρ_x(release_time) for all x
+              caps = arbitrate_energy(energy_pool, densities, mode)
+              de_budget = min(energy_pool, caps[x])                       # this proc's share
+
+3. LOOK UP    _, planned = dps[x].distribute(c+1, observed_dt, de_budget) # downstream plan
+
+4. GUARANTEE  committed = _commit_with_guarantee(planned)                 # dyn-DBF + pool, trim
+
+5. SETTLE     energy_pool -= Σ committed.a_e                              # pay for what stuck
+              dps[x] = _build_dp(x);  refresh pos_of                      # lazy rebuild
+              return Σ committed.gain, committed</div>
+
+  <h4><code>_timing_ok_dynamic()</code> — the feasibility authority</h4>
+  <p>A full preemptive-EDF DBF across all processors and all
+  <code>(t1∈arrivals, t2∈deadlines)</code> windows, but it sums <code>_eff(i,j)</code> — the
+  <em>actual</em> effective time for already-completed jobs (from <code>eff_override</code>) and
+  the committed WCET effective time otherwise. Because a completed job contributes <em>less</em>,
+  adding work to a downstream job inside its window keeps the window demand at or below its
+  original, already-feasible value. This is what makes the additions provably safe.</p>
+
+  <h4><code>_commit_with_guarantee(planned)</code> — trim-to-feasible</h4>
+  <ol>
+    <li><b>Fast path:</b> apply <em>all</em> planned decisions, check
+      <code>_timing_ok_dynamic()</code> and <code>energy_pool − spent ≥ 0</code>. If both hold,
+      keep the whole set.</li>
+    <li><b>Else revert</b> and re-apply greedily, highest <code>gain</code> first, re-verifying
+      after each; keep a decision only if it preserves feasibility, else roll just it back.</li>
+  </ol>
+  <p>The committed schedule therefore always satisfies the dynamic DBF and the budget — nothing
+  probabilistic, every commit is provably legal.</p>
+</section>
+
+<!-- ════════════════════════════ 9 ════════════════════════════ -->
+<h2 id="sim">9. <span class="file">simulator.py</span> &amp; <span class="file">worked_examples.py</span></h2>
+<section class="card">
+  <h4>OnlineSimulator — drives a whole hyper-period</h4>
+  <ul>
+    <li><code>_windfall(i, j, ratio)</code>: a job whose effective time is <code>eff</code>
+      actually runs <code>ratio·eff</code>, freeing <code>dt=(1−ratio)·eff</code> and
+      <code>de=(1−ratio)·E(committed)</code> (doc §1.1 model). <code>ratio</code> is fixed
+      (<code>acet_ratio</code>) or drawn in <code>[ratio_min, ratio_max]</code> with a seeded RNG.</li>
+    <li><code>_event_order()</code>: jobs in release order (≈ wall-clock), each fed to
+      <code>on_completion</code>.</li>
+    <li><code>run()</code> prints the per-event table and a summary, returning a dict with
+      <code>offline_utility</code>, <code>online_added</code>, <code>final_utility</code>,
+      <code>wcet_energy</code>, <code>actual_energy</code>, <code>feasible</code>.
+      <strong>Note:</strong> C3 (energy ≤ B) binds on <code>actual_energy = B − energy_pool</code>,
+      the realised consumption — not the conservative WCET commitment.</li>
+    <li><code>verify_single(i, j, dt, de)</code>: computes the DP value, runs the real event, and
+      asserts <code>added == dp_value</code> (the doc's "verified trace" property).</li>
+  </ul>
+
+  <h4>worked_examples — pins the engine to the paper</h4>
+  <p><code>build_levels()</code> feeds the doc's literal <code>Action</code> lists to
+  <code>compose</code>; <code>table()</code> materialises a dense grid from the step function by
+  calling <code>query</code> at every integer cell; <code>_cmp</code> asserts it equals the
+  published table; <code>reconstruct()</code> follows <code>nxt</code> to print the chosen actions.
+  Both 3-job and 4-job examples (all 7 tables, traces 19.0 / 17.0 / 10.0) reproduce exactly.
+  Run standalone: <code>python -m usrt.online.worked_examples</code>.</p>
+
+  <h4>online_demo (in <span class="file">usrt/solvers/</span>) — the <code>run.py online</code> entry</h4>
+  <p>Builds the offline schedule with the v5b pipeline (Quantum SPS → Refine 2b → aggressive →
+  greedy → swap) to get <code>(seg_k, freq_idx, mapping)</code>, runs
+  <code>verify_worked_examples()</code>, then constructs an <code>OnlineSimulator</code> and calls
+  <code>run()</code>. One command proves both "engine matches the doc" and "online improves a real
+  schedule while staying feasible."</p>
+</section>
+
+<!-- ════════════════════════════ 10 ════════════════════════════ -->
+<h2 id="flow">10. End-to-End Value Flow (One Early Completion)</h2>
+<section class="card">
+  <div class="flow">  testcase.py
+      │ load_testcase
+      ▼
+  offline_schedule()                       seg_k, freq_idx, mapping      (the precompute INPUT)
+      │
+      ▼
+  OnlineController.__init__
+      │  energy_pool = B − total_energy()
+      │  for x: dps[x] = build_processor_dp(x, time_caps = deadline-interval)
+      │             └─ _edf_order → JobSlots → right-to-left compose() → V_levels[]
+      ▼
+  ── runtime: job (i,j) finishes at ratio·eff ───────────────────────────────────────────
+  simulator._windfall  →  (observed_dt, observed_de)
+      │
+      ▼
+  controller.on_completion(i, j, observed_dt, observed_de)
+      │  ① eff_override[(i,j)] ← actual;  energy_pool += observed_de
+      │  ② de_budget ← arbitrate_energy(pool, ρ)        [density.py]
+      │  ③ planned ← dps[x].distribute(c+1, observed_dt, de_budget)
+      │             └─ query(V_levels[c+1]) → Entry → follow nxt → [PlannedAction]
+      │  ④ committed ← _commit_with_guarantee(planned)   [dyn-DBF + pool, trim]
+      │  ⑤ energy_pool −= Σ a_e;  dps[x] ← rebuild
+      ▼
+  (added_utility, [JobDecision])  →  applied += …  ;  seg_k / freq_idx mutated in place</div>
+
+  <p class="muted">Data shape at each hop: floats <code>(dt, de)</code> in → an <code>Entry</code>
+  chosen → a list of <code>PlannedAction</code> → a (possibly trimmed) list of
+  <code>JobDecision</code> out, with <code>seg_k</code>/<code>freq_idx</code>/<code>energy_pool</code>
+  updated as side effects.</p>
+</section>
+
+<!-- ════════════════════════════ 11 ════════════════════════════ -->
+<h2 id="options">11. The Four Paper Options ↔ Signed Deltas</h2>
+<section class="card">
+  <p>There is no <code>if option == 3</code> anywhere. The four options are <em>emergent</em> from
+  the sign of an action's deltas, produced naturally by the nested <code>(k, z)</code> loop in
+  <code>build_job_actions</code>:</p>
+  <table>
+    <tr><th>Paper option</th><th>Code condition</th><th class="mono">a_t</th><th class="mono">a_e</th><th class="mono">gain</th></tr>
+    <tr><td>1 — Save</td><td class="mono">k=k_off, z=z_off</td><td class="mono">0</td><td class="mono">0</td><td class="mono">0</td></tr>
+    <tr><td>2 — Spend</td><td class="mono">k&gt;k_off, z=z_off</td><td class="mono">&gt;0</td><td class="mono">&gt;0</td><td class="mono">&gt;0</td></tr>
+    <tr><td>3 — Time→Energy</td><td class="mono">k=k_off, z&lt;z_off (slower)</td><td class="mono">&gt;0</td><td class="mono">&lt;0</td><td class="mono">0</td></tr>
+    <tr><td>4 — Energy→Time</td><td class="mono">k=k_off, z&gt;z_off (faster)</td><td class="mono">&lt;0</td><td class="mono">&gt;0</td><td class="mono">0</td></tr>
+  </table>
+  <p>The composer's <code>max(0, a_t + d.req_t)</code> clamp is what lets the negative deltas of
+  Options 3/4 reduce upstream requirements. <strong>Caveat (α=1, β=0.5):</strong> energy is
+  minimised at f<sub>max</sub>, so Option-3/4 actions carry <code>gain=0</code> and are dominated
+  in <code>prune</code> — present in code, inert in practice. See §12 and
+  <code>dp_assumptions.html</code> (L1).</p>
+</section>
+
+<!-- ════════════════════════════ 12 ════════════════════════════ -->
+<h2 id="concerns">12. Concerns &amp; Edge Cases (code-specific)</h2>
+
+<section class="card">
+  <span class="badge high">High</span>
+  <h3>E1. <code>distribute()</code> value can exceed what <code>_commit_with_guarantee</code> keeps</h3>
+  <p>The DP plans against a <em>loose</em> per-job <code>time_cap</code> (deadline interval) and a
+  scalar <code>dt</code>; the true preemptive-EDF coupling is only enforced at commit. When a
+  windfall would fund several downstream jobs that share a tight window, the fast path fails and the
+  greedy trim keeps a subset. Then the committed utility is <strong>less than</strong>
+  <code>distribute()</code>'s returned <code>total_value</code>.</p>
+  <div class="note"><strong>Consequence for the validator:</strong>
+  <code>verify_single</code> asserts <code>added == dp_value</code>. That holds for
+  single-windfall / non-conflicting chains (the worked examples), but on a contended real instance
+  trimming can make it <em>fail</em>. <code>verify_single</code> is a single-event soundness check,
+  not a general invariant — treat a mismatch there as "trimming happened," not "bug."</div>
+</section>
+
+<section class="card">
+  <span class="badge med">Medium</span>
+  <h3>E2. Arbitration instant uses release time, and ρ filters by <code>job_r ≥ t</code></h3>
+  <p><code>on_completion</code> arbitrates at <code>t = job_r[(i,j)]</code>, and
+  <code>future_utility_density</code> counts only jobs with <code>release ≥ t</code>. A
+  high-value job already <em>released but still pending</em> on another processor (release &lt; t)
+  is excluded from that processor's ρ, so it can be under-weighted in the energy split. The split is
+  advisory (never unsafe), but it can be sub-optimal exactly where it matters most.</p>
+</section>
+
+<section class="card">
+  <span class="badge med">Medium</span>
+  <h3>E3. <code>verify_single</code> is not side-effect-free</h3>
+  <p>It nudges <code>energy_pool</code> up/down and then calls the <em>real</em>
+  <code>on_completion</code>, which mutates the live schedule and rebuilds the DP. Calling it as if
+  it were a pure assertion will advance controller state. It's fine inside a dedicated validation
+  run, surprising if reused mid-simulation.</p>
+</section>
+
+<section class="card">
+  <span class="badge med">Medium</span>
+  <h3>E4. Energy reservation is soft across events</h3>
+  <p><code>de_budget</code> caps planning, but the hard commit check uses the <em>whole</em>
+  <code>energy_pool</code>. Within one event the cap reserves energy for other processors; but the
+  first processor to complete can still spend down the global pool before later processors get their
+  turn (events are serialised — doc's "two early completions" question is approximated, not solved
+  jointly).</p>
+</section>
+
+<section class="card">
+  <span class="badge low">Low</span>
+  <h3>E5. Dead/defensive trailing block in <code>distribute()</code></h3>
+  <p>Because <code>base_level()</code>'s entry has <code>k=None</code> and every composed
+  <code>Entry</code> always gets an integer <code>nxt</code>, the post-loop "last consumed level"
+  block cannot append a decision the loop didn't already handle. It's harmless but misleading; worth
+  a comment or removal to stop future readers (and you) from puzzling over it.</p>
+</section>
+
+<section class="card">
+  <span class="badge low">Low</span>
+  <h3>E6. Per-job <code>prune()</code> is O(n²) with no hard frontier bound</h3>
+  <p>Fine for the current instances (few segments × few frequencies). On a long chain with many
+  frequencies the frontier could grow; there's no explicit cap (doc's "aggregate states" /
+  schedule-derived bounds are not applied). Watch this if task sets or frequency levels scale up.</p>
+</section>
+
+<section class="card">
+  <span class="badge low">Low</span>
+  <h3>E7. Single hyper-period; lazy full rebuild per event</h3>
+  <p>The DP is built for one hyper-period's job set (no cross-period carry), and after each commit
+  the <em>entire</em> affected processor's DP is rebuilt rather than incrementally patched. Correct,
+  but it gives up the "one frozen table for the whole run" ideal — see <code>dp_assumptions.html</code>
+  (L4).</p>
+</section>
+
+<section class="card">
+  <span class="badge low">Low</span>
+  <h3>E8. Options 3/4 are structurally present but numerically inert</h3>
+  <p>Under α=1, β=0.5 the frequency-conversion actions always carry <code>gain=0</code> and lose to
+  <code>(0,0,0)</code> in <code>prune</code>. The DVFS axis of the action set is exercised only if
+  the energy constants are changed to put the critical frequency below f<sub>max</sub> (no code
+  change needed). Until then the online phase is effectively Save + Spend.</p>
+</section>
+
+<footer>
+  Source-level walkthrough of <code>C:\homogenous\V2\usrt\online</code> against
+  <em>usrt_online_dp_doc.pdf</em> and the USRT paper §VI. Companion docs:
+  <code>dp_assumptions.html</code>, <code>usrt_code_review_report.html</code>.
+</footer>
+
+</main>
+</body>
+</html>

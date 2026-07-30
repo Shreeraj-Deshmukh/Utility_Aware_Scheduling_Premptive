@@ -21,7 +21,6 @@ Job execution order is EDF: (deadline, release, task, job).
 
 from collections import namedtuple
 
-from ..models     import energy_val, e_eff_val
 from ..dbf.slack  import min_slack_for_job
 from .actions     import build_job_actions
 from .value_function import base_level, compose, query
@@ -113,13 +112,16 @@ def _edf_order(jobs_x, job_r, job_d):
 
 
 def build_processor_dp(x, proc_jobs, seg_k, freq_idx, job_r, job_d,
-                       cum, N_seg, freq_set, tasks, time_caps=None):
+                       cum, N_seg, freq_set, tasks, time_caps=None,
+                       max_frontier=None):
     """
     Construct the ProcessorDP for processor x from an offline schedule.
 
     Parameters mirror the heuristic solvers' state.  `time_caps` optionally
     overrides the per-job DBF window-slack cap (keyed by (i, j)); when omitted
     it is computed with min_slack_for_job at the offline-committed state.
+    `max_frontier` optionally caps each level's Pareto frontier (aggregate
+    states) — required when DVFS is active or the exact frontier can explode.
 
     Returns a ProcessorDP (with V_levels precomputed for every suffix).
     """
@@ -145,6 +147,6 @@ def build_processor_dp(x, proc_jobs, seg_k, freq_idx, job_r, job_d,
         acts = build_job_actions(
             slot.i, slot.k_off, slot.z_off, cum, N_seg[slot.i],
             freq_set, tasks[slot.i]['u_i'], slot.time_cap)
-        V_levels[s] = compose(acts, V_levels[s + 1])
+        V_levels[s] = compose(acts, V_levels[s + 1], max_frontier=max_frontier)
 
     return ProcessorDP(x, slots, V_levels, cum, freq_set, tasks)
