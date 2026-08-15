@@ -123,6 +123,14 @@ class OnlineSimulator:
                   f"acquisitions, spent={pstats['spent_total']:.4f}, "
                   f"refunded={pstats['refunded_total']:.4f}, "
                   f"denied={pstats['denied']}")
+            print(f"  Δt-scalar vs exact DBF : DP promised {cfg.promised_total:.4f}, "
+                  f"committed {cfg.committed_total:.4f}  →  "
+                  f"utility lost to trim = {cfg.trim_loss:.4f} "
+                  f"over {cfg.trim_events} event(s)")
+            if cfg.trims:
+                for (job, npl, ncm, gap) in cfg.trims:
+                    print(f"      trim: T{self.ctrl.tasks[job[0]]['id']},j{job[1]}  "
+                          f"planned {npl} → kept {ncm}  (lost {gap:.4f})")
             print(_S)
 
         return {
@@ -134,6 +142,10 @@ class OnlineSimulator:
             "energy_pool":     cfg.pool.level(),
             "pool_stats":      pstats,
             "feasible":        feasible,
+            "promised_total":  cfg.promised_total,
+            "committed_total": cfg.committed_total,
+            "trim_events":     cfg.trim_events,
+            "trim_loss":       cfg.trim_loss,
         }
 
     # ── single-event validation ────────────────────────────────────────────────

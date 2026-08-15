@@ -1,0 +1,31 @@
+_. L & L only for SPS mapping. opt_k messes the U<= Condition, so DBF is the way.
+
+-> Premption wrt opt_k blocks only. no in between cutoff. limited premption windows only.- Preemption is NOT allowed mid-segment. Optional segments are atomic blocks
+
+-> Mapping is Job Level. SPS does the mapping for us. 
+
+-> Heuristic does the tuple ({1,2} , {4,7}) shuffle to get a better utility density 
+
+
+
+
+QUESTIONS: 
+
+____
+
+- sfs mapping good, but when we get extra time slack during online phase, it might be that the job j+1 isn't even released to use that slack.
+
+- harmonic periods 
+
+
+
+
+
+Phase	Name	What it does	Module
+1	Quantum SPS mapping	Assign each job to a processor (mandatory work only, at f_max), load-balanced.	quantum.py
+1b	Refine mapping	Rebalance the mapping so utility density is even across processors, not just load — so no processor is stuffed with all the high-value jobs (2a = linear scan, 2b = one-swap-one-scan).	refine_mapping.py
+2	Left shift	Diagnostic: pack jobs left, report timing slack. Informational only.	left_shift.py
+3	Energy slack	Compute Δe = B − E_consumed. If mandatory-only already exceeds budget → infeasible, stop.	energy_slack.py
+4	Aggressive freq scaling	Lower frequencies to fit the energy budget. ← the one we just fixed	aggressive.py
+5	Greedy optional segments	The main utility engine: add optional segments to jobs (highest utility first) while timing + energy allow.	greedy.py
+6	Pairwise segment swap	Escape local optima: swap a low-value segment for a higher-value one across jobs, then re-fill.	swap.py

@@ -30,7 +30,7 @@ committed only if it provably satisfies every constraint.
 
 from collections import namedtuple
 
-from ..models     import total_energy, total_utility
+from ..models     import total_energy, total_utility, energy_val, e_eff_val
 from ..utils      import lcm_list, build_cum, build_job_times, build_proc_jobs
 from .dp          import build_processor_dp
 from .density     import future_utility_density, arbitrate_energy
@@ -91,6 +91,16 @@ class OnlineController:
         for x, dp in self.dps.items():
             for slot in dp.slots:
                 self.pos_of[(slot.i, slot.j)] = slot.pos
+
+        # ── Δt-scalar approximation instrumentation ──────────────────────────
+        # Measures how much utility the scalar-Δt DP over-promises that the exact
+        # commit-time DBF then trims (the Issue-4 gap).  If trim_loss stays ~0,
+        # the per-window vector state would buy nothing here.
+        self.promised_total  = 0.0   # Σ DP table value at each event
+        self.committed_total = 0.0   # Σ utility actually kept after the DBF trim
+        self.trim_events     = 0     # events where the trim removed some utility
+        self.trim_loss       = 0.0   # Σ (promised − committed) over those events
+        self.trims           = []    # (event_job, #planned, #committed, gap)
 
         self.applied = []   # history of JobDecision
 
@@ -198,11 +208,24 @@ class OnlineController:
         de_budget = min(pool_now, max(0.0, caps.get(x, 0.0)))
 
         # 3) DP lookup + reconstruction for the downstream chain jobs[c+1:].
-        _, planned = self.dps[x].distribute(c + 1, observed_dt, de_budget)
+        dp_value, planned = self.dps[x].distribute(c + 1, observed_dt, de_budget)
 
         # 4) hard-verify (per-processor dynamic DBF + atomic pool spend), trimming
         #    if necessary.  All energy is deducted through pool.try_spend inside.
         committed = self._commit_with_guarantee(x, planned)
+
+        # ── instrument the scalar-Δt approximation cost ──────────────────────
+        # In the deterministic single-thread run the energy batch always fits
+        # (the DP already respected de_budget ≤ pool), so any shortfall here is
+        # the DBF trim removing utility the scalar-Δt DP over-promised.
+        committed_gain = sum(d.gain for d in committed)
+        gap = dp_value - committed_gain
+        self.promised_total  += dp_value
+        self.committed_total += committed_gain
+        if gap > 1e-9:
+            self.trim_events += 1
+            self.trim_loss   += gap
+            self.trims.append(((i, j), len(planned), len(committed), gap))
 
         # 5) rebuild this processor's DP so later completions stay exact.
         self.dps[x] = self._build_dp(x)
@@ -228,6 +251,15 @@ class OnlineController:
         if timing passes do we touch the pool — so a rejected decision never
         needs an energy refund.  The fast path spends the batch atomically and
         refunds it if the batch fails the timing check.
+
+        GRACEFUL DEGRADATION: when a planned segment addition (k > k_off) does
+        not fit at its target k, we do NOT drop the job to baseline — we retry
+        k-1, k-2, … down to k_off+1, DBF-checking every level, and keep the
+        largest that satisfies timing + energy.  This recovers utility the
+        all-or-nothing trim used to discard (a job that could take *some* extra
+        segments no longer takes *none*).  It is a partial, cheap remedy for the
+        scalar-Δt over-planning; the exact per-window DP would avoid planning the
+        infeasible k in the first place.
         """
         if not planned:
             return []
@@ -253,14 +285,39 @@ class OnlineController:
 
         committed = []
         for d in sorted(planned, key=lambda p: -p.gain):
-            prev_k = self.seg_k[(d.i, d.j)]
-            prev_z = self.freq_idx[(d.i, d.j)]
-            self.seg_k[(d.i, d.j)]    = d.k
-            self.freq_idx[(d.i, d.j)] = d.z
-            # Timing first (lock-free); only then claim energy atomically.
-            if self._timing_ok_dynamic(only_x=x) and self.pool.try_spend(d.a_e):
-                committed.append(d)
-            else:
-                self.seg_k[(d.i, d.j)]    = prev_k
-                self.freq_idx[(d.i, d.j)] = prev_z
+            i, j = d.i, d.j
+
+            # Pure frequency change (no segment gain): single-shot, nothing to
+            # degrade — apply the exact (k_off, z) or drop to baseline.
+            if d.k <= d.k_off:
+                self.seg_k[(i, j)]    = d.k
+                self.freq_idx[(i, j)] = d.z
+                if self._timing_ok_dynamic(only_x=x) and self.pool.try_spend(d.a_e):
+                    committed.append(d)
+                else:
+                    self.seg_k[(i, j)]    = d.k_off
+                    self.freq_idx[(i, j)] = d.z_off
+                continue
+
+            # Segment addition: try the DP's target k, then degrade k-1, k-2, …
+            # down to k_off+1.  DBF-check EVERY level; keep the largest that fits.
+            base_en  = energy_val(self.cum[i][d.k_off], self.freq_set[d.z_off])
+            base_eff = e_eff_val(self.cum[i][d.k_off], self.freq_set[d.z_off])
+            fz       = self.freq_set[d.z]
+            for kp in range(d.k, d.k_off, -1):
+                self.seg_k[(i, j)]    = kp
+                self.freq_idx[(i, j)] = d.z
+                a_e_kp = energy_val(self.cum[i][kp], fz) - base_en
+                # Timing first (lock-free); only then claim energy atomically.
+                if self._timing_ok_dynamic(only_x=x) and self.pool.try_spend(a_e_kp):
+                    committed.append(d._replace(
+                        k=kp,
+                        a_t=e_eff_val(self.cum[i][kp], fz) - base_eff,
+                        a_e=a_e_kp,
+                        gain=self.tasks[i]['u_i'] * (self.cum[i][kp] - self.cum[i][d.k_off]),
+                    ))
+                    break
+                # level kp infeasible → back to baseline, try a smaller k
+                self.seg_k[(i, j)]    = d.k_off
+                self.freq_idx[(i, j)] = d.z_off
         return committed
