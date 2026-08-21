@@ -4,7 +4,7 @@ Energy model constants and per-job energy/utility functions.
 Energy model:  E(i,k,z) = ALPHA * cum[i][k] / fz  +  BETA * fz^2 * cum[i][k]
 Effective exec time:  e_eff(i,k,z) = cum[i][k] / fz
 
-With ALPHA=1.0, BETA=0.5 the minimum energy is achieved at f_max.
+just for info : With ALPHA=1.0, BETA=0.5 the minimum energy is achieved at f_max.
 """
 
 ALPHA = 0.15

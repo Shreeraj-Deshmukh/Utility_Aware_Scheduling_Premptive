@@ -1,0 +1,210 @@
+<title>USRT Dry Run - 21 August</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+ :root{--bg:#f7f7f5;--panel:#fff;--ink:#1a1a18;--muted:#5c5c56;--line:#e3e2dc;
+  --accent:#1f4d7a;--accent2:#7a1f1f;--code-bg:#f2f1ec;--ok:#1f6b45;--warn:#9a6a12;--bad:#a33;
+  --mono:"SFMono-Regular",Consolas,monospace;--serif:Georgia,serif;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+ @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#16161a;--panel:#1e1e24;--ink:#e9e8e2;--muted:#a7a69e;--line:#31313a;
+  --accent:#8ab4e0;--accent2:#e08a8a;--code-bg:#24242b;--ok:#7fd0a3;--warn:#e0bd6a;--bad:#e08a8a;}}
+ *{box-sizing:border-box}
+ body{background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.6;margin:0}
+ .wrap{max-width:1000px;margin:0 auto;padding:2.2rem 1.3rem 5rem}
+ h1{font-family:var(--serif);font-size:1.95rem;margin:.2rem 0 .4rem}
+ h2{font-family:var(--serif);font-size:1.4rem;margin:2.2rem 0 .5rem;padding-top:1rem;border-top:1px solid var(--line)}
+ h3{font-size:1.05rem;margin:1.4rem 0 .4rem}
+ .kicker{font-family:var(--mono);font-size:.72rem;letter-spacing:.15em;text-transform:uppercase;color:var(--accent)}
+ .sub{color:var(--muted);max-width:74ch}
+ code{font-family:var(--mono);font-size:.86em;background:var(--code-bg);padding:.08em .35em;border-radius:4px}
+ pre{background:var(--code-bg);border:1px solid var(--line);border-radius:8px;padding:.8rem 1rem;
+     overflow-x:auto;font-family:var(--mono);font-size:.79rem;line-height:1.5}
+ table{border-collapse:collapse;width:100%;margin:.8rem 0;font-size:.84rem;display:block;overflow-x:auto}
+ th,td{border:1px solid var(--line);padding:.42rem .55rem;text-align:right;white-space:nowrap}
+ th:first-child,td:first-child{text-align:left}
+ th{background:var(--code-bg);font-weight:650}
+ .callout{border-left:4px solid var(--accent);background:var(--panel);padding:.75rem 1rem;
+          border-radius:0 8px 8px 0;margin:1rem 0}
+ .callout.bad{border-left-color:var(--bad)}
+ .callout.warn{border-left-color:var(--warn)}
+ .muted{color:var(--muted);font-size:.83rem}
+ .ok{color:var(--ok);font-weight:650}.bad{color:var(--bad);font-weight:650}
+ .bar{display:inline-block;height:.62em;background:var(--accent);border-radius:2px;vertical-align:middle}
+ hr{border:none;border-top:1px solid var(--line);margin:1.8rem 0}
+</style>
+<div class="wrap">
+<div class="kicker">USRT &middot; V2 &middot; Dry Run</div>
+<h1>Dry Run &mdash; 21 August</h1>
+<p class="sub">A small, ILP-tractable sweep to see how the exact solvers and the heuristics behave
+as <strong>energy</strong> and <strong>utilisation</strong> tighten. Not a published result &mdash;
+a diagnostic.</p>
+<h2>1 &middot; Setup</h2>
+<table>
+<tr><th>Parameter</th><th>Value</th></tr>
+<tr><td>Processors <code>N_prc</code></td><td>2</td></tr>
+<tr><td>Tasks <code>N_tsk</code></td><td>5</td></tr>
+<tr><td>Periods</td><td>10 / 20 / 40 &nbsp;(base 10 &times; 2^m, m &isin; {0,1,2})</td></tr>
+<tr><td>Hyper-period <code>H</code></td><td>40</td></tr>
+<tr><td>Jobs per instance <code>J</code></td><td>10 &ndash; 13</td></tr>
+<tr><td>Frequency levels <code>N_frq</code></td><td>5 (drawn from {0.30, 0.35, &hellip;, 1.00}, f_max always present)</td></tr>
+<tr><td>Optional segments</td><td>1 &ndash; 3 per task</td></tr>
+<tr><td>Energy model</td><td>&alpha;=0.15, &beta;=1.0 &rarr; energy-optimal f* &asymp; 0.42</td></tr>
+<tr><td>Instances</td><td>90 (5 per configuration)</td></tr>
+<tr><td>Models</td><td>ILP v1 (exact) &middot; ILP v2 (SPS+ILP) &middot; Heuristic v5b &middot; Heuristic claudeoptimal</td></tr>
+<tr><td>ILP time limit</td><td>20 s (never hit &mdash; all solves were sub-second)</td></tr>
+</table>
+<p class="muted">Defaults when not swept: &alpha;=0.5, &beta;=0.5, &rho;=0.7.</p>
+<h2>2 &middot; Headline</h2>
+<div class="callout"><strong>A phase-ordering defect was found and fixed during this dry run.</strong>
+The heuristics were declaring infeasible on 34 instances that the ILP solved &mdash; because Phase 3
+tested the energy budget at <code>f_max</code> and returned terminally, before Phase 4 (whose whole
+purpose is to lower frequency) could run. Fixing the test to compare against the
+<em>cheapest-possible</em> assignment lifted the heuristics from <b>50/90</b> to <b>82&ndash;84/90</b>,
+matching the ILP. Details in &sect;6. <b>All results below are post-fix.</b></div>
+<table>
+<tr><th>Model</th><th>Feasible / 90</th><th>Before the fix</th></tr>
+<tr><td>ILP v1 (exact)</td><td class="ok">84</td><td>84</td></tr>
+<tr><td>ILP v2 (SPS+ILP)</td><td class="ok">84</td><td>84</td></tr>
+<tr><td>Heuristic v5b</td><td class="ok">82</td><td class="bad">50</td></tr>
+<tr><td>Heuristic claudeoptimal</td><td class="ok">84</td><td class="bad">50</td></tr>
+</table>
+<p class="muted">The 6 instances nobody solves are &rho;=0.3 (and one at &rho;=0.4) &mdash; genuinely
+infeasible budgets. claudeoptimal now matches the exact solver on feasibility everywhere.</p>
+<h2>3 &middot; Sweep: Energy budget &rho;</h2>
+<p class="sub">B = &rho; &times; E_full_fmax &mdash; lower &rho; = tighter energy</p>
+<h3>Feasibility (instances solved, out of 5)</h3>
+<table>
+<tr><th>value</th><th>ILP v1 (exact)</th><th>ILP v2 (SPS+ILP)</th><th>Heuristic v5b</th><th>Heuristic claudeoptimal</th></tr>
+<tr><td><code>0.3</code></td><td class="bad">0/5</td><td class="bad">0/5</td><td class="bad">0/5</td><td class="bad">0/5</td></tr>
+<tr><td><code>0.4</code></td><td class="warn">4/5</td><td class="warn">4/5</td><td class="warn">3/5</td><td class="warn">4/5</td></tr>
+<tr><td><code>0.5</code></td><td class="ok">5/5</td><td class="ok">5/5</td><td class="warn">4/5</td><td class="ok">5/5</td></tr>
+<tr><td><code>0.6</code></td><td class="ok">5/5</td><td class="ok">5/5</td><td class="ok">5/5</td><td class="ok">5/5</td></tr>
+<tr><td><code>0.7</code></td><td class="ok">5/5</td><td class="ok">5/5</td><td class="ok">5/5</td><td class="ok">5/5</td></tr>
+<tr><td><code>0.8</code></td><td class="ok">5/5</td><td class="ok">5/5</td><td class="ok">5/5</td><td class="ok">5/5</td></tr>
+<tr><td><code>0.9</code></td><td class="ok">5/5</td><td class="ok">5/5</td><td class="ok">5/5</td><td class="ok">5/5</td></tr>
+<tr><td><code>1</code></td><td class="ok">5/5</td><td class="ok">5/5</td><td class="ok">5/5</td><td class="ok">5/5</td></tr>
+</table>
+<h3>Mean utility &mdash; instances where <em>all four</em> models succeeded</h3>
+<table>
+<tr><th>value</th><th>n</th><th>ILP v1 (exact)</th><th>ILP v2 (SPS+ILP)</th><th>Heuristic v5b</th><th>Heuristic claudeoptimal</th><th>v5b gap vs ILP v1</th></tr>
+<tr><td><code>0.4</code></td><td>3</td><td>22.92</td><td>13.93</td><td>5.02</td><td>6.46</td><td class="bad">78.1%</td></tr>
+<tr><td><code>0.5</code></td><td>4</td><td>41.81</td><td>35.10</td><td>20.65</td><td>20.70</td><td class="bad">50.6%</td></tr>
+<tr><td><code>0.6</code></td><td>5</td><td>56.57</td><td>48.65</td><td>25.80</td><td>30.97</td><td class="bad">54.4%</td></tr>
+<tr><td><code>0.7</code></td><td>5</td><td>63.68</td><td>58.57</td><td>26.77</td><td>36.19</td><td class="bad">58.0%</td></tr>
+<tr><td><code>0.8</code></td><td>5</td><td>66.00</td><td>63.38</td><td>42.59</td><td>49.42</td><td class="bad">35.5%</td></tr>
+<tr><td><code>0.9</code></td><td>5</td><td>66.00</td><td>65.58</td><td>54.90</td><td>60.96</td><td class="warn">16.8%</td></tr>
+<tr><td><code>1</code></td><td>5</td><td>66.00</td><td>65.58</td><td>63.27</td><td>65.58</td><td class="ok">4.1%</td></tr>
+</table>
+<h2>4 &middot; Sweep: Mandatory utilisation &alpha;</h2>
+<p class="sub">U_M = &alpha; &times; N_prc &mdash; higher &alpha; = tighter timing</p>
+<h3>Feasibility (instances solved, out of 5)</h3>
+<table>
+<tr><th>value</th><th>ILP v1 (exact)</th><th>ILP v2 (SPS+ILP)</th><th>Heuristic v5b</th><th>Heuristic claudeoptimal</th></tr>
+<tr><td><code>0.2</code></td><td class="ok">5/5</td><td class="ok">5/5</td><td class="ok">5/5</td><td class="ok">5/5</td></tr>
+<tr><td><code>0.3</code></td><td class="ok">5/5</td><td class="ok">5/5</td><td class="ok">5/5</td><td class="ok">5/5</td></tr>
+<tr><td><code>0.4</code></td><td class="ok">5/5</td><td class="ok">5/5</td><td class="ok">5/5</td><td class="ok">5/5</td></tr>
+<tr><td><code>0.5</code></td><td class="ok">5/5</td><td class="ok">5/5</td><td class="ok">5/5</td><td class="ok">5/5</td></tr>
+<tr><td><code>0.6</code></td><td class="ok">5/5</td><td class="ok">5/5</td><td class="ok">5/5</td><td class="ok">5/5</td></tr>
+<tr><td><code>0.7</code></td><td class="ok">5/5</td><td class="ok">5/5</td><td class="ok">5/5</td><td class="ok">5/5</td></tr>
+</table>
+<h3>Mean utility &mdash; instances where <em>all four</em> models succeeded</h3>
+<table>
+<tr><th>value</th><th>n</th><th>ILP v1 (exact)</th><th>ILP v2 (SPS+ILP)</th><th>Heuristic v5b</th><th>Heuristic claudeoptimal</th><th>v5b gap vs ILP v1</th></tr>
+<tr><td><code>0.2</code></td><td>5</td><td>100.96</td><td>99.25</td><td>66.09</td><td>72.66</td><td class="bad">34.5%</td></tr>
+<tr><td><code>0.3</code></td><td>5</td><td>90.88</td><td>89.20</td><td>57.55</td><td>58.82</td><td class="bad">36.7%</td></tr>
+<tr><td><code>0.4</code></td><td>5</td><td>77.00</td><td>75.89</td><td>46.56</td><td>52.13</td><td class="bad">39.5%</td></tr>
+<tr><td><code>0.5</code></td><td>5</td><td>63.68</td><td>58.57</td><td>26.77</td><td>36.19</td><td class="bad">58.0%</td></tr>
+<tr><td><code>0.6</code></td><td>5</td><td>47.73</td><td>41.28</td><td>24.03</td><td>31.26</td><td class="bad">49.7%</td></tr>
+<tr><td><code>0.7</code></td><td>5</td><td>27.67</td><td>22.99</td><td>13.04</td><td>14.19</td><td class="bad">52.9%</td></tr>
+</table>
+<h2>5 &middot; Sweep: Optional utilisation &beta;</h2>
+<p class="sub">U_O = &beta; &times; (N_prc &minus; U_M) &mdash; more optional work available</p>
+<h3>Feasibility (instances solved, out of 5)</h3>
+<table>
+<tr><th>value</th><th>ILP v1 (exact)</th><th>ILP v2 (SPS+ILP)</th><th>Heuristic v5b</th><th>Heuristic claudeoptimal</th></tr>
+<tr><td><code>0.2</code></td><td class="ok">5/5</td><td class="ok">5/5</td><td class="ok">5/5</td><td class="ok">5/5</td></tr>
+<tr><td><code>0.4</code></td><td class="ok">5/5</td><td class="ok">5/5</td><td class="ok">5/5</td><td class="ok">5/5</td></tr>
+<tr><td><code>0.6</code></td><td class="ok">5/5</td><td class="ok">5/5</td><td class="ok">5/5</td><td class="ok">5/5</td></tr>
+<tr><td><code>0.8</code></td><td class="ok">5/5</td><td class="ok">5/5</td><td class="ok">5/5</td><td class="ok">5/5</td></tr>
+</table>
+<h3>Mean utility &mdash; instances where <em>all four</em> models succeeded</h3>
+<table>
+<tr><th>value</th><th>n</th><th>ILP v1 (exact)</th><th>ILP v2 (SPS+ILP)</th><th>Heuristic v5b</th><th>Heuristic claudeoptimal</th><th>v5b gap vs ILP v1</th></tr>
+<tr><td><code>0.2</code></td><td>5</td><td>26.94</td><td>26.87</td><td>15.65</td><td>17.52</td><td class="bad">41.9%</td></tr>
+<tr><td><code>0.4</code></td><td>5</td><td>52.72</td><td>48.94</td><td>23.43</td><td>37.96</td><td class="bad">55.6%</td></tr>
+<tr><td><code>0.6</code></td><td>5</td><td>70.94</td><td>64.30</td><td>36.09</td><td>45.12</td><td class="bad">49.1%</td></tr>
+<tr><td><code>0.8</code></td><td>5</td><td>87.33</td><td>76.10</td><td>50.39</td><td>55.63</td><td class="bad">42.3%</td></tr>
+</table>
+<h2>6 &middot; Runtime</h2>
+<table>
+<tr><th>Model</th><th>mean (s)</th><th>median (s)</th><th>max (s)</th><th>n</th></tr>
+<tr><td>ILP v1 (exact)</td><td>0.2784</td><td>0.0290</td><td>1.8673</td><td>90</td></tr>
+<tr><td>ILP v2 (SPS+ILP)</td><td>0.0256</td><td>0.0131</td><td>0.1472</td><td>90</td></tr>
+<tr><td>Heuristic v5b</td><td>0.0017</td><td>0.0016</td><td>0.0038</td><td>90</td></tr>
+<tr><td>Heuristic claudeoptimal</td><td>0.0058</td><td>0.0060</td><td>0.0159</td><td>90</td></tr>
+</table>
+<p class="muted">At this size (J=10&ndash;13) the exact ILP is not a bottleneck &mdash; every solve proved optimality well inside the 20&nbsp;s limit. The heuristics are still 1&ndash;2 orders of magnitude faster, which is the scalability argument, but on <em>these</em> instances speed is not the differentiator.</p>
+<h2>7 &middot; The defect: Phase 3 tested feasibility at the wrong frequency</h2>
+<p>The original failures were not gradual degradation &mdash; they were all-or-nothing, and lined up
+exactly with one condition: <strong>does the mandatory workload fit the budget at f_max?</strong></p>
+<pre>rho_0.5.py            B= 34.50   E_mand@f_max= 46.00   E_mand@cheapest= 22.04
+                      fits at f_max? NO        fits at cheapest? YES</pre>
+<p>A feasible schedule plainly exists &mdash; the mandatory segments cost 22.04 at a lower frequency
+against a budget of 34.50, and the ILP finds exactly such a schedule. The heuristic never looked,
+because Phase 3 exited before Phase 4 could act:</p>
+<pre>Phase 3 : E_slack = B - E_consumed        # evaluated at f_max, k=0
+          if E_slack &lt; 0:
+              return ... 0.0, E_init      # &lt;-- terminal, gave up here
+
+Phase 4 : lower frequencies for energy feasibility   # never reached</pre>
+<div class="callout bad"><strong>Phase 4 exists precisely to fix the condition Phase 3 treated as
+fatal.</strong> The energy model here is <code>g(f) = &alpha;/f + &beta;f&sup2;</code>, minimised at
+f* &asymp; 0.42 &mdash; so running slower costs 0.55 per unit work versus 1.15 at f_max, roughly
+<b>2&times; cheaper</b>. Testing the budget at f_max therefore rejects a large band of perfectly
+solvable instances.</div>
+<h3>The fix</h3>
+<p>The terminal test now compares the budget against a genuine lower bound &mdash; every job at its
+<em>cheapest</em> available frequency, ignoring timing:</p>
+<pre>E_floor = SUM over jobs of  min over z of  E(cum[i][0], f_z)
+if B &lt; E_floor:  infeasible at any frequency   # necessary condition, sound
+else:            continue to Phase 4 and let it scale</pre>
+<p>Ignoring timing only loosens the bound, so it can never wrongly reject a solvable instance. If
+Phase 4 subsequently cannot reach feasibility (because timing blocks the scaling), the schedule comes
+back over budget and the runner flags it &mdash; which is what still happens on the two &rho;=0.4/0.5
+instances v5b misses.
+<span class="muted">(<code>phases/energy_slack.py::min_possible_energy</code>; applied to all six
+solver variants.)</span></p>
+
+<h3>Why low <em>optional</em> utilisation looked worse</h3>
+<p>Before the fix, the heuristics failed at &beta;=0.2 and 0.4 but succeeded at 0.6 and 0.8 &mdash;
+more optional work made instances <em>easier</em>. That followed directly from the budget definition
+<code>B = &rho; &times; E_full_fmax</code>, whose denominator includes optional work. Mandatory-at-f_max
+fits only when</p>
+<pre>rho &ge; U_M / (U_M + U_O)</pre>
+<p>so shrinking the optional part shrinks the budget while leaving the mandatory cost unchanged: at
+&beta;=0.2 the threshold is &asymp;0.83, above the &rho;=0.7 used here; at &beta;=0.8 it falls to
+&asymp;0.56 and passed. Post-fix the anomaly is gone &mdash; every &beta; value now solves 5/5.</p>
+<h2>8 &middot; What to take from this</h2>
+<ol>
+<li><strong>The heuristics are far more robust than the pre-fix numbers suggested.</strong> Their
+apparent schedulability collapse was an artifact of one mis-placed test, not the algorithm.
+claudeoptimal now matches the exact solver on feasibility across all 90 instances.</li>
+<li><strong>The utility gap is real and is an energy-tightness effect.</strong> v5b sits ~4% below the
+exact optimum when energy is plentiful (&rho;=1.0) and ~50&ndash;78% below it when energy binds
+(&rho;&le;0.6). The heuristics still do not trade frequency for optional segments globally &mdash;
+that is the open item, and it is separate from the bug fixed here.</li>
+<li><strong>claudeoptimal dominates v5b everywhere</strong>, by 3&ndash;28 percentage points of gap.
+Since v5b is the current runner default and the offline baseline for the online phase, that choice
+should be revisited.</li>
+<li><strong>The exact ILP is cheap at this scale</strong> (J=10&ndash;13, proven optimal in
+milliseconds), so the small tier is a sound optimality benchmark. The scalability case for the
+heuristics must be made on much larger instances.</li>
+<li><strong>ILP v1 and ILP v2 track each other closely</strong>, so SPS mapping costs little here;
+the interesting gap is frequency/segment selection, not mapping.</li>
+</ol>
+<hr>
+<p class="muted">Generated 2026-08-21 from <code>dry_run_tc/</code> &mdash; 90 instances, 360 model runs,
+re-run after the Phase 3 fix. Regenerate with:<br>
+<code>python gen_testcases.py rho --sets 5 --n-prc 2 --n-tsk 5 --kmax 2 --max-seg 3 --n-frq 5 --grid 0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0 --out dry_run_tc</code><br>
+<code>python run_models.py dry_run_tc --models ilp_v1,ilp_v2,heuristic --heur v5b</code></p>
+</div>

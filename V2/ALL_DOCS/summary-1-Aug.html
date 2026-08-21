@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>USRT — Project Summary (1 Aug)</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --card:#fff; --ink:#1e2430; --muted:#5b6472; --accent:#0d5c63;
+    --accent2:#12808a; --purp:#5a3a8c; --border:#d7dde2; --code-bg:#eef2f4;
+    --ok:#1b5e20; --ok-bg:#e9f5ea; --part:#b35900; --part-bg:#fff4e5;
+    --no:#b3261e; --no-bg:#fdecea; --exp:#1f4e8c; --exp-bg:#eef3fa;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;padding:0 0 4rem;font-family:"Segoe UI",system-ui,-apple-system,sans-serif;
+       background:var(--bg);color:var(--ink);line-height:1.6;}
+  header{background:linear-gradient(135deg,#08343a 0%,#0d5c63 55%,#12808a 100%);
+         color:#fff;padding:2.2rem 2rem 1.8rem;}
+  header h1{margin:0 0 .4rem;font-size:1.7rem;font-weight:650;}
+  header p{margin:.15rem 0;opacity:.93;font-size:.95rem;}
+  main{max-width:1120px;margin:0 auto;padding:1.5rem 1.5rem 0;}
+  h2{color:var(--accent);font-size:1.3rem;margin:2.4rem 0 .7rem;
+     border-bottom:2px solid var(--border);padding-bottom:.35rem;}
+  h3{font-size:1.06rem;margin:1.3rem 0 .45rem;color:#08343a;}
+  section.card{background:var(--card);border:1px solid var(--border);border-radius:10px;
+               padding:1.1rem 1.4rem;margin:1rem 0;box-shadow:0 1px 3px rgba(20,30,50,.06);}
+  code{font-family:Consolas,"Cascadia Code",monospace;font-size:.85em;background:var(--code-bg);
+       border-radius:4px;padding:.06rem .3rem;}
+  table{border-collapse:collapse;width:100%;margin:.7rem 0;font-size:.88rem;background:var(--card);}
+  th,td{border:1px solid var(--border);padding:.45rem .62rem;text-align:left;vertical-align:top;}
+  th{background:#e9f1f2;font-weight:650;}
+  td.mono,th.mono{font-family:Consolas,"Cascadia Code",monospace;font-size:.85em;}
+  .b{display:inline-block;font-size:.7rem;font-weight:700;border-radius:4px;padding:.1rem .45rem;
+     white-space:nowrap;}
+  .b.ok{background:var(--ok-bg);color:var(--ok);border:1px solid var(--ok);}
+  .b.part{background:var(--part-bg);color:var(--part);border:1px solid var(--part);}
+  .b.no{background:var(--no-bg);color:var(--no);border:1px solid var(--no);}
+  .b.exp{background:var(--exp-bg);color:var(--exp);border:1px solid var(--exp);}
+  .note{border-left:4px solid var(--accent2);background:#e7f4f5;padding:.55rem .9rem;
+        border-radius:0 6px 6px 0;margin:.7rem 0;font-size:.92rem;}
+  .note strong{color:var(--accent);}
+  .key{border-left:4px solid var(--purp);background:#f1ecf8;padding:.55rem .9rem;
+       border-radius:0 6px 6px 0;margin:.7rem 0;font-size:.93rem;}
+  .key strong{color:var(--purp);}
+  .formula{background:var(--code-bg);border-radius:6px;padding:.55rem 1rem;
+           font-family:"Cambria Math",Cambria,serif;font-size:1.0rem;margin:.5rem 0;overflow-x:auto;}
+  nav.toc{background:var(--card);border:1px solid var(--border);border-radius:10px;
+          padding:1rem 1.4rem;margin-top:1rem;font-size:.93rem;column-count:2;column-gap:2rem;}
+  nav.toc a{color:var(--accent);text-decoration:none;display:block;padding:.11rem 0;}
+  nav.toc a:hover{text-decoration:underline;}
+  .muted{color:var(--muted);font-size:.9rem;}
+  ol.steps{margin:.4rem 0 .4rem 0;padding-left:1.3rem;}
+  ol.steps li{margin:.25rem 0;}
+  footer{text-align:center;color:var(--muted);font-size:.82rem;margin-top:3rem;}
+  .legend span{margin-right:1rem;font-size:.82rem;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>USRT — Utility-Aware Energy-Constrained Real-Time Scheduling</h1>
+  <p>Project summary &amp; implementation status · <strong>1 August</strong></p>
+  <p>Based on <em>Segmented_Workload_Scheduling_Shared_v2</em> (paper) + <em>usrt_online_dp_doc</em> (online design)</p>
+  <p class="legend" style="margin-top:.5rem">
+    <span class="b ok">✅ done</span>
+    <span class="b part">⚠️ partial</span>
+    <span class="b no">❌ not done</span>
+    <span class="b exp">🔬 measured/experimental</span>
+  </p>
+</header>
+
+<main>
+
+<nav class="toc">
+  <strong>Contents</strong>
+  <a href="#problem">1. The problem in one paragraph</a>
+  <a href="#approaches">2. The four approaches (paper → code)</a>
+  <a href="#model">3. System &amp; energy model</a>
+  <a href="#heuristic">4. The Heuristic — SPS, Refine, the 8 phases</a>
+  <a href="#versions">5. Heuristic version matrix</a>
+  <a href="#online">6. The Online phase</a>
+  <a href="#status">7. What's been done so far (Aug 1)</a>
+  <a href="#dvfs">8. The α/β (DVFS) regime finding</a>
+  <a href="#open">9. Open decisions &amp; next steps</a>
+</nav>
+
+<!-- 1 -->
+<h2 id="problem">1. The Problem in One Paragraph</h2>
+<section class="card">
+  <p>Schedule periodic real-time tasks (harmonic periods, preemptive EDF, job-level mapping) on
+  <em>homogeneous</em> processors with discrete DVFS frequencies. Each job has a <strong>mandatory</strong>
+  segment (must finish by deadline) and several <strong>optional</strong> segments (each adds utility).
+  Choose, per job, a <em>processor</em>, a <em>frequency</em>, and <em>how many optional segments</em> to run,
+  so as to <strong>maximise total utility</strong> subject to (1) all deadlines met (DBF), (2) total energy
+  ≤ budget <code>B</code>, (3) no migration / no mid-run frequency change / one job per core at a time.</p>
+</section>
+
+<!-- 2 -->
+<h2 id="approaches">2. The Four Approaches (paper → code)</h2>
+<section class="card">
+  <p>The paper (§I.1) defines four approaches. Three are <strong>offline</strong> (compute the whole
+  hyper-period schedule assuming worst-case execution time), one is <strong>online</strong> (react at runtime
+  to early completions).</p>
+  <table>
+    <tr><th>Approach</th><th>What it is (paper)</th><th>Implementation</th><th>Status</th></tr>
+    <tr><td><b>ILP v1</b></td>
+        <td>Pure discrete optimisation — one solve decides job→proc, frequency, and segments jointly. Optimal.</td>
+        <td class="mono">ILP.py (legacy, standalone, needs Gurobi)</td>
+        <td><span class="b part">⚠️ legacy only</span></td></tr>
+    <tr><td><b>ILP v2</b></td>
+        <td>SPS decides the mapping, then an ILP decides frequency + optional segments for that mapping.</td>
+        <td class="mono">usrt.solvers.ilp_v2 (needs Gurobi)</td>
+        <td><span class="b ok">✅ modular</span></td></tr>
+    <tr><td><b>Heuristic</b></td>
+        <td>Fast, solver-free: build the schedule stage-by-stage (mapping → frequency → segments).</td>
+        <td class="mono">usrt.solvers.heuristic_v1 … v5b, claudeoptimal</td>
+        <td><span class="b ok">✅ main focus</span></td></tr>
+    <tr><td><b>Online</b></td>
+        <td>Use time + energy slack from early completion to run extra optional segments at runtime.</td>
+        <td class="mono">usrt/online/ + usrt.solvers.online_demo</td>
+        <td><span class="b ok">✅ built</span></td></tr>
+  </table>
+  <p class="muted">Run any via <code>python run.py testcase.py &lt;approach&gt;</code>
+  (e.g. <code>ilp_v2</code>, <code>heuristic_v5b</code>, <code>online</code>).</p>
+</section>
+
+<!-- 3 -->
+<h2 id="model">3. System &amp; Energy Model</h2>
+<section class="card">
+  <ul>
+    <li><b>Processors:</b> homogeneous, discrete frequencies normalised to <code>f_max = 1</code>. Testcase set: <code>{0.3,0.4,…,1.0}</code>.</li>
+    <li><b>Tasks:</b> harmonic periods; job <code>(i,j)</code> released at <code>(j−1)·p_i</code>, deadline <code>j·p_i</code>; hyper-period <code>h = lcm(p_i)</code>.</li>
+    <li><b>Segments:</b> mandatory <code>G_{i,0}</code> + optional <code>G_{i,k}</code>; executing <code>k</code> implies all previous. Utility ∝ optional work × <code>u_i</code>.</li>
+    <li><b>Timing (C1/C2):</b> preemptive-EDF feasibility via the <b>Demand Bound Function</b> — for every window <code>[t1,t2]</code>, Σ effective time of contained jobs ≤ <code>t2−t1</code>.</li>
+    <li><b>Energy (C3):</b> <span class="formula">E(i,j,k,z) = α·(Σe / f_z) + β·f_z²·Σe , &nbsp; Σ over all jobs ≤ B</span></li>
+  </ul>
+  <div class="note"><strong>Current constants:</strong> <code>α = 0.15, β = 1.0</code> (in <code>usrt/models.py</code>).
+  This puts the energy-optimal frequency <code>f* ≈ 0.42</code> <em>inside</em> the range, so <b>DVFS is a live
+  decision</b>. The earlier <code>α=1, β=0.5</code> made <code>f* = f_max</code> — frequency was degenerate (see §8).</div>
+</section>
+
+<!-- 4 -->
+<h2 id="heuristic">4. The Heuristic — SPS Mapping, Refine Mapping, and the 8 Phases</h2>
+<section class="card">
+  <p>"The Heuristic" <em>is</em> this staged pipeline (paper &sect;V). Every phase is a separate module under
+  <code>usrt/phases/</code> or <code>usrt/mapping/</code>; the <em>versions</em> (&sect;5) are different
+  assemblies of the same building blocks. Phases 1&ndash;6 are the paper's heuristic; Phases 7&ndash;8 are
+  extra local-search layers used only by <code>heuristic_claudeoptimal</code>.</p>
+
+  <p class="note"><strong>Invariant at the start of Phase 2:</strong> every job sits at
+  <code>f_max</code> with <b>zero</b> optional segments (<code>seg_k = 0</code>). Phases 4&ndash;8 exist to
+  spend the energy and timing budget on turning that into utility. Utility only ever comes from optional
+  segments; frequency is purely a time&harr;energy converter (paper Eq.&nbsp;8 has no <code>f</code> term).</p>
+
+  <h3>Phase 1 &mdash; Quantum SPS mapping <span class="b ok" style="font-size:.68rem">&#10003;</span></h3>
+  <p>Decides <b>job &rarr; processor</b> (mandatory work only, at <code>f_max</code>). Work proceeds one
+  <em>quantum</em> at a time, where the quantum is <code>gcd</code> of all periods, so every job boundary
+  falls on a quantum edge. Per quantum <code>[q_start, q_end]</code>:</p>
+  <ol>
+    <li>Collect newly-arrived jobs plus any <em>leftover</em> deferred from earlier quanta.</li>
+    <li>Classify each as <b>mandatory-now</b> (<code>d == q_end</code> &mdash; must be placed) or
+        <b>deferrable</b> (<code>d &gt; q_end</code>).</li>
+    <li><b>Pre-filter:</b> if total utilisation exceeds remaining capacity, defer the
+        <em>latest-deadline</em> deferrable jobs until it fits.</li>
+    <li>Run <b>DPS + SPS</b> to produce a balanced assignment.</li>
+    <li>Verify per-processor utilisation <code>&le; 1.0</code>; if violated, defer more deferrables.</li>
+    <li>Commit the assignment and update the running <code>proc_util</code>.</li>
+  </ol>
+  <p>After every quantum is placed: a full <b>mandatory-only DBF check</b> at <code>f_max</code>, followed by
+  <b>greedy repair</b> if any window fails. Load metric is <code>u_i = e_m_i / p_i</code>, which is the
+  correct measure for preemptive EDF; feasibility uses cumulative per-processor utilisation
+  <code>&le; 1.0</code>.
+  <span class="muted">(<code>mapping/quantum.py</code>, <code>dps_sps.py</code>, <code>repair.py</code>)</span></p>
+
+  <h3>Phase 1b &mdash; Refine mapping: minimise max utility density <span class="b ok" style="font-size:.68rem">&#10003;</span></h3>
+  <p>SPS balances <em>load</em>, not <em>value</em>. If several high-utility tasks land on one core, timing
+  blocks their optional segments even when energy is plentiful. Phase 1b rebalances <b>utility density</b>
+  (paper &sect;V.A):</p>
+  <p class="formula">ud(i) = u_i &middot; (cum[i][N_seg] &minus; cum[i][0]) / p_i &nbsp;&nbsp;&nbsp;
+     UD(x) = &Sigma; ud(i) over all jobs mapped to processor x</p>
+  <p>A candidate swap is accepted only when <b>all three</b> conditions hold &mdash; this is the part that is
+  easy to miss:</p>
+  <ol>
+    <li>UD imbalance <b>strictly decreases</b> (pair-level for 2a; max-UD level for 2b).</li>
+    <li>Mandatory-utilisation imbalance between the two processors does <b>not worsen</b>. SPS already produced
+        a load-balanced mapping; a swap that disturbs it leaves less timing slack on the heavier core and
+        hurts Phase 5 <em>even when DBF still technically passes</em>.</li>
+    <li>Mandatory-only <b>DBF at f_max stays feasible</b> for both affected processors.</li>
+  </ol>
+  <table>
+    <tr><th>Variant</th><th>Selection strategy</th></tr>
+    <tr><td><b>2a</b></td><td><b>Linear doublet scan.</b> Enumerate all job pairs sorted by ascending
+        <code>|ud_a &minus; ud_b|</code> and swap whenever the three conditions hold. One sweep over the list.</td></tr>
+    <tr><td><b>2b</b></td><td><b>One-swap-one-scan.</b> Repeatedly identify the processor pair with the largest
+        UD difference, find the <em>first</em> pair whose higher-UD job sits on the heavier processor, swap it,
+        then re-scan from scratch. Mirrors the SPS style.</td></tr>
+  </table>
+  <p class="muted">(<code>mapping/refine_mapping.py</code>) &mdash; measured: UD spread 1.45 &rarr; 0.12 on
+  <code>testcase.py</code>.</p>
+
+  <h3>Phase 2 &mdash; Left shift (diagnostic) <span class="b ok" style="font-size:.68rem">&#10003;</span></h3>
+  <p>Simulates <b>non-preemptive</b> EDF-order packing on each processor:</p>
+  <p class="formula">start = max(proc_avail, release) &nbsp;&middot;&nbsp;
+     finish = start + e_eff(i,k,z) &nbsp;&middot;&nbsp; slack = deadline &minus; finish</p>
+  <p class="note"><strong>Read this as an approximation, not a feasibility test.</strong> The real system is
+  <em>preemptive</em> EDF, so left-shift only estimates where idle time sits. Hard feasibility is always
+  decided by <b>DBF</b>. In v3&ndash;v5b Phase 2 is run once and its output is printed but never gates a
+  decision &mdash; it is informational.
+  <span class="muted">(<code>phases/left_shift.py</code>)</span></p>
+
+  <h3>Phase 3 &mdash; Energy slack <span class="b ok" style="font-size:.68rem">&#10003;</span></h3>
+  <p>Computes <code>&Delta;e = B &minus; E_consumed</code> at the current (all-<code>f_max</code>,
+  mandatory-only) state. If <code>&Delta;e &lt; 0</code>, the mandatory workload alone busts the budget and
+  the solver <b>exits early</b> reporting infeasible &mdash; no optional segment could ever be afforded.
+  <span class="muted">(<code>phases/energy_slack.py</code>)</span></p>
+
+  <h3>Phase 4 &mdash; Aggressive frequency scaling <span class="b part" style="font-size:.68rem">&#9888;</span></h3>
+  <p>Iteratively steps each job's frequency <b>down one level</b>, subject to:</p>
+  <ul>
+    <li>skip if the step yields <b>no energy saving</b> (<code>E_new &ge; E_cur</code>) &mdash; important,
+        because below <code>f*</code> lowering frequency <em>costs</em> energy;</li>
+    <li><b>revert</b> the step if the DBF timing check fails;</li>
+    <li><b>stop the instant</b> <code>E_total &le; B</code>.</li>
+  </ul>
+  <p class="note"><strong>The gate, and its two failure modes.</strong> Phase 4 is gated on budget
+  feasibility: if <code>f_max</code> already fits, it does <b>nothing</b>. That gate was added to fix a real
+  collapse &mdash; ungated, it drove 98 jobs toward <code>f*</code>, saturated the DBF windows with inflated
+  mandatory work, and starved Phase 5 of <em>time</em> (utility fell to ~4). But the gate has the opposite
+  failure mode under a tight budget: it under-scales and starves Phase 5 of <em>energy</em>. Measured at
+  &rho;=0.7 on an 8-task instance, mandatory-at-<code>f_max</code> = 92.00 against B = 96.60, so Phase 4
+  returned immediately and left only 4.60 energy for optional work &mdash; where slowing down would have
+  freed ~48. <b>Neither "always scale" nor "scale only when over budget" is correct;</b> the decision needs to
+  be driven by marginal utility-per-energy.
+  <span class="muted">(<code>phases/aggressive.py</code>)</span></p>
+
+  <h3>Phase 5 &mdash; Greedy optional segments <span class="b ok" style="font-size:.68rem">&#10003;</span></h3>
+  <p>The main utility engine. Jobs are visited in a stable order sorted by
+  <code>(&minus;u_i, task_id, job_id)</code>; each outer pass adds <b>at most one segment per job</b>, and the
+  outer loop repeats until no addition succeeds. For a candidate job <code>j*</code> three cases are tried in
+  order:</p>
+  <table>
+    <tr><th>Case</th><th>Condition</th><th>Action</th></tr>
+    <tr><td><b>(i)</b> add outright</td>
+        <td><code>min_slack &ge; add_time</code> <b>and</b> <code>E_slack &ge; add_energy</code></td>
+        <td>commit the segment. No other job is disturbed.</td></tr>
+    <tr><td><b>(ii.A)</b> raise j*'s freq</td>
+        <td>timing blocks, but energy is available</td>
+        <td>step <code>j*</code> up one frequency level (shrinking its execution time) so the segment fits;
+            re-verified with a full <code>check_all_timing</code>.</td></tr>
+    <tr><td><b>(ii.B)</b> lower others' freq</td>
+        <td>energy blocks, but timing is available</td>
+        <td>step <em>another</em> job on the same processor (with <code>u_i &le; u_{j*}</code>) down one level
+            to free energy, then add the segment. Only accepted if the donor keeps its own timing.</td></tr>
+  </table>
+  <p>The timing gate is <code>min_slack_for_job</code> &mdash; the minimum DBF window slack over every window
+  containing the job &mdash; which is sufficient without a full DBF recomputation in case (i).
+  <span class="muted">(<code>phases/greedy.py</code>)</span></p>
+
+  <h3>Phase 6 &mdash; Best-first pairwise segment swap <span class="b ok" style="font-size:.68rem">&#10003;</span></h3>
+  <p>Escapes the local optimum Phase 5 leaves behind. Each round:</p>
+  <ol>
+    <li><b>Search</b> every (giver, receiver) pair &mdash; giver = any job with <code>&ge;1</code> active
+        optional segment, receiver = any job with <code>&lt; N_seg</code>. With the giver's <em>last</em>
+        segment tentatively removed, require:
+        <span class="formula">net = u_recv &middot; e_recv_next &minus; u_give &middot; e_give_last &gt; 0</span>
+        plus the energy balance <code>E_freed &minus; E_cost &le; E_slack</code> and the receiver's timing
+        <code>min_slack &ge; add_time</code>.</li>
+    <li><b>Execute</b> the single swap with the highest net gain, then re-verify with full
+        <code>check_all_timing</code>.</li>
+    <li><b>Fill pass</b> &mdash; re-run Phase 5 to capitalise on whatever the swap freed.</li>
+    <li>Repeat until no improving swap exists.</li>
+  </ol>
+  <p>Swaps may cross processors: energy is a <em>global</em> budget, so dropping a low-value segment on P0 can
+  fund a high-value one on P1. <span class="muted">(<code>phases/swap.py</code>)</span></p>
+
+  <h3>Phase 7 &mdash; Double-giver swap <span class="b part" style="font-size:.68rem">claudeoptimal only</span></h3>
+  <p>Some receivers are too expensive for <em>any</em> single-giver swap to unlock. Phase 7 removes the last
+  optional segment of <b>two</b> givers simultaneously to open enough combined timing + energy room for
+  <b>one</b> receiver. The giver pool is every job with <code>&ge;1</code> active segment, sorted by
+  <b>ascending marginal utility</b> (cheapest segments destroyed first) and truncated to
+  <code>_MAX_DG_CANDIDATES = 20</code> &mdash; without that cap the pair enumeration is O(n&sup3;).
+  <span class="muted">(<code>solvers/heuristic_claudeoptimal.py::_phase_double_giver_swap</code>)</span></p>
+
+  <h3>Phase 8 &mdash; Iterated greedy (destroy / reconstruct) <span class="b part" style="font-size:.68rem">claudeoptimal only</span></h3>
+  <p>A metaheuristic layer that escapes optima no local move can. Each of
+  <code>_IG_ITERATIONS = 8</code> rounds:</p>
+  <ol>
+    <li><b>Score</b> every active optional segment by <em>utility per unit execution time</em>:
+        <span class="formula">density = u_i &middot; (cum[k] &minus; cum[k&minus;1]) &nbsp;/&nbsp; add_time,
+        &nbsp; add_time = (cum[k] &minus; cum[k&minus;1]) / f_z</span></li>
+    <li><b>Destroy</b> the lowest-density <code>_IG_DESTROY_FRAC = 33%</code> &mdash; the segments that occupy
+        the most schedule for the least value, freeing timing density for better ones.</li>
+    <li><b>Reconstruct</b> with Phase 5 (greedy) followed by Phase 6 (pairwise swap).</li>
+    <li><b>Accept</b> only if total utility strictly improves; otherwise restore the incumbent best.</li>
+  </ol>
+  <p>The best solution found is always restored in-place at the end, so Phase 8 can never make the result
+  worse than the Phase 6 output.
+  <span class="muted">(<code>solvers/heuristic_claudeoptimal.py::_phase_iterated_greedy</code>)</span></p>
+
+  <h3 style="margin-top:1.6rem">Not implemented: paper &sect;V.B "Heur1.0 / Baseline"</h3>
+  <p class="note">The paper also defines a separate, simpler <b>2-phase baseline</b> that is
+  <b>absent from the codebase</b> &mdash; there is no probabilistic acceptance, annealing, or
+  worst-fit mapping anywhere in <code>usrt/</code>. It is a distinct algorithm, not one of the versions below:</p>
+  <ul>
+    <li><b>Phase 1 &mdash; mapping.</b> Tasks in <em>decreasing</em> utilisation order; assign each to the
+        least-utilised processor; feasibility by a plain <b>utilisation check</b> (the paper notes DBF is not
+        needed yet). Effectively Worst-Fit Decreasing.</li>
+    <li><b>Phase 2 &mdash; local search</b> over eight operations: inc/dec frequency, inc/dec optional segment,
+        and the four combinations. Each iteration takes the best improving move, and
+        <b>probabilistically accepts a worsening one</b>, with the acceptance probability decaying
+        geometrically &mdash; simulated annealing in all but name.</li>
+  </ul>
+  <p>Two of its operations lie <em>outside</em> our design space: <b>O7 (dec freq + inc optional segment)</b>
+  and the segment-<em>decreasing</em> moves. O7 is precisely the trade our heuristics cannot make, and it is
+  the one that cost them 30&ndash;47% under tight budgets (&sect;8). It is therefore possible that the paper's
+  own baseline <b>outperforms v5b in the energy-bound regime</b> &mdash; worth measuring before publishing
+  any "we beat the baseline" claim.</p>
+</section>
+
+<!-- 5 -->
+<h2 id="versions">5. Heuristic Version Matrix</h2>
+<section class="card">
+  <p>The phases are building blocks; the versions are different <em>assemblies</em> (which is why
+  <code>run.py</code> lists so many "heuristic" keys). Note that <b>v5a and v5b are siblings built on v4</b>,
+  not a progression &mdash; they differ only in which Refine-Mapping strategy Phase 1b uses.</p>
+  <table>
+    <tr><th>Version</th><th>Phases</th><th>Distinguishing feature</th></tr>
+    <tr><td class="mono">heuristic_v1</td><td>single-pass SPS + freq scaling + greedy</td>
+        <td>Uses the <code>ScheduleState</code> class with incremental DBF slack structures instead of
+            recomputing DBF. <b>Returns a <code>ScheduleState</code>, not the 4-tuple</b> every other variant
+            returns &mdash; so it is incompatible with <code>run_models.py</code>.</td></tr>
+    <tr><td class="mono">heuristic_v2</td><td>Quantum SPS + left-shift greedy</td>
+        <td>Joint freq/segment greedy driven by left-shift slack rather than DBF window slack.</td></tr>
+    <tr><td class="mono">heuristic_v3</td><td>1, 2, 3, 4, 5</td>
+        <td><b>No Phase 6.</b> The plain staged greedy baseline of the family.</td></tr>
+    <tr><td class="mono">heuristic_v4</td><td>1, 2, 3, 4, 5, <b>6</b></td>
+        <td>v3 <b>+ pairwise swap</b> and fill pass.</td></tr>
+    <tr><td class="mono">heuristic_v5a</td><td>1, <b>1b(2a)</b>, 2&ndash;6</td>
+        <td>v4 + Refine Mapping <b>2a</b> (linear doublet scan).</td></tr>
+    <tr><td class="mono">heuristic_v5b</td><td>1, <b>1b(2b)</b>, 2&ndash;6</td>
+        <td>v4 + Refine Mapping <b>2b</b> (one-swap-one-scan). Current default baseline for the online phase.</td></tr>
+    <tr><td class="mono">heuristic_claudeoptimal</td><td>1&ndash;6 + <b>7</b> + <b>8</b></td>
+        <td>v4 + double-giver swap + iterated greedy. The only variant that meaningfully re-bases frequency.</td></tr>
+  </table>
+
+  <h3>Measured &mdash; and the ranking depends on the regime</h3>
+  <table>
+    <tr><th>Version</th><th>Loose budget<br><span class="muted">testcase.py, B=400</span></th>
+        <th>Tight budget<br><span class="muted">mean over 10 instances, &rho;=0.7</span></th>
+        <th>Wins<br><span class="muted">of 10</span></th></tr>
+    <tr><td class="mono">heuristic_v2</td><td>~220</td><td class="muted">&mdash;</td><td class="muted">&mdash;</td></tr>
+    <tr><td class="mono">heuristic_v3</td><td>204.4</td><td>116.09</td><td>0</td></tr>
+    <tr><td class="mono">heuristic_v4</td><td>222.2</td><td>126.13</td><td>1</td></tr>
+    <tr><td class="mono">heuristic_v5a</td><td>~227</td><td>121.18</td><td>2</td></tr>
+    <tr><td class="mono">heuristic_v5b</td><td><b>227.33</b></td><td>121.57</td><td>0</td></tr>
+    <tr><td class="mono">heuristic_claudeoptimal</td><td>~top</td><td><b>141.85</b></td><td><b>7</b></td></tr>
+  </table>
+  <p class="note"><strong>The default is not the best under tight budgets.</strong> At B=400 the extra mapping
+  refinement in v5b pays off (227.33, matching the ILP reference). Under an energy-bound budget it does not:
+  <code>claudeoptimal</code> beats <code>v5b</code> by roughly <b>17%</b>, because Phases 7&ndash;8 are the only
+  mechanism in the family that meaningfully lowers frequency to fund more segments. Since v5b is currently both
+  the <code>run_models.py</code> default and the offline baseline handed to the online phase, that choice
+  should be revisited for tight-budget results.</p>
+</section>
+
+<!-- 6 -->
+<h2 id="online">6. The Online Phase</h2>
+<section class="card">
+  <p>At runtime jobs finish early (ACET &lt; WCET), freeing <b>time slack Δt</b> (processor-local, perishable)
+  and <b>energy slack Δe</b> (global, accumulative). A precomputed DP decides, per completion, how to spread
+  that slack over downstream jobs to add optional-segment utility — paper §VI + the online design doc.</p>
+
+  <h3>The DP</h3>
+  <div class="formula">V[j][Δt][Δe] = max<sub>(a<sub>t</sub>,a<sub>e</sub>)</sub> { gain(j,a<sub>t</sub>,a<sub>e</sub>) + V[j+1][Δt−a<sub>t</sub>][Δe−a<sub>e</sub>] }</div>
+  <ul>
+    <li><b>Exact breakpoint representation</b> — each level is the Pareto frontier of reachable
+        <code>(req_t, req_e, value)</code> points, not a dense grid (no quantisation until capped). <code>value_function.py</code></li>
+    <li><b>Per-processor DP + shared global energy</b> — one <code>ProcessorDP</code> per core (time is local);
+        a single <code>SharedEnergyPool</code> guarded by a <b>semaphore</b> couples them. <code>dp.py</code>, <code>energy_pool.py</code></li>
+    <li><b>Builds from offline <code>k_off</code></b> — online adds segments <em>beyond</em> the offline count (design doc Issue 2). <code>actions.py</code></li>
+    <li><b>Utility-density arbitration</b> for the shared pool on contention (paper §VIII / Approach C). <code>density.py</code></li>
+    <li><b>Dynamic-DBF commit guarantee</b> — every applied move re-checked against the exact per-processor DBF + energy pool; never a deadline miss or budget overrun. <code>controller.py</code></li>
+  </ul>
+
+  <h3>What's implemented in the online phase</h3>
+  <table>
+    <tr><th>Item</th><th>Status</th></tr>
+    <tr><td>Precompute DP + online lookup, per-processor</td><td><span class="b ok">✅</span></td></tr>
+    <tr><td>Worked-example verification vs the design doc (all tables/traces exact)</td><td><span class="b ok">✅</span></td></tr>
+    <tr><td>Single global energy pool + semaphore (atomic <code>try_spend</code>/<code>refund</code>)</td><td><span class="b ok">✅</span></td></tr>
+    <tr><td>Aggregate states (frontier cap 256, adaptive 16×16 grid)</td><td><span class="b ok">✅</span></td></tr>
+    <tr><td>Graceful degradation on trim (retry k−1, k−2, … DBF-checked)</td><td><span class="b ok">✅</span></td></tr>
+    <tr><td>ACET simulator + gap instrumentation</td><td><span class="b ok">✅</span></td></tr>
+    <tr><td>§VIII.B marginal opportunity-cost energy routing</td><td><span class="b no">❌</span></td></tr>
+    <tr><td>Exact per-window / nesting-level Δt state (kills scalar approximation)</td><td><span class="b no">❌</span></td></tr>
+    <tr><td>Better bounds + Lazy DP</td><td><span class="b no">❌</span></td></tr>
+  </table>
+</section>
+
+<!-- 7 -->
+<h2 id="status">7. What's Been Done So Far (Aug 1)</h2>
+<section class="card">
+  <h3>Recent changes</h3>
+  <ul>
+    <li><b>Energy constants flipped</b> to α=0.15, β=1.0 so DVFS is a live decision (<code>f*≈0.42</code>).</li>
+    <li><b>Phase 4 gated on feasibility</b> — it was greedily minimising energy, starving Phase 5 of timing slack
+        (utility collapsed to ~0 under the new constants). Now it acts only when the budget is actually
+        exceeded. Restored v3/v4/v5 to 204 / 222 / 227.</li>
+    <li><b>Online shared energy pool + semaphore</b>, per-processor DPs, density arbitration.</li>
+    <li><b>Aggregate states</b> added — the frontier explodes (~2000 pts/level) once DVFS is active; capped to 256.</li>
+    <li><b>Graceful degradation</b> in the commit — recovered utility the all-or-nothing trim used to drop.</li>
+    <li><b>Console UTF-8 fix</b> in <code>run.py</code> (earlier cp1252 crash on α/β/box glyphs).</li>
+  </ul>
+
+  <h3>Latest measured result <span class="b exp" style="font-size:.68rem">🔬</span></h3>
+  <table>
+    <tr><th>Metric</th><th>Value</th></tr>
+    <tr><td>Offline schedule (v5b)</td><td>utility <b>227.33</b>, energy 274 / B=400</td></tr>
+    <tr><td>Online added utility (graceful degradation)</td><td><b>+68.36</b> → final <b>295.68</b></td></tr>
+    <tr><td>Realised energy (C3 binds here)</td><td>213.2 ≤ 400 ✓ · pool 186.8</td></tr>
+    <tr><td>Feasibility (dynamic DBF + energy)</td><td><b>True</b></td></tr>
+    <tr><td>Scalar-Δt gap (DP promised vs committed)</td><td>72.90 → 68.36, trim loss <b>4.55</b> (was 10.10 before degradation)</td></tr>
+    <tr><td>Shared pool</td><td>77 semaphore acquisitions, 0 denied</td></tr>
+  </table>
+
+  <div class="note"><strong>Key finding on the scalar Δt:</strong> the DP's single time budget over-plans; the
+  commit-time DBF trims it. Measured cost was ~10.1 utility (one event); graceful degradation recovered ~5.5 of
+  it. The residual ~4.55 is what an <em>exact per-window (vector) Δt state</em> would recover by never planning
+  the infeasible move — that vector state is the identified but not-yet-built next improvement.</div>
+</section>
+
+<!-- 8 -->
+<h2 id="dvfs">8. The α/β (DVFS) Regime Finding</h2>
+<section class="card">
+  <p>Energy per unit work <code>g(f)=α/f+βf²</code> is convex with minimum at
+  <b>f* = (α/2β)<sup>1/3</sup></b> — depends only on the ratio <code>r=α/β</code>. Which frequency is
+  energy-optimal (and whether frequency is even a decision) falls into three regimes:</p>
+  <table>
+    <tr><th>Regime</th><th>Condition</th><th>Optimal f</th><th>Frequency a real decision?</th></tr>
+    <tr><td>Leakage-dominated</td><td class="mono">α ≥ 2β &nbsp;(r ≥ 2)</td><td><code>f_max</code></td>
+        <td>No — <code>f_max</code> wins on time <em>and</em> energy (degenerate)</td></tr>
+    <tr><td>Balanced / interior</td><td class="mono">2β·f_min³ &lt; α &lt; 2β</td><td><code>f*</code> (interior)</td>
+        <td>Yes — trade-off along [f*, f_max]</td></tr>
+    <tr><td>Dynamic-dominated</td><td class="mono">α ≤ 2β·f_min³</td><td><code>f_min</code></td>
+        <td>Yes — whole [f_min, f_max] efficient</td></tr>
+  </table>
+  <p>For the testcase set (<code>f_min=0.3</code>): <code>r ≥ 2</code> → <code>f_max</code>; <code>0.054 &lt; r &lt; 2</code> → interior; <code>r ≤ 0.054</code> → <code>f_min</code>.
+  Old constants <code>α=1,β=0.5</code> → <code>r=2</code> (exactly degenerate); current <code>α=0.15,β=1.0</code> → <code>r=0.15</code> (interior, DVFS live).</p>
+  <div class="key"><strong>Consequence:</strong> frequency only <em>matters</em> when (a) the ratio is in the
+  interior band <em>and</em> (b) the energy budget is tight enough that <code>f_max</code>-everywhere is
+  infeasible. The current B=400 is energy-loose, so time (not energy) binds — which is why DVFS gains look
+  small even with live constants.</div>
+</section>
+
+<!-- 9 -->
+<h2 id="open">9. Open Decisions &amp; Next Steps</h2>
+<section class="card">
+  <table>
+    <tr><th>Item</th><th>Note</th><th>Status</th></tr>
+    <tr><td><b>Frequency scope of the online phase</b></td>
+        <td>Paper §VI lists online Options 3/4 (change frequency of not-yet-started jobs) — legal, since the
+            "no change" rule is mid-execution only. Decision: keep online DVFS (richer, but frontier blow-up)
+            <em>vs</em> freeze frequency online and decide only segments (exact + fast). Open.</td>
+        <td><span class="b no">❌ decide</span></td></tr>
+    <tr><td><b>Exact per-window / nesting-level Δt state</b></td>
+        <td>Replaces the scalar Δt; recovers the residual ~4.55 (and silent) utility, and removes the runtime
+            DBF trim. Reduced to per-period-level under harmonic periods to stay tractable.</td>
+        <td><span class="b no">❌</span></td></tr>
+    <tr><td><b>§VIII.B marginal energy routing</b></td>
+        <td>Replace density-share arbitration with live marginal opportunity-cost from the tables; ration only
+            under scarcity (fixes surplus-capping).</td>
+        <td><span class="b no">❌</span></td></tr>
+    <tr><td><b>Better bounds + Lazy DP</b></td>
+        <td>Schedule-derived ceilings on Δt/Δe; compute-on-demand. Needed to afford finer resolution / less
+            quantisation once frequency is in.</td>
+        <td><span class="b no">❌</span></td></tr>
+    <tr><td><b>Tight-budget experiment</b></td>
+        <td>Re-run with a smaller B so <code>f_max</code>-everywhere is infeasible → exercises DVFS in offline
+            &amp; online, gives the regime where DVFS earns its place in the paper.</td>
+        <td><span class="b exp">🔬 proposed</span></td></tr>
+  </table>
+</section>
+
+<footer>
+  USRT project summary — 1 Aug · <code>C:\homogenous\V2</code> · companions:
+  <code>online_phase_implementation.html</code>, <code>dp_assumptions.html</code>,
+  <code>online_phase_explained_2.html</code>, <code>usrt_code_review_report.html</code>.
+</footer>
+
+</main>
+</body>
+</html>

@@ -1,0 +1,375 @@
+<title>USRT V2 — Command Reference</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#f7f7f5; --panel:#ffffff; --ink:#1a1a18; --muted:#5c5c56;
+    --line:#e3e2dc; --accent:#1f4d7a; --accent2:#7a1f1f;
+    --code-bg:#f2f1ec; --code-ink:#2a2a26;
+    --ok:#1f6b45; --warn:#9a6a12;
+    --chip-a:#1f4d7a; --chip-b:#4a7a4a; --chip-c:#b7791f; --chip-d:#7a1f1f;
+    --mono:"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;
+    --serif:Georgia,"Times New Roman",serif;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#16161a; --panel:#1e1e24; --ink:#e9e8e2; --muted:#a7a69e;
+      --line:#31313a; --accent:#8ab4e0; --accent2:#e08a8a;
+      --code-bg:#24242b; --code-ink:#d8d7cf;
+      --ok:#7fd0a3; --warn:#e0bd6a;
+      --chip-a:#3a6f9a; --chip-b:#4a8a4a; --chip-c:#a07a2a; --chip-d:#9a4a4a;
+    }
+  }
+  *{box-sizing:border-box}
+  body{background:var(--bg);color:var(--ink);font-family:var(--sans);
+       line-height:1.6;margin:0;padding:0;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1000px;margin:0 auto;padding:2.4rem 1.4rem 6rem}
+  header.top{border-bottom:2px solid var(--accent);padding-bottom:1.2rem;margin-bottom:1.4rem}
+  header.top .kicker{font-family:var(--mono);font-size:.72rem;letter-spacing:.16em;
+       text-transform:uppercase;color:var(--accent);margin-bottom:.5rem}
+  h1{font-family:var(--serif);font-weight:600;font-size:2rem;line-height:1.18;margin:.1rem 0 .5rem}
+  .sub{color:var(--muted);font-size:1.02rem;max-width:74ch}
+  h2{font-family:var(--serif);font-size:1.45rem;font-weight:600;margin:2.4rem 0 .5rem;
+     padding-top:1rem;border-top:1px solid var(--line)}
+  h3{font-size:1.08rem;font-weight:650;margin:1.5rem 0 .4rem}
+  h4{font-size:.95rem;font-weight:650;margin:1.1rem 0 .3rem;color:var(--accent)}
+  p{margin:.55rem 0}
+  code{font-family:var(--mono);font-size:.86em;background:var(--code-bg);color:var(--code-ink);
+       padding:.08em .35em;border-radius:4px}
+  pre{background:var(--code-bg);color:var(--code-ink);border:1px solid var(--line);
+      border-radius:8px;padding:.85rem 1rem;overflow-x:auto;font-family:var(--mono);
+      font-size:.8rem;line-height:1.55;margin:.6rem 0}
+  pre code{background:none;padding:0}
+  ul,ol{margin:.5rem 0 .7rem;padding-left:1.35rem}
+  li{margin:.26rem 0}
+  table{border-collapse:collapse;width:100%;margin:.9rem 0;font-size:.84rem;display:block;overflow-x:auto}
+  th,td{border:1px solid var(--line);padding:.45rem .6rem;text-align:left;vertical-align:top}
+  th{background:var(--code-bg);font-weight:650}
+  .callout{border-left:4px solid var(--accent);background:var(--panel);
+           padding:.8rem 1.1rem;border-radius:0 8px 8px 0;margin:1rem 0}
+  .callout.warn{border-left-color:var(--warn)}
+  .callout.key{border-left-color:var(--accent2);background:linear-gradient(90deg,rgba(122,31,31,.06),transparent)}
+  .toc{columns:2;column-gap:2rem;font-size:.9rem}
+  .toc a{text-decoration:none;color:var(--accent)}
+  .small{font-size:.82rem;color:var(--muted)}
+  hr{border:none;border-top:1px solid var(--line);margin:2rem 0}
+  mark{background:rgba(199,120,40,.22);color:inherit;padding:.02em .2em;border-radius:3px}
+  @media (max-width:640px){.toc{columns:1}}
+</style>
+
+<div class="wrap">
+<header class="top">
+  <div class="kicker">USRT · V2 · Operations Manual</div>
+  <h1>V2 Command Reference</h1>
+  <p class="sub">Every command to run the V2 codebase: the offline solvers, the online phase,
+  the test-case generator, and the model runner — with all configurations in one place.
+  Section&nbsp;8 answers <strong>how the online phase gets its ACETs</strong>.</p>
+  <p class="small" style="margin-top:.8rem">Last updated 2026-08-16 (rev. 2 - aligned to paper Section VII.A) · all commands run from
+  <code>c:\homogenous\V2</code></p>
+</header>
+
+<h2 id="toc">Contents</h2>
+<div class="toc">
+  <ol>
+    <li><a href="#s0">Prerequisites</a></li>
+    <li><a href="#s1">Offline solvers — <code>run.py</code></a></li>
+    <li><a href="#s2">ILP v1 — standalone</a></li>
+    <li><a href="#s3">Online phase</a></li>
+    <li><a href="#s4">Test-case generation</a></li>
+    <li><a href="#s5">Model runner</a></li>
+    <li><a href="#s6">End-to-end pipeline</a></li>
+    <li><a href="#s7">How online ACETs are defined</a></li>
+    <li><a href="#s8">Output schemas</a></li>
+    <li><a href="#s9">Caveats</a></li>
+  </ol>
+</div>
+
+<h2 id="s0">1 · Prerequisites</h2>
+<pre><code>cd c:\homogenous\V2          # all commands assume this working directory
+python --version             # 3.11 used here
+python -c "import gurobipy"  # required ONLY for ilp_v1 / ilp_v2</code></pre>
+<div class="callout warn"><strong>Gurobi licence.</strong> The academic licence expires
+<strong>2026-08-19</strong>. After that every ILP command fails; the heuristics and the online
+phase keep working. Renew with <code>grbgetkey &lt;key&gt;</code>.</div>
+<p>Console encoding: <code>run.py</code>, <code>gen_testcases.py</code> and
+<code>run_models.py</code> force UTF-8 output, so the α/β and box-drawing glyphs print correctly
+on Windows cp1252 terminals. Scripts that bypass them may need
+<code>set PYTHONIOENCODING=utf-8</code>.</p>
+
+<h2 id="s1">2 · Offline solvers — <code>run.py</code></h2>
+<pre><code>python run.py &lt;testcase.py&gt; [solver]</code></pre>
+<p>Default solver when omitted: <code>heuristic_v4</code>.</p>
+<table>
+<thead><tr><th>Solver key</th><th>What it is</th><th>Needs Gurobi</th></tr></thead>
+<tbody>
+<tr><td><code>ilp_v2</code></td><td>Quantum SPS mapping + Gurobi ILP (freq + segments)</td><td>Yes</td></tr>
+<tr><td><code>heuristic_v1</code></td><td>Single-pass SPS + ScheduleState + freq scaling + greedy</td><td>No</td></tr>
+<tr><td><code>heuristic_v2</code></td><td>Quantum SPS + left-shift greedy</td><td>No</td></tr>
+<tr><td><code>heuristic_v3</code></td><td>Quantum SPS + DBF window-slack greedy (Phases 1–5)</td><td>No</td></tr>
+<tr><td><code>heuristic_v4</code></td><td>v3 + pairwise swap (Phases 1–6) <em>(default)</em></td><td>No</td></tr>
+<tr><td><code>heuristic_v5a</code></td><td>+ Refine Mapping 2a (linear doublet scan)</td><td>No</td></tr>
+<tr><td><code>heuristic_v5b</code></td><td>+ Refine Mapping 2b (one-swap-one-scan) — <strong>the reference heuristic</strong></td><td>No</td></tr>
+<tr><td><code>heuristic_claudeoptimal</code></td><td>Phases 1–6 + double-giver swap + iterated greedy</td><td>No</td></tr>
+<tr><td><code>online</code></td><td>v5b offline schedule + online slack DP (see §4)</td><td>No</td></tr>
+</tbody></table>
+<h4>Examples</h4>
+<pre><code>python run.py testcase.py                       # default heuristic_v4
+python run.py testcase.py heuristic_v5b          # reference heuristic
+python run.py testcase.py ilp_v2                 # SPS + ILP
+python run.py testcase.py online                 # online phase demo
+
+# any generated instance works the same way
+python run.py testcases/rho/set00/rho_0.6.py heuristic_v5b</code></pre>
+
+<h2 id="s2">3 · ILP v1 — standalone</h2>
+<p>ILP v1 (the exact/optimal benchmark) has <strong>no <code>run.py</code> key</strong>; it is a
+root-level script:</p>
+<pre><code>python ILP.py                    # defaults to testcase.py
+python ILP.py testcase.py
+python ILP.py testcases/rho/set00/rho_0.6.py</code></pre>
+<div class="callout warn"><strong>Known defect.</strong> <code>ILP.py</code> hard-codes
+<code>ALPHA=1.0, BETA=0.5</code> (lines 51–52) — the <em>stale</em> constants. The project uses
+<code>ALPHA=0.15, BETA=1.0</code> from <code>usrt/models.py</code>. So a <em>standalone</em>
+<code>python ILP.py</code> run solves a <strong>different energy model</strong> than every other
+solver, and its utility is not comparable. The model runner (§6) re-points these at runtime, so
+runner results are valid. Permanent fix: replace those two lines with
+<code>from usrt.models import ALPHA, BETA</code>.</div>
+
+<h2 id="s3">4 · Online phase</h2>
+<pre><code>python run.py testcase.py online</code></pre>
+<p>This runs, in order: (1) the DP worked-example verification against the design document,
+(2) the v5b offline pipeline to build the base schedule, (3) the online simulation over one
+hyper-period of early completions.</p>
+<h4>Verify only the DP core</h4>
+<pre><code>python -m usrt.online.worked_examples</code></pre>
+<p>Reproduces every published V[j][Δt][Δe] table cell and the three verified traces
+(19.0 / 17.0 / 10.0). Exit code 0 = all match.</p>
+
+<h4>Changing online knobs (no CLI flags — must be done in code)</h4>
+<p><code>usrt/solvers/online_demo.py</code> line&nbsp;86 hard-codes the config:</p>
+<pre><code>cfg = SimConfig(acet_ratio=0.7, arbitration="proportional", verbose=True)</code></pre>
+<table>
+<thead><tr><th>SimConfig field</th><th>Default</th><th>Meaning</th></tr></thead>
+<tbody>
+<tr><td><code>acet_ratio</code></td><td>0.7</td><td>fixed actual/WCET ratio for <em>every</em> job; <code>None</code> ⇒ draw per job</td></tr>
+<tr><td><code>ratio_min</code></td><td>0.5</td><td>lower bound when drawing per job</td></tr>
+<tr><td><code>ratio_max</code></td><td>0.9</td><td>upper bound when drawing per job</td></tr>
+<tr><td><code>seed</code></td><td>12345</td><td>RNG seed (reproducible draws)</td></tr>
+<tr><td><code>arbitration</code></td><td>"proportional"</td><td>shared-energy split: <code>proportional</code> | <code>strict</code></td></tr>
+<tr><td><code>verbose</code></td><td>True</td><td>per-event trace</td></tr>
+<tr><td><code>max_frontier</code></td><td>256</td><td>Pareto-frontier cap per DP level (aggregate states)</td></tr>
+</tbody></table>
+
+<h4>Driving the online phase programmatically (full control)</h4>
+<pre><code>python -c "
+import sys; sys.path.insert(0,'.')
+from usrt.utils import load_testcase
+from usrt.solvers.online_demo import offline_schedule
+from usrt.online.simulator import OnlineSimulator, SimConfig
+
+procs, tasks, B = load_testcase('testcase.py')
+seg_k, freq_idx, mapping = offline_schedule(procs, tasks, B)
+
+cfg = SimConfig(acet_ratio=None, ratio_min=0.5, ratio_max=0.9,
+                seed=7, arbitration='strict', verbose=True, max_frontier=512)
+sim = OnlineSimulator(procs, tasks, B, seg_k, freq_idx, mapping, config=cfg)
+print(sim.run())
+"</code></pre>
+
+<h2 id="s4">5 &middot; Test-case generation &mdash; <code>gen_testcases.py</code></h2>
+<pre><code>python gen_testcases.py &lt;sweep&gt; [options]</code></pre>
+<div class="callout key"><strong>Design (paper &sect;VII.A).</strong> <em>System</em> parameters are
+fixed for every test case; <em>simulation</em> parameters are swept
+<strong>one at a time</strong> with all others at their defaults. One value of one parameter =
+one <strong>configuration</strong>; each configuration gets <code>--sets</code> (default 100)
+test cases.</div>
+<h4>Sweeps = the simulation parameters</h4>
+<table>
+<thead><tr><th>Sweep</th><th>Paper symbol</th><th>Meaning</th><th>Default grid</th></tr></thead>
+<tbody>
+<tr><td><code>n_prc</code></td><td>N<sup>prc</sup></td><td>processors (n_tsk auto-scales, see note)</td><td>2, 4, 8, 16</td></tr>
+<tr><td><code>n_tsk</code></td><td>N<sup>tsk</sup></td><td>number of tasks</td><td>4, 6, 8, 10, 12</td></tr>
+<tr><td><code>u_mand_factor</code></td><td>&alpha;</td><td>U_M = &alpha; &times; N_prc</td><td>0.1 &hellip; 0.9</td></tr>
+<tr><td><code>u_opt_factor</code></td><td>&beta;</td><td>U_O = &beta; &times; (N_prc &minus; U_M)</td><td>0.1 &hellip; 0.9</td></tr>
+<tr><td><code>rho</code></td><td>&rho;</td><td>B = &rho; &times; E_full_fmax</td><td>0.2 &hellip; 1.0</td></tr>
+<tr><td><code>xi</code></td><td>&xi;</td><td>per-task ACET multiplier &theta; ~ U(&xi;,1)</td><td>0.3 &hellip; 0.9</td></tr>
+<tr><td><code>util_grid</code></td><td>&alpha; &times; &beta;</td><td>2-D: vary U_mand and U_opt together</td><td>6 &times; 6</td></tr>
+<tr><td><code>schedulability</code></td><td>&alpha; &uarr;</td><td>push U_M past capacity (success-rate cliff)</td><td>0.3 &hellip; 0.95</td></tr>
+<tr><td><code>all</code></td><td>&mdash;</td><td>everything above</td><td>&mdash;</td></tr>
+</tbody></table>
+<h4>Options</h4>
+<table>
+<thead><tr><th>Flag</th><th>Default</th><th>Meaning</th></tr></thead>
+<tbody>
+<tr><td><code>--sets N</code></td><td>100</td><td>test cases per configuration</td></tr>
+<tr><td><code>--seed S</code></td><td>1000</td><td>base seed</td></tr>
+<tr><td><code>--out DIR</code></td><td>testcases</td><td>output root</td></tr>
+<tr><td><code>--grid a,b,c</code></td><td>&mdash;</td><td>override the swept values</td></tr>
+<tr><td colspan="3"><em>defaults held by the NON-swept simulation parameters</em></td></tr>
+<tr><td><code>--n-prc</code> / <code>--n-tsk</code></td><td>2 / 8</td><td>processors / tasks</td></tr>
+<tr><td><code>--alpha</code> / <code>--beta</code></td><td>0.5 / 0.5</td><td>u_mand_factor / u_opt_factor</td></tr>
+<tr><td><code>--rho</code> / <code>--xi</code></td><td>0.7 / 0.6</td><td>budget / ACET lower bound</td></tr>
+<tr><td colspan="3"><em>system parameters (fixed across test cases)</em></td></tr>
+<tr><td><code>--n-frq N</code></td><td>5</td><td>frequency levels (paper fixes 5)</td></tr>
+<tr><td><code>--max-seg N</code></td><td>4</td><td>N_seg drawn from {1..max-seg}</td></tr>
+<tr><td><code>--kmax N</code></td><td>3</td><td>period = base &times; 2^m, m &isin; {0..kmax}</td></tr>
+<tr><td><code>--base-per N</code></td><td>10</td><td>base period (10 &rArr; chain 10/20/40/80)</td></tr>
+</tbody></table>
+<h4>Examples</h4>
+<pre><code># smoke test
+python gen_testcases.py n_tsk --sets 2 --out tc_smoke
+
+# one simulation parameter, production scale
+python gen_testcases.py rho --sets 100
+python gen_testcases.py u_mand_factor --sets 100
+
+# custom grid
+python gen_testcases.py rho --sets 100 --grid 0.2,0.4,0.6,0.8,1.0
+
+# 2-D utilisation study, and the schedulability cliff
+python gen_testcases.py util_grid --sets 100
+python gen_testcases.py schedulability --sets 100
+
+# everything
+python gen_testcases.py all --sets 100 --out testcases</code></pre>
+<p class="small">Layout: <code>&lt;out&gt;/&lt;sweep&gt;/set00/&lt;factor&gt;_&lt;value&gt;.py</code> +
+<code>&lt;out&gt;/&lt;sweep&gt;/manifest.csv</code>.</p>
+<div class="callout warn"><strong>Two documented deviations from pure OFAT, both reported at
+generation time.</strong>
+<br>1. <strong>n_prc sweep scales n_tsk.</strong> U_M = &alpha;&middot;N_prc grows with cores, so 8 tasks cannot
+carry a 16-core load (&alpha;=0.5 &rArr; U_M=8.0 &gt; 8&times;&gamma;=4.0). n_tsk rises with n_prc (2,4&rarr;8; 8&rarr;12; 16&rarr;23)
+and the realised value is recorded in the manifest.
+<br>2. <strong>The &delta; cap can be arithmetically impossible.</strong> Keeping each task's
+optional &le; &delta;&times;mandatory requires <code>beta &le; 2*alpha/(1-alpha)</code>. At &alpha;=0.1 that caps &beta; at 0.222, so
+&beta;=0.5 cannot satisfy it &mdash; the paper's own answer is "report error". The generator emits the
+instance, sets <code>donate_ok=0</code> in the manifest, and prints a
+<code>delta-cap UNMET</code> line so the affected configurations are filterable.</div>
+
+<h2 id="s5">6 · Model runner — <code>run_models.py</code></h2>
+<pre><code>python run_models.py &lt;manifest.csv | sweep_dir | testcases_root&gt; [options]</code></pre>
+<table>
+<thead><tr><th>Flag</th><th>Default</th><th>Meaning</th></tr></thead>
+<tbody>
+<tr><td><code>--models M</code></td><td>ilp_v2,heuristic</td><td>comma list: <code>ilp_v1</code>, <code>ilp_v2</code>, <code>heuristic</code></td></tr>
+<tr><td><code>--heur V</code></td><td>v5b</td><td>heuristic variant (<code>v5b</code>,<code>v5a</code>,<code>v4</code>,<code>v3</code>,<code>claudeoptimal</code>)</td></tr>
+<tr><td><code>--time-limit S</code></td><td>30</td><td>Gurobi TimeLimit per ILP solve (the ILP timeout exit)</td></tr>
+<tr><td><code>--mip-gap G</code></td><td>0.0</td><td>stop ILP at this relative gap (0 = prove optimality)</td></tr>
+<tr><td><code>--no-resume</code></td><td>off</td><td>recompute rows already present in results.csv</td></tr>
+</tbody></table>
+<h4>Examples</h4>
+<pre><code># one sweep, all three models
+python run_models.py testcases/rho/manifest.csv --models ilp_v1,ilp_v2,heuristic
+
+# whole tree, the two cheap models
+python run_models.py testcases/ --models ilp_v2,heuristic
+
+# one sweep dir, heuristic only (no Gurobi needed)
+python run_models.py testcases/schedulability --models heuristic
+
+# exact benchmark with a hard timeout and a 5% early-exit gap
+python run_models.py testcases/tasks/manifest.csv --models ilp_v1 --time-limit 60 --mip-gap 0.05
+
+# compare heuristic variants on the same instances
+python run_models.py testcases/util_grid/manifest.csv --models heuristic --heur v4
+python run_models.py testcases/util_grid/manifest.csv --models heuristic --heur claudeoptimal</code></pre>
+<div class="callout"><strong>Resume is on by default.</strong> Completed
+<code>(file, model)</code> pairs are skipped, so a long run can be interrupted with Ctrl-C and
+restarted. To rebuild from scratch, delete the sweep's <code>results.csv</code>.</div>
+
+<h2 id="s6">7 · End-to-end pipeline</h2>
+<pre><code># 1. generate
+python gen_testcases.py all --sets 100 --out testcases
+
+# 2. run the cheap models everywhere
+python run_models.py testcases/ --models ilp_v2,heuristic
+
+# 3. add the exact benchmark only on the ILP-tractable sweeps
+python run_models.py testcases/n_tsk/manifest.csv     --models ilp_v1 --time-limit 60
+python run_models.py testcases/util_grid/manifest.csv  --models ilp_v1 --time-limit 60
+python run_models.py testcases/rho/manifest.csv  --models ilp_v1 --time-limit 60
+
+# 4. results land beside each manifest
+#    testcases/&lt;sweep&gt;/results.csv     &lt;- join to manifest on 'file'</code></pre>
+<p class="small">Plotting is a separate, not-yet-built phase. <code>results.csv</code> is
+long-format (one row per instance × model), so it plots directly: group by
+<code>regime</code> + <code>value</code>, average <code>utility</code> / <code>runtime</code> /
+<code>model_feasible</code> per <code>model</code>.</p>
+
+<h2 id="s7">8 &middot; How the online phase gets its ACETs</h2>
+<div class="callout key"><strong>Generated test cases now carry the ACET model as data.</strong>
+Following paper &sect;VII.A.2(f), every task is emitted with a <code>theta</code> field &mdash; a per-task
+multiplier &theta; ~ U(&xi;, 1). Every segment of every job of that task completes in &theta; &times; its WCET, so an
+online run is reproducible from the file alone.</div>
+<pre><code>{'id': 2, 'e_m': 6.689624, 'e_o_k': [...], 'p_i': 40, 'u_i': 3.7946, 'theta': 0.6435}</code></pre>
+<h4>How the simulator resolves the ratio</h4>
+<p><code>OnlineSimulator._ratio(i)</code> prefers the test case's per-task &theta;; if the file has no
+<code>theta</code> (e.g. the legacy hand-written <code>testcase.py</code>) it falls back to the
+<code>SimConfig</code> knobs &mdash; a fixed <code>acet_ratio</code>, or a per-job uniform draw from
+<code>[ratio_min, ratio_max]</code>. Set <code>use_task_theta=False</code> to force the fallback.</p>
+<pre><code>ratio = task['theta']                   # paper VII.A.2(f), if present
+      | acet_ratio                      # fixed, legacy
+      | uniform(ratio_min, ratio_max)   # per-job draw, legacy
+
+k, z = the job's COMMITTED segment count and frequency
+dt = (1 - ratio) * e_eff(cum[i][k], f_z)     # time windfall   -> processor-local
+de = (1 - ratio) * E   (cum[i][k], f_z)      # energy windfall -> global pool</code></pre>
+<p>Two properties worth understanding:</p>
+<ul>
+<li><strong>ACET is relative to the committed schedule.</strong> &theta; multiplies
+<code>cum[i][k]</code> at <code>f_z</code>, so a job granted more optional segments yields a
+proportionally larger windfall; change the offline schedule and the windfalls change with it.</li>
+<li><strong>Energy scales by the same &theta; as time</strong> &mdash; correct here because
+E = &alpha;&middot;e/f + &beta;&middot;f&sup2;&middot;e is <em>linear in the work e</em>, so running a fraction &theta; of the work costs a
+fraction &theta; of the energy.</li>
+</ul>
+<h4>Sweeping the ACET model</h4>
+<p><code>&xi;</code> is a first-class simulation parameter: <code>python gen_testcases.py xi
+--sets 100</code> sweeps the early-completion spread (&xi;=0.9 &rArr; jobs finish near WCET, little slack;
+&xi;=0.3 &rArr; large, highly variable windfalls).</p>
+<div class="callout warn"><strong>Still open:</strong> the online phase is not yet part of
+<code>run_models.py</code>. The generated &theta; makes online runs reproducible, but the runner scores
+one deterministic solve per instance and has no online adapter; wiring one is the remaining
+step.</div>
+
+<h2 id="s8">9 · Output schemas</h2>
+<h4><code>manifest.csv</code> (one row per generated instance)</h4>
+<pre><code>file, sweep, set, factor, value,
+n_prc, n_tsk, n_frq, u_mand_factor, u_opt_factor, rho, xi,
+U_M, U_O, B, H, J,
+e_mand_fmax, e_full_fmax, e_mand_min,
+feasible, donate_ok, seed, redraws</code></pre>
+<p class="small"><code>feasible</code> here is the <strong>instance</strong> property: does the
+mandatory part pack onto the cores at all.</p>
+<h4><code>results.csv</code> = manifest columns + per-model metrics</h4>
+<pre><code>model, status, model_feasible, utility, energy, util_per_energy, runtime, gap, error</code></pre>
+<table>
+<thead><tr><th>Column</th><th>Meaning</th></tr></thead>
+<tbody>
+<tr><td><code>status</code></td><td><code>optimal</code> (ILP proved) · <code>solved</code> (heuristic) · <code>time_limit</code> (ILP stopped, incumbent kept) · <code>timeout</code> (stopped, no solution) · <code>infeasible</code> · <code>error</code></td></tr>
+<tr><td><code>model_feasible</code></td><td>did <em>this model</em> produce a valid schedule (1/0). Distinct from the manifest's <code>feasible</code> — the pair separates “instance impossible” from “this model's partitioning failed”.</td></tr>
+<tr><td><code>utility</code></td><td>total optional utility</td></tr>
+<tr><td><code>energy</code></td><td>schedule energy, recomputed via <code>usrt.models</code> so all models share one energy model</td></tr>
+<tr><td><code>util_per_energy</code></td><td>utility ÷ energy (energy efficiency)</td></tr>
+<tr><td><code>runtime</code></td><td>wall-clock seconds for that model on that instance</td></tr>
+<tr><td><code>gap</code></td><td>MIP relative gap (ILP only; <code>inf</code> if stopped with no bound)</td></tr>
+</tbody></table>
+
+<h2 id="s9">10 · Caveats</h2>
+<ul>
+<li><strong>ILP.py α/β</strong> — standalone runs use the stale energy model (§3). Runner runs are fine.</li>
+<li><strong>Gurobi licence expires 2026-08-19.</strong></li>
+<li><strong><code>--time-limit</code> bounds the ILP <em>solve</em>, not model building.</strong> On
+the ILP-tractable tier (H ≤ 80, ≤ 8 freqs, ≤ 12 tasks) building is milliseconds, so it effectively
+bounds the whole run; on deliberately huge instances building alone can take seconds.</li>
+<li><strong>Schema changes require deleting <code>results.csv</code></strong> — the runner refuses
+to append under a mismatched header rather than silently misaligning rows.</li>
+<li><strong>Regenerating a sweep with fewer <code>--sets</code></strong> leaves stale
+<code>.py</code> files on disk; the manifest is the source of truth and ignores them.</li>
+<li><strong>Online is not in the runner</strong> — see §8.</li>
+</ul>
+
+<hr>
+<p class="small">USRT V2 · command reference · generated 2026-08-16. Companion documents:
+<code>15Aug_Online_Audit.html</code> (online-phase audit),
+<code>summary-1-Aug.html</code> (approach overview).</p>
+</div>

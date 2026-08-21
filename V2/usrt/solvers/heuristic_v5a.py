@@ -20,7 +20,7 @@ from ..mapping.quantum        import quantum_sps_mapping
 from ..mapping.refine_mapping import refine_mapping_2a
 from ..output   import print_instance_summary, print_schedule
 from ..phases.left_shift   import left_shift
-from ..phases.energy_slack import compute_energy_slack
+from ..phases.energy_slack import compute_energy_slack, min_possible_energy
 from ..phases.aggressive   import phase_aggressive_scaling
 from ..phases.greedy       import phase_optional_segments
 from ..phases.swap         import phase_swap_local_search
@@ -95,8 +95,12 @@ def run(processors, tasks, B_BUDGET):
     print(f"  E_budget                     : {B_BUDGET:.4f}")
     print(f"  E_slack                      : {E_slk:.4f}"
           f"{'  [INFEASIBLE]' if E_slk < 0 else ''}")
-    if E_slk < -1e-9:
-        print(f"  Mandatory cost exceeds budget — no feasible schedule.")
+    E_floor = min_possible_energy(seg_k, freq_set, cum, N_tsk, N_job)
+    # Phase 3 must NOT declare infeasible merely because f_max busts the
+    # budget -- Phase 4 lowers frequency and is the fix for exactly that.
+    # Only a budget below the cheapest-possible assignment is terminal.
+    if B_BUDGET < E_floor - 1e-9:
+        print(f"  Budget below cheapest-possible mandatory cost — infeasible at any frequency.")
         print_schedule(seg_k, freq_idx, freq_set, cum, tasks, N_tsk, N_job,
                        mapping, B_BUDGET, label="INFEASIBLE MANDATORY")
         return seg_k, freq_idx, 0.0, E_init

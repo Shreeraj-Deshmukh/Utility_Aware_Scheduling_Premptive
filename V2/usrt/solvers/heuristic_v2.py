@@ -19,7 +19,7 @@ from ..utils    import load_testcase, lcm_list, gcd_list, build_cum, build_job_t
 from ..mapping.quantum import quantum_sps_mapping
 from ..output   import print_instance_summary, print_mapping_summary
 from ..phases.left_shift  import left_shift_mapping
-from ..phases.energy_slack import compute_energy_slack
+from ..phases.energy_slack import compute_energy_slack, min_possible_energy
 from ..phases.greedy_leftshift import phase_optional_segments_leftshift
 
 _S  = "=" * 76
@@ -80,8 +80,12 @@ def run(processors, tasks, B_BUDGET):
     print(f"  E_budget                     : {B_BUDGET:.4f}")
     print(f"  E_slack                      : {E_slack:.4f}"
           f"{'  [INFEASIBLE]' if E_slack < 0 else ''}")
-    if E_slack < -1e-9:
-        print(f"  Mandatory cost exceeds budget — no feasible schedule.")
+    E_floor = min_possible_energy(seg_state, freq_set, cum, N_tsk, N_job)
+    # Phase 3 must NOT declare infeasible merely because f_max busts the
+    # budget -- Phase 4 lowers frequency and is the fix for exactly that.
+    # Only a budget below the cheapest-possible assignment is terminal.
+    if B_BUDGET < E_floor - 1e-9:
+        print(f"  Budget below cheapest-possible mandatory cost — infeasible at any frequency.")
         return seg_state, freq_state, 0.0, E_consumed
 
     # ── Phase 4: Aggressive scaling (structural no-op at α=1, β=0.5) ─────────

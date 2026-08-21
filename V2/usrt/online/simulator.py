@@ -31,8 +31,10 @@ SimConfig = namedtuple("SimConfig", [
     "arbitration",   # "proportional" | "strict"
     "verbose",
     "max_frontier",  # per-level Pareto-frontier cap (aggregate states)
+    "use_task_theta",# prefer the test case's per-task theta when present
 ])
-SimConfig.__new__.__defaults__ = (0.7, 0.5, 0.9, 12345, "proportional", True, 256)
+SimConfig.__new__.__defaults__ = (0.7, 0.5, 0.9, 12345, "proportional", True,
+                                  256, True)
 
 _S  = "=" * 76
 _S2 = "-" * 76
@@ -51,7 +53,20 @@ class OnlineSimulator:
         self.offline_energy  = self.ctrl.total_energy()
 
     # ── windfall model ───────────────────────────────────────────────────────
-    def _ratio(self):
+    def _ratio(self, i=None):
+        """
+        Actual/WCET multiplier for a job of task i.
+
+        Preference order (paper VII.A.2(f) first): the generated test case may
+        carry a PER-TASK `theta`, in which case every segment of every job of
+        that task completes in theta * its WCET — the ACET realisation is then
+        reproducible data, not a simulator setting.  Otherwise fall back to the
+        SimConfig knobs: a fixed `acet_ratio`, or a per-job uniform draw.
+        """
+        if i is not None and self.config.use_task_theta:
+            th = self.ctrl.tasks[i].get("theta")
+            if th is not None:
+                return float(th)
         if self.config.acet_ratio is not None:
             return self.config.acet_ratio
         return self._rng.uniform(self.config.ratio_min, self.config.ratio_max)
@@ -93,7 +108,7 @@ class OnlineSimulator:
         total_added = 0.0
         n_event = 0
         for (i, j) in self._event_order():
-            ratio = self._ratio()
+            ratio = self._ratio(i)
             dt, de = self._windfall(i, j, ratio)
             added, committed = cfg.on_completion(i, j, dt, de)
             total_added += added

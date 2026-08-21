@@ -1,0 +1,26 @@
+"""Auto-generated USRT testcase -- DO NOT EDIT BY HAND.
+
+Provenance (regenerate from usrt.gen with this spec + seed):
+{"B": 110.400002, "H": 80, "J": 34, "factor": "n_seg", "n_frq": 8, "n_prc": 2, "n_tsk": 8, "opt_ratio": 0.5, "periods": [10, 20, 40, 80], "regime": "HL", "rho": 1.0, "seed": 1027, "set": 27, "sweep": "segments", "util_per_core": 0.4, "value": "2"}
+"""
+
+_SPEC = '{"B": 110.400002, "H": 80, "J": 34, "factor": "n_seg", "n_frq": 8, "n_prc": 2, "n_tsk": 8, "opt_ratio": 0.5, "periods": [10, 20, 40, 80], "regime": "HL", "rho": 1.0, "seed": 1027, "set": 27, "sweep": "segments", "util_per_core": 0.4, "value": "2"}'
+
+
+def testcase():
+    processors = [
+        {'id': 0, 'frequencies': [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]},
+        {'id': 1, 'frequencies': [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]},
+    ]
+    tasks = [
+        {'id': 0, 'e_m': 3.415674, 'e_o_k': [0.948798, 0.759039], 'p_i': 10, 'u_i': 3.9517},
+        {'id': 1, 'e_m': 0.148832, 'e_o_k': [0.041342, 0.033074], 'p_i': 20, 'u_i': 3.7467},
+        {'id': 2, 'e_m': 2.086145, 'e_o_k': [0.579485, 0.463588], 'p_i': 40, 'u_i': 4.6120},
+        {'id': 3, 'e_m': 0.844474, 'e_o_k': [0.234576, 0.187661], 'p_i': 80, 'u_i': 4.9202},
+        {'id': 4, 'e_m': 1.893474, 'e_o_k': [0.525965, 0.420772], 'p_i': 80, 'u_i': 4.2451},
+        {'id': 5, 'e_m': 1.089996, 'e_o_k': [0.302777, 0.242221], 'p_i': 10, 'u_i': 4.7909},
+        {'id': 6, 'e_m': 2.548948, 'e_o_k': [0.708041, 0.566433], 'p_i': 10, 'u_i': 3.3523},
+        {'id': 7, 'e_m': 0.028745, 'e_o_k': [0.007985, 0.006388], 'p_i': 40, 'u_i': 1.0347},
+    ]
+    B_BUDGET = 110.400002
+    return processors, tasks, B_BUDGET
