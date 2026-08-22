@@ -39,7 +39,13 @@ def run_sps(ps_list: list):
         return None
     active = list(ps_list)
     while len(active) > 1:
-        active.sort(key=lambda ps: -ps.gap)
+        # Largest gap first (the SPS rule).  No principled preference exists
+        # among equal gaps, so the secondary key is the honest one: total load,
+        # resolving the heaviest partial solution earlier; position closes the
+        # order.  ps_list itself is deterministic once DPS's input is.
+        active = [ps for _, ps in
+                  sorted(enumerate(active),
+                         key=lambda t: (-t[1].gap, -sum(t[1].loads), t[0]))]
         merged = active[0].combine(active[1])
         active = active[2:] + [merged]
     return active[0]

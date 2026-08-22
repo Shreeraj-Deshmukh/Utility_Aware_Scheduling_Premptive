@@ -284,7 +284,12 @@ class OnlineController:
             self.freq_idx[ij] = zv
 
         committed = []
-        for d in sorted(planned, key=lambda p: -p.gain):
+        # Highest gain first.  Among EQUAL gains commit the CHEAPER decision
+        # first (least time + energy): the trim below drops whatever no longer
+        # fits, so spending the scarce resources on the cheapest of two equally
+        # valuable options leaves room for more of them.
+        for d in sorted(planned,
+                        key=lambda p: (-p.gain, p.a_t + p.a_e, p.i, p.j)):
             i, j = d.i, d.j
 
             # Pure frequency change (no segment gain): single-shot, nothing to

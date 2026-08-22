@@ -117,7 +117,9 @@ def refine_mapping_budget(mapping, tasks, N_tsk, N_prc, N_job, cum, N_seg,
     f_hat   = estimate_operating_freq(tasks, N_tsk, N_job, freq_set, B_BUDGET)
     z_hat   = min(range(len(freq_set)), key=lambda z: abs(freq_set[z] - f_hat))
 
-    jobs = list(mapping.keys())
+    # sorted(): iteration order over a dict must not leak into which swap is
+    # chosen among equally-scoring candidates.
+    jobs = sorted(mapping.keys())
     seg0 = {ij: 0 for ij in jobs}
     frq  = {ij: z_hat for ij in jobs}          # judge timing AT THE OPERATING POINT
 

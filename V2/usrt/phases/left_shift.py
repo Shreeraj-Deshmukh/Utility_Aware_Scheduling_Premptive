@@ -31,7 +31,11 @@ def left_shift(proc_jobs, job_r, job_d, seg_k, freq_idx, freq_set, cum) -> dict:
     """
     ls_slack = {}
     for x, jobs in proc_jobs.items():
-        jobs_edf   = sorted(jobs, key=lambda ij: job_d[ij])
+        # EDF; among equal deadlines the earlier-RELEASED job goes first (it
+        # is available sooner, so packing it first wastes less idle time).  The
+        # deadline tie was previously decided by list order, which made the
+        # reported slack depend on dict insertion order (measured: 2.0 vs 12.0).
+        jobs_edf   = sorted(jobs, key=lambda ij: (job_d[ij], job_r[ij], ij))
         proc_avail = 0.0
         for (i, j) in jobs_edf:
             ef         = e_eff_val(cum[i][seg_k[(i, j)]], freq_set[freq_idx[(i, j)]])

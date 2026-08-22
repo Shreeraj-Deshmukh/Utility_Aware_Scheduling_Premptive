@@ -54,11 +54,35 @@ def _init_proc_mutil(mapping, task_mutil, N_prc):
     return pm
 
 
-def _build_doublets(mapping, task_ud):
-    """All job pairs sorted by ascending |ud(a) - ud(b)|."""
-    jobs  = list(mapping.keys())
+def _build_doublets(mapping, task_ud, proc_ud=None):
+    """
+    All job pairs sorted by ascending |ud(a) - ud(b)| -- pairs of SIMILAR
+    density first, so the search makes gentle corrective swaps before large
+    disruptive ones.
+
+    Tie-break (this matters a great deal): every pair drawn from the same two
+    tasks has an IDENTICAL |ud_a - ud_b|, so ties are the common case, not the
+    exception.  Breaking them by list order made the whole refinement depend on
+    dict insertion order -- measured swing on testcase.py: 227.33 -> 177.28.
+
+    Among equally-similar pairs we prefer the one joining the MOST IMBALANCED
+    pair of processors, because that is where a swap can actually reduce max UD;
+    a swap between two already-balanced processors is motion without progress.
+    `(p[0], p[1])` closes the order so the result is fully reproducible.
+    """
+    # sorted() is essential: combinations() preserves INPUT order, so the same
+    # unordered pair appears as (a,b) or (b,a) depending on dict insertion
+    # order -- which then leaks straight back into the tie-break below.
+    jobs  = sorted(mapping.keys())
     pairs = list(combinations(jobs, 2))
-    pairs.sort(key=lambda p: abs(task_ud[p[0][0]] - task_ud[p[1][0]]))
+    if proc_ud is None:
+        pairs.sort(key=lambda p: (abs(task_ud[p[0][0]] - task_ud[p[1][0]]),
+                                  p[0], p[1]))
+    else:
+        pairs.sort(key=lambda p: (abs(task_ud[p[0][0]] - task_ud[p[1][0]]),
+                                  -abs(proc_ud[mapping[p[0]]] -
+                                       proc_ud[mapping[p[1]]]),
+                                  p[0], p[1]))
     return pairs
 
 
@@ -128,7 +152,7 @@ def refine_mapping_2a(mapping, tasks, N_prc, cum, N_seg, job_r, job_d, verbose=T
     task_mutil = _task_mutil(tasks)
     proc_ud    = _init_proc_ud(mapping, task_ud, N_prc)
     proc_mutil = _init_proc_mutil(mapping, task_mutil, N_prc)
-    doublets   = _build_doublets(mapping, task_ud)
+    doublets   = _build_doublets(mapping, task_ud, proc_ud)
 
     proc_jobs = defaultdict(list)
     for (i, j), x in mapping.items():
@@ -194,7 +218,7 @@ def refine_mapping_2b(mapping, tasks, N_prc, cum, N_seg, job_r, job_d, verbose=T
     task_mutil = _task_mutil(tasks)
     proc_ud    = _init_proc_ud(mapping, task_ud, N_prc)
     proc_mutil = _init_proc_mutil(mapping, task_mutil, N_prc)
-    doublets   = _build_doublets(mapping, task_ud)
+    doublets   = _build_doublets(mapping, task_ud, proc_ud)
 
     proc_jobs = defaultdict(list)
     for (i, j), x in mapping.items():
