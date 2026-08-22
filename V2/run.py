@@ -50,6 +50,7 @@ SOLVERS = {
     "heuristic_v4":           "usrt.solvers.heuristic_v4",
     "heuristic_v5a":          "usrt.solvers.heuristic_v5a",
     "heuristic_v5b":          "usrt.solvers.heuristic_v5b",
+    "heuristic_v6":           "usrt.solvers.heuristic_v6",
     "heuristic_claudeoptimal":"usrt.solvers.heuristic_claudeoptimal",
     "greedy_sps_baseline":    "usrt.solvers.greedy_sps_baseline",
     "online":                 "usrt.solvers.online_demo",

@@ -239,6 +239,86 @@ frequencies instead of pinning f_max, which is exactly the precondition the onli
 and Option 3 gains a live customer. Worth re-running the online phase to see whether DVFS now activates
 at loose budgets too.</li>
 </ol>
+<h2 id="v6">10 &middot; Heuristic v6 &mdash; budget-aware mapping</h2>
+<p class="sub">The 22 August work above improved how the pipeline <em>uses</em> a mapping. v6 attacks
+the mapping itself, which the ILP-v2 decomposition showed was the dominant error source at tight
+budgets (44 points at &rho;=0.4, versus 14 from the frequency/segment search).</p>
+
+<h3>What v6 changes</h3>
+<p>Only the mapping stage; phases 2&ndash;6b are v5b's, unchanged.</p>
+<table>
+<tr><th>Stage</th><th>Idea</th></tr>
+<tr><td><b>1b&prime;</b> budget-aware refine</td>
+    <td>The objective <b>flips on a parameter-free regime test</b> (<code>E_mand_fmax &le; B</code>):
+        time-bound &rarr; <em>balance</em> utility density (as before); energy-bound &rarr;
+        <em>concentrate</em> it. Measured against optimal ILP mappings, the optimum concentrates at
+        &rho;=0.4 (spread 0.504&rarr;0.730, 3/4 instances) and balances at &rho;=1.0
+        (0.472&rarr;0.295) &mdash; the old "always minimise max UD" rule was backwards at tight
+        budgets. Concentration is measured by <code>&Sigma; UD(x)&sup2;</code>, which rises exactly
+        when mass concentrates.</td></tr>
+<tr><td><b>f&#770;</b> operating point</td>
+    <td>DBF and the load-balance guard are evaluated at the frequency the budget actually forces,
+        <code>f&#770; = max{f : E(W_mand, f) &le; B}</code>, not at f_max. A tight budget inflates
+        effective times by <code>1/f&#770;</code>, so a mapping "feasible at f_max" can leave a core
+        with almost no slack where it matters. (Predicted f&#770;=0.6 on the &rho;=0.4 instances; the
+        optimal solver used 0.6 on essentially every job.)</td></tr>
+<tr><td><b>1c</b> mapping local search</td>
+    <td>Best-improvement over single-job reassignments, each candidate scored by the utility the
+        <b>full pipeline</b> actually achieves &mdash; the real objective, not a proxy.</td></tr>
+<tr><td><b>guard</b></td>
+    <td>1b&prime; optimises a proxy, so it can land on a mapping the pipeline scores lower than plain
+        SPS. Both are scored on the real objective and the better is kept, so the refinement
+        <b>cannot hurt</b>.</td></tr>
+</table>
+<h3>Results</h3>
+<div class="callout ok"><strong>v6 reaches a mean gap of 3.55% &mdash; better than ILP v2
+(4.79%), which solves frequency and segments <em>exactly</em>.</strong> A pure heuristic
+beating SPS+exact-ILP is only possible because v6 improves the mapping, which ILP v2 is structurally
+stuck with. It is optimal on 25/50 instances (median gap 0.15%) and matches the
+exact solver on feasibility at 84/90.</div>
+<table>
+<tr><th>Model</th><th>mean gap</th><th>median</th><th>optimal on</th><th>feasible / 90</th></tr>
+<tr><td>greedy_SPS_Baseline</td><td class="bad">51.49%</td><td>53.48%</td>
+    <td>3/50</td><td class="bad">50</td></tr>
+<tr><td>heuristic v5b</td><td>13.94%</td><td>10.36%</td>
+    <td>11/50</td><td>83</td></tr>
+<tr><td>heuristic claudeoptimal</td><td>9.04%</td><td>6.25%</td>
+    <td>13/50</td><td>84</td></tr>
+<tr><td>ILP v2 <span class="muted">(SPS + exact freq/seg)</span></td><td>4.79%</td>
+    <td>1.00%</td><td>20/50</td><td>84</td></tr>
+<tr><td><b>heuristic v6</b></td><td class="ok"><b>3.55%</b></td>
+    <td class="ok"><b>0.15%</b></td><td class="ok"><b>25/50</b></td>
+    <td class="ok"><b>84</b></td></tr>
+</table>
+<p class="muted">Gaps are per-instance vs ILP v1 over the 50 instances every model solved.</p>
+<div class="callout ok"><strong>No regressions.</strong> Against v5b instance by instance: v6 is
+better on <b>34</b>, equal on <b>16</b>, worse on <b>0</b>. On the legacy
+<code>testcase.py</code> v6 scores <b>240.70</b> vs v5b's 227.33 (+5.9%) within the same budget, and
+v3/v4/v5a/v5b/claudeoptimal all still reproduce their baselines exactly.</div>
+
+<h3>Per-configuration</h3>
+<table>
+<tr><th>sweep</th><th>value</th><th>n</th><th>ILP v1</th><th>v5b</th><th>co</th><th>ILP v2</th>
+    <th>v6</th><th>v5b gap</th><th>v6 gap</th></tr>
+<tr><td>Energy budget &rho;</td><td><code>0.7</code></td><td>5</td><td>63.68</td><td class="muted">48.06</td><td class="muted">54.17</td><td class="muted">58.57</td><td><b>62.03</b></td><td>24.5%</td><td class="ok">2.6%</td></tr>
+<tr><td>Energy budget &rho;</td><td><code>0.8</code></td><td>5</td><td>66.00</td><td class="muted">58.43</td><td class="muted">61.72</td><td class="muted">63.38</td><td><b>66.00</b></td><td>11.5%</td><td class="ok">0.0%</td></tr>
+<tr><td>Energy budget &rho;</td><td><code>0.9</code></td><td>5</td><td>66.00</td><td class="muted">62.88</td><td class="muted">63.88</td><td class="muted">65.58</td><td><b>66.00</b></td><td>4.7%</td><td class="ok">0.0%</td></tr>
+<tr><td>Energy budget &rho;</td><td><code>1</code></td><td>5</td><td>66.00</td><td class="muted">63.27</td><td class="muted">65.58</td><td class="muted">65.58</td><td><b>66.00</b></td><td>4.1%</td><td class="ok">0.0%</td></tr>
+<tr><td>Mandatory utilisation &alpha;</td><td><code>0.2</code></td><td>5</td><td>100.96</td><td class="muted">93.99</td><td class="muted">94.36</td><td class="muted">99.25</td><td><b>94.36</b></td><td>6.9%</td><td class="warn">6.5%</td></tr>
+<tr><td>Mandatory utilisation &alpha;</td><td><code>0.3</code></td><td>5</td><td>90.88</td><td class="muted">80.35</td><td class="muted">84.40</td><td class="muted">89.20</td><td><b>85.31</b></td><td>11.6%</td><td class="warn">6.1%</td></tr>
+<tr><td>Mandatory utilisation &alpha;</td><td><code>0.4</code></td><td>5</td><td>77.00</td><td class="muted">67.49</td><td class="muted">73.43</td><td class="muted">75.89</td><td><b>75.54</b></td><td>12.4%</td><td class="ok">1.9%</td></tr>
+<tr><td>Mandatory utilisation &alpha;</td><td><code>0.5</code></td><td>5</td><td>63.68</td><td class="muted">48.06</td><td class="muted">54.17</td><td class="muted">58.57</td><td><b>62.03</b></td><td>24.5%</td><td class="ok">2.6%</td></tr>
+<tr><td>Optional utilisation &beta;</td><td><code>0.6</code></td><td>5</td><td>70.94</td><td class="muted">57.88</td><td class="muted">61.11</td><td class="muted">64.30</td><td><b>68.23</b></td><td>18.4%</td><td class="ok">3.8%</td></tr>
+<tr><td>Optional utilisation &beta;</td><td><code>0.8</code></td><td>5</td><td>87.33</td><td class="muted">70.47</td><td class="muted">72.67</td><td class="muted">76.10</td><td><b>80.02</b></td><td>19.3%</td><td class="warn">8.4%</td></tr>
+</table>
+<div class="callout warn"><strong>Caveats.</strong> Phase 1c evaluates the full pipeline per candidate
+reassignment, so cost grows as O(rounds &times; moves &times; pipeline). At J=10&ndash;13 the whole
+90-instance sweep still runs in under 3 s, but on large instances the move budget
+(<code>MAP_LS_MAX_MOVES</code>) will need tuning &mdash; and the ILP comparison itself is only
+available on the small tier. The LP relaxation is the practical bound for larger instances: measured
+integrality gap 8.8% at &rho;=0.4 falling to 0.0% at &rho;=1.0, though LP-<em>rounded</em> mappings
+did not reliably beat SPS, so it is worth adopting as an evaluation bound rather than a mapping
+oracle.</div>
 <hr>
 <p class="muted">Generated 2026-08-22 &mdash; 90 instances, 360 model runs, same test cases as the
 21 August dry run. Reproduce with:<br>
