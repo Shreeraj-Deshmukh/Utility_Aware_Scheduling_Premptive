@@ -47,9 +47,14 @@ from math import gcd
 import gurobipy as gp
 from gurobipy import GRB
 
-# ── energy model coefficients (edit here if needed) ───────────────────────────
-ALPHA = 1.0
-BETA  = 0.5
+# ── energy model coefficients ─────────────────────────────────────────────────
+# Imported from the single source of truth (usrt/models.py) so this solver can
+# never drift from the rest of the project.  These were previously hard-coded to
+# ALPHA=1.0, BETA=0.5 -- the stale pair -- which silently solved a DIFFERENT
+# energy model whenever this file was run standalone: under 1.0/0.5 the energy
+# optimum is f_max, whereas under the project's 0.15/1.0 it is f* ~= 0.42, so the
+# two disagree about the entire DVFS trade-off.
+from usrt.models import ALPHA, BETA
 
 
 # ─────────────────────────── helpers ─────────────────────────────────────────

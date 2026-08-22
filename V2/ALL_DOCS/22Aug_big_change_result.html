@@ -119,37 +119,37 @@ introduced.</div>
 <h2>3 &middot; Energy budget &rho;</h2>
 <p class="sub">B = &rho; &middot; E_full_fmax &mdash; lower = tighter energy</p>
 <table>
-<tr><th rowspan="2">value</th><th rowspan="2">ILP v1</th><th colspan="3">heuristic v5b</th><th colspan="3">claudeoptimal</th></tr>
-<tr><th>21 Aug</th><th>22 Aug</th><th>gap</th><th>21 Aug</th><th>22 Aug</th><th>gap</th></tr>
-<tr><td><code>0.4</code></td><td>22.92</td><td class="muted">5.02</td><td>15.73</td><td class="bad">78.1% &rarr; 31.4%</td><td class="muted">6.46</td><td>11.47</td><td class="bad">71.8% &rarr; 49.9%</td></tr>
-<tr><td><code>0.5</code></td><td>41.81</td><td class="muted">20.65</td><td>28.75</td><td class="bad">50.6% &rarr; 31.2%</td><td class="muted">20.70</td><td>31.25</td><td class="bad">50.5% &rarr; 25.3%</td></tr>
-<tr><td><code>0.6</code></td><td>56.57</td><td class="muted">25.80</td><td>39.76</td><td class="bad">54.4% &rarr; 29.7%</td><td class="muted">30.97</td><td>42.93</td><td class="warn">45.3% &rarr; 24.1%</td></tr>
-<tr><td><code>0.7</code></td><td>63.68</td><td class="muted">26.77</td><td>48.06</td><td class="warn">58.0% &rarr; 24.5%</td><td class="muted">36.19</td><td>54.17</td><td class="warn">43.2% &rarr; 14.9%</td></tr>
-<tr><td><code>0.8</code></td><td>66.00</td><td class="muted">42.59</td><td>58.43</td><td class="warn">35.5% &rarr; 11.5%</td><td class="muted">49.42</td><td>61.72</td><td class="ok">25.1% &rarr; 6.5%</td></tr>
-<tr><td><code>0.9</code></td><td>66.00</td><td class="muted">54.90</td><td>62.88</td><td class="ok">16.8% &rarr; 4.7%</td><td class="muted">60.96</td><td>63.88</td><td class="ok">7.6% &rarr; 3.2%</td></tr>
-<tr><td><code>1</code></td><td>66.00</td><td class="muted">63.27</td><td>63.27</td><td class="ok">4.1% &rarr; 4.1%</td><td class="muted">65.58</td><td>65.58</td><td class="ok">0.6% &rarr; 0.6%</td></tr>
+<tr><th rowspan="2">value</th><th rowspan="2">ILP v1</th><th colspan="3">heuristic v5b</th><th colspan="3">claudeoptimal</th><th colspan="2">heuristic v6</th></tr>
+<tr><th>21 Aug</th><th>22 Aug</th><th>gap</th><th>21 Aug</th><th>22 Aug</th><th>gap</th><th>utility</th><th>gap</th></tr>
+<tr><td><code>0.4</code></td><td>22.92</td><td class="muted">5.02</td><td>15.73</td><td class="bad">78.1% &rarr; 31.4%</td><td class="muted">6.46</td><td>11.47</td><td class="bad">71.8% &rarr; 49.9%</td><td><b>22.00</b></td><td class="ok"><b>4.0%</b></td></tr>
+<tr><td><code>0.5</code></td><td>41.81</td><td class="muted">20.65</td><td>28.75</td><td class="bad">50.6% &rarr; 31.2%</td><td class="muted">20.70</td><td>31.25</td><td class="bad">50.5% &rarr; 25.3%</td><td><b>37.68</b></td><td class="ok"><b>9.9%</b></td></tr>
+<tr><td><code>0.6</code></td><td>56.57</td><td class="muted">25.80</td><td>39.76</td><td class="bad">54.4% &rarr; 29.7%</td><td class="muted">30.97</td><td>42.93</td><td class="warn">45.3% &rarr; 24.1%</td><td><b>51.64</b></td><td class="ok"><b>8.7%</b></td></tr>
+<tr><td><code>0.7</code></td><td>63.68</td><td class="muted">26.77</td><td>48.06</td><td class="warn">58.0% &rarr; 24.5%</td><td class="muted">36.19</td><td>54.17</td><td class="warn">43.2% &rarr; 14.9%</td><td><b>62.03</b></td><td class="ok"><b>2.6%</b></td></tr>
+<tr><td><code>0.8</code></td><td>66.00</td><td class="muted">42.59</td><td>58.43</td><td class="warn">35.5% &rarr; 11.5%</td><td class="muted">49.42</td><td>61.72</td><td class="ok">25.1% &rarr; 6.5%</td><td><b>66.00</b></td><td class="ok"><b>0.0%</b></td></tr>
+<tr><td><code>0.9</code></td><td>66.00</td><td class="muted">54.90</td><td>62.88</td><td class="ok">16.8% &rarr; 4.7%</td><td class="muted">60.96</td><td>63.88</td><td class="ok">7.6% &rarr; 3.2%</td><td><b>66.00</b></td><td class="ok"><b>0.0%</b></td></tr>
+<tr><td><code>1</code></td><td>66.00</td><td class="muted">63.27</td><td>63.27</td><td class="ok">4.1% &rarr; 4.1%</td><td class="muted">65.58</td><td>65.58</td><td class="ok">0.6% &rarr; 0.6%</td><td><b>66.00</b></td><td class="ok"><b>0.0%</b></td></tr>
 </table>
 <h2>4 &middot; Mandatory utilisation &alpha;</h2>
 <p class="sub">U_M = &alpha; &middot; N_prc &mdash; higher = tighter timing</p>
 <table>
-<tr><th rowspan="2">value</th><th rowspan="2">ILP v1</th><th colspan="3">heuristic v5b</th><th colspan="3">claudeoptimal</th></tr>
-<tr><th>21 Aug</th><th>22 Aug</th><th>gap</th><th>21 Aug</th><th>22 Aug</th><th>gap</th></tr>
-<tr><td><code>0.2</code></td><td>100.96</td><td class="muted">66.09</td><td>93.99</td><td class="ok">34.5% &rarr; 6.9%</td><td class="muted">72.66</td><td>94.36</td><td class="ok">28.0% &rarr; 6.5%</td></tr>
-<tr><td><code>0.3</code></td><td>90.88</td><td class="muted">57.55</td><td>80.35</td><td class="warn">36.7% &rarr; 11.6%</td><td class="muted">58.82</td><td>84.40</td><td class="ok">35.3% &rarr; 7.1%</td></tr>
-<tr><td><code>0.4</code></td><td>77.00</td><td class="muted">46.56</td><td>67.49</td><td class="warn">39.5% &rarr; 12.4%</td><td class="muted">52.13</td><td>73.43</td><td class="ok">32.3% &rarr; 4.6%</td></tr>
-<tr><td><code>0.5</code></td><td>63.68</td><td class="muted">26.77</td><td>48.06</td><td class="warn">58.0% &rarr; 24.5%</td><td class="muted">36.19</td><td>54.17</td><td class="warn">43.2% &rarr; 14.9%</td></tr>
-<tr><td><code>0.6</code></td><td>47.73</td><td class="muted">24.03</td><td>38.10</td><td class="warn">49.7% &rarr; 20.2%</td><td class="muted">31.26</td><td>36.82</td><td class="warn">34.5% &rarr; 22.9%</td></tr>
-<tr><td><code>0.7</code></td><td>27.67</td><td class="muted">13.04</td><td>16.93</td><td class="bad">52.9% &rarr; 38.8%</td><td class="muted">14.19</td><td>20.76</td><td class="warn">48.7% &rarr; 25.0%</td></tr>
+<tr><th rowspan="2">value</th><th rowspan="2">ILP v1</th><th colspan="3">heuristic v5b</th><th colspan="3">claudeoptimal</th><th colspan="2">heuristic v6</th></tr>
+<tr><th>21 Aug</th><th>22 Aug</th><th>gap</th><th>21 Aug</th><th>22 Aug</th><th>gap</th><th>utility</th><th>gap</th></tr>
+<tr><td><code>0.2</code></td><td>100.96</td><td class="muted">66.09</td><td>93.99</td><td class="ok">34.5% &rarr; 6.9%</td><td class="muted">72.66</td><td>94.36</td><td class="ok">28.0% &rarr; 6.5%</td><td><b>94.36</b></td><td class="ok"><b>6.5%</b></td></tr>
+<tr><td><code>0.3</code></td><td>90.88</td><td class="muted">57.55</td><td>80.35</td><td class="warn">36.7% &rarr; 11.6%</td><td class="muted">58.82</td><td>84.40</td><td class="ok">35.3% &rarr; 7.1%</td><td><b>85.31</b></td><td class="ok"><b>6.1%</b></td></tr>
+<tr><td><code>0.4</code></td><td>77.00</td><td class="muted">46.56</td><td>67.49</td><td class="warn">39.5% &rarr; 12.4%</td><td class="muted">52.13</td><td>73.43</td><td class="ok">32.3% &rarr; 4.6%</td><td><b>75.54</b></td><td class="ok"><b>1.9%</b></td></tr>
+<tr><td><code>0.5</code></td><td>63.68</td><td class="muted">26.77</td><td>48.06</td><td class="warn">58.0% &rarr; 24.5%</td><td class="muted">36.19</td><td>54.17</td><td class="warn">43.2% &rarr; 14.9%</td><td><b>62.03</b></td><td class="ok"><b>2.6%</b></td></tr>
+<tr><td><code>0.6</code></td><td>47.73</td><td class="muted">24.03</td><td>38.10</td><td class="warn">49.7% &rarr; 20.2%</td><td class="muted">31.26</td><td>36.82</td><td class="warn">34.5% &rarr; 22.9%</td><td><b>43.82</b></td><td class="ok"><b>8.2%</b></td></tr>
+<tr><td><code>0.7</code></td><td>27.67</td><td class="muted">13.04</td><td>16.93</td><td class="bad">52.9% &rarr; 38.8%</td><td class="muted">14.19</td><td>20.76</td><td class="warn">48.7% &rarr; 25.0%</td><td><b>25.00</b></td><td class="ok"><b>9.6%</b></td></tr>
 </table>
 <h2>5 &middot; Optional utilisation &beta;</h2>
 <p class="sub">U_O = &beta; &middot; (N_prc &minus; U_M)</p>
 <table>
-<tr><th rowspan="2">value</th><th rowspan="2">ILP v1</th><th colspan="3">heuristic v5b</th><th colspan="3">claudeoptimal</th></tr>
-<tr><th>21 Aug</th><th>22 Aug</th><th>gap</th><th>21 Aug</th><th>22 Aug</th><th>gap</th></tr>
-<tr><td><code>0.2</code></td><td>26.94</td><td class="muted">15.65</td><td>21.40</td><td class="warn">41.9% &rarr; 20.6%</td><td class="muted">17.52</td><td>26.64</td><td class="ok">35.0% &rarr; 1.1%</td></tr>
-<tr><td><code>0.4</code></td><td>52.72</td><td class="muted">23.43</td><td>38.79</td><td class="bad">55.6% &rarr; 26.4%</td><td class="muted">37.96</td><td>46.70</td><td class="warn">28.0% &rarr; 11.4%</td></tr>
-<tr><td><code>0.6</code></td><td>70.94</td><td class="muted">36.09</td><td>57.88</td><td class="warn">49.1% &rarr; 18.4%</td><td class="muted">45.12</td><td>61.11</td><td class="warn">36.4% &rarr; 13.8%</td></tr>
-<tr><td><code>0.8</code></td><td>87.33</td><td class="muted">50.39</td><td>70.47</td><td class="warn">42.3% &rarr; 19.3%</td><td class="muted">55.63</td><td>72.67</td><td class="warn">36.3% &rarr; 16.8%</td></tr>
+<tr><th rowspan="2">value</th><th rowspan="2">ILP v1</th><th colspan="3">heuristic v5b</th><th colspan="3">claudeoptimal</th><th colspan="2">heuristic v6</th></tr>
+<tr><th>21 Aug</th><th>22 Aug</th><th>gap</th><th>21 Aug</th><th>22 Aug</th><th>gap</th><th>utility</th><th>gap</th></tr>
+<tr><td><code>0.2</code></td><td>26.94</td><td class="muted">15.65</td><td>21.40</td><td class="warn">41.9% &rarr; 20.6%</td><td class="muted">17.52</td><td>26.64</td><td class="ok">35.0% &rarr; 1.1%</td><td><b>26.87</b></td><td class="ok"><b>0.2%</b></td></tr>
+<tr><td><code>0.4</code></td><td>52.72</td><td class="muted">23.43</td><td>38.79</td><td class="bad">55.6% &rarr; 26.4%</td><td class="muted">37.96</td><td>46.70</td><td class="warn">28.0% &rarr; 11.4%</td><td><b>52.54</b></td><td class="ok"><b>0.3%</b></td></tr>
+<tr><td><code>0.6</code></td><td>70.94</td><td class="muted">36.09</td><td>57.88</td><td class="warn">49.1% &rarr; 18.4%</td><td class="muted">45.12</td><td>61.11</td><td class="warn">36.4% &rarr; 13.8%</td><td><b>68.23</b></td><td class="ok"><b>3.8%</b></td></tr>
+<tr><td><code>0.8</code></td><td>87.33</td><td class="muted">50.39</td><td>70.47</td><td class="warn">42.3% &rarr; 19.3%</td><td class="muted">55.63</td><td>72.67</td><td class="warn">36.3% &rarr; 16.8%</td><td><b>80.02</b></td><td class="ok"><b>8.4%</b></td></tr>
 </table>
 <h2>6 &middot; greedy_SPS_Baseline &mdash; the naive floor</h2>
 <p class="sub">A deliberately minimal reference point: <b>Quantum SPS mapping only</b> (no Refine

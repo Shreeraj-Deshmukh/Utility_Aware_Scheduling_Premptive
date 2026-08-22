@@ -161,6 +161,10 @@ the utility function (paper Eq.&nbsp;8), so it is purely a time&harr;energy conv
     <td>job &rarr; processor</td><td>all</td></tr>
 <tr><td><b>1b</b> Refine mapping</td><td><code>mapping/refine_mapping.py</code></td>
     <td>rebalance utility density</td><td>v5a / v5b</td></tr>
+<tr><td><b>1b&prime;</b> Budget-aware refine</td><td><code>mapping/budget_refine.py</code></td>
+    <td>balance <em>or</em> concentrate, judged at f&#770;</td><td>v6</td></tr>
+<tr><td><b>1c</b> Mapping local search</td><td><code>mapping/budget_refine.py</code></td>
+    <td>reassign jobs, scored by real utility</td><td>v6</td></tr>
 <tr><td><b>2</b> Left shift</td><td><code>phases/left_shift.py</code></td>
     <td>diagnostic only</td><td>all</td></tr>
 <tr><td><b>3</b> Energy slack</td><td><code>phases/energy_slack.py</code></td>
@@ -214,6 +218,125 @@ UD(x) = sum of ud(i) over jobs mapped to processor x</pre>
 SPS (and this refinement) balance on utilisation at <code>f_max</code>. When the budget forces slow
 execution, effective times inflate 1.5&ndash;2.5&times; and a partition balanced for <code>f_max</code>
 is badly balanced for the operating point actually used. Neither step is energy-budget-aware.</div>
+
+<h3>Phase 1b&prime; &mdash; Budget-aware refine (v6)</h3>
+<p>Phase 1b always <em>balances</em> utility density. Measured against optimal ILP mappings that is
+right only when energy is plentiful &mdash; the optimum <b>concentrates</b> when energy binds:</p>
+<pre>rho    SPS UD-spread   OPT UD-spread   optimum...
+0.4        0.504           0.730       CONCENTRATES (3/4 instances)
+0.7        0.472           0.511       neutral
+1.0        0.472           0.295       BALANCES</pre>
+<p>The mechanism: with energy plentiful everything runs at f_max and the binding resource is
+per-processor <em>time</em>, so spreading optional work keeps any one core from saturating. With
+energy tight, utility per energy is <code>u_i/g(f)</code>, so the budget should go to high-<code>u_i</code>
+work while low-value work runs slowly to shrink its energy footprint &mdash; and running slowly costs
+time on its <em>own</em> processor. Scattering low-value jobs makes every core pay that slowdown,
+including the cores hosting the valuable optional work; segregating them onto dedicated donor cores
+localises the penalty where nothing is lost.</p>
+<p>Phase 1b&prime; therefore flips its objective on a <b>parameter-free regime test</b>:</p>
+<pre>energy-bound?  E_mand_fmax &gt; B
+  yes -> MAXIMISE  sum UD(x)^2     (concentrate)
+  no  -> MINIMISE  sum UD(x)^2     (balance, as before)</pre>
+<p>Sum-of-squares is used in both directions because, for a fixed total, it rises exactly when mass
+concentrates and falls exactly when it spreads.</p>
+<p><b>And it judges feasibility at the operating point.</b> SPS checks utilisation &le; 1 at
+<code>f_max</code>, but a tight budget forces execution at</p>
+<pre>f&#770; = max{ f in F : E(W_mand, f) &le; B }     W_mand = SUM N_job_i * e_m_i</pre>
+<p>where effective times inflate by <code>1/f&#770;</code> &mdash; so a mapping "feasible at f_max"
+can leave a core with almost no slack where it matters. Both the DBF guard and the load-balance guard
+use <code>f&#770;</code>. (On the &rho;=0.4 instances this predicts <code>f&#770;=0.6</code>; the
+optimal solver used 0.6 on essentially every job.)</p>
+<div class="callout"><strong>Guard.</strong> 1b&prime; optimises a <em>proxy</em> (utility density), so
+it can land on a mapping the full pipeline scores lower than plain SPS. Both are scored on the real
+objective and the better is kept &mdash; so the refinement cannot hurt. This guard was added after a
+first run regressed one instance (91.17 vs 108.89).</div>
+
+<h3>Phase 1c &mdash; Mapping local search (v6)</h3>
+<p>Best-improvement search over <b>single-job reassignments</b>. Every candidate mapping is scored by
+running the <em>entire</em> downstream pipeline (phases 2&ndash;6b) and reading the utility it actually
+achieves &mdash; the real objective, not a proxy like utility density.</p>
+<pre>for each round (max MAP_LS_ROUNDS = 2):
+    for each job, for each other processor (max MAP_LS_MAX_MOVES = 24 candidates):
+        trial = mapping with that one job moved
+        u, feasible = full_pipeline(trial)
+        keep the best strictly-improving trial
+    stop when no move improves</pre>
+<p>Infeasible candidates are discarded and the incumbent is replaced only on strict improvement, so
+the result is never worse than the mapping handed in. Cost is
+O(rounds &times; moves &times; pipeline); at J=10&ndash;13 the full 90-instance sweep still runs in
+under 3&nbsp;s, but <code>MAP_LS_MAX_MOVES</code> needs tuning as J grows.</p>
+<h4 id="p1c-cost">Why Phase 1c is ~156&times; slower than Phase 1</h4>
+<p>Measured on the &rho;=0.7 instances (J = 10&ndash;13 jobs, 2 processors):</p>
+<table>
+<tr><th>Stage</th><th>mean time</th><th>what it evaluates</th><th>how many times</th></tr>
+<tr><td>Phase 1 &mdash; Quantum SPS</td><td class="ok">0.20 ms</td>
+    <td>utilisation arithmetic, one pass per quantum</td><td>once</td></tr>
+<tr><td>Phase 1b&prime; &mdash; budget-aware refine</td><td class="ok">0.23 ms</td>
+    <td><b>a proxy</b> &mdash; the &Delta; of <code>&Sigma; UD(x)&sup2;</code>, a few float ops per
+        candidate swap; DBF is touched only when a swap is <em>accepted</em></td>
+    <td>~J&sup2; cheap candidates</td></tr>
+<tr><td><em>one downstream pipeline</em> (phases 4&rarr;5&rarr;6&rarr;6b)</td><td class="warn">1.11 ms</td>
+    <td>the real schedule</td><td>&mdash;</td></tr>
+<tr><td><b>Phase 1c &mdash; mapping local search</b></td><td class="bad">30.91 ms</td>
+    <td><b>the real objective</b> &mdash; the utility the full pipeline actually achieves</td>
+    <td><b>~25 full pipelines</b></td></tr>
+</table>
+<p>So the slowdown is not that the <em>search</em> is complicated &mdash; it visits only
+<code>J &times; (P&minus;1)</code> single-job moves per round, fewer candidates than Phase 1b&prime;
+considers. It is that <b>the scoring function is ~5&times; more expensive than all of Phase 1, and it
+is called ~25 times instead of once</b>:</p>
+<pre>Phase 1c   30.91 ms
+  = ~25 evaluations x 1.11 ms per full pipeline   (28.7x one pipeline)
+  = 156x Phase 1</pre>
+
+<h4>The proxy-versus-truth trade</h4>
+<p>Phases 1 and 1b&prime; are fast <em>because they never build a schedule</em>. They optimise
+surrogates &mdash; utilisation balance and utility density &mdash; that are pure arithmetic on
+per-processor aggregates. Phase 1c deliberately abandons the surrogate: the only way to know what a
+mapping is worth is to schedule it. That is also precisely why it works where 1b&prime; alone does
+not (1b&prime; can land on a mapping the pipeline scores <em>lower</em> than plain SPS, which is why
+it needs a guard).</p>
+
+<h4>Where the pipeline's own 1.11 ms goes</h4>
+<p>One evaluation is itself a nest of loops, with DBF at the bottom:</p>
+<pre>Phase 1c
+ └─ x25  full pipeline
+     ├─ Phase 4   iterative scale-down, sorted candidates, DBF check per attempt
+     ├─ Phase 5   multi-pass greedy: per pass, per job -> min_slack_for_job
+     ├─ Phase 6   O(J^2) giver/receiver pairs, and every accepted swap
+     │             RE-RUNS Phase 5 as a fill pass
+     └─ Phase 6b  per round: shadow prices over all jobs, then Phase 5 AGAIN
+                              ↓
+                    min_slack_for_job / check_all_timing
+                    each O(P . |A| . |D| . J)</pre>
+<p>Phase 5 is therefore executed many times inside a single "one pipeline" call &mdash; once directly,
+once per Phase 6 swap, and once per Phase 6b accepted trade. The DBF window scan is the innermost
+primitive and dominates.</p>
+
+<h4>How this scales &mdash; the real concern</h4>
+<pre>total ~ rounds x min(J.(P-1), MAP_LS_MAX_MOVES) x pipeline(J)
+                                                   ^ superlinear in J:
+                                                     Phase 6 is O(J^2) and
+                                                     |A|,|D| both grow with J</pre>
+<p>At J=13 this is 31 ms and invisible &mdash; the whole 90-instance sweep runs in under 3 s. But the
+move count grows as <code>J&middot;P</code> <em>and</em> each evaluation gets superlinearly dearer, so
+the product grows fast. <code>MAP_LS_MAX_MOVES = 24</code> caps the first factor, which bounds the
+runtime but means the search covers a shrinking fraction of the neighbourhood as J grows &mdash; on a
+large instance Phase 1c would examine 24 of potentially hundreds of possible moves.</p>
+<div class="callout warn"><strong>If Phase 1c has to scale, the fix is a cheaper screen, not a smaller
+search.</strong> Options, cheapest first: (1) <b>two-stage evaluation</b> &mdash; rank candidates by
+the 1b&prime; proxy, then full-evaluate only the top handful; (2) <b>restrict the move set</b> to jobs
+on the most-loaded or highest-UD processor, where improvement is likeliest; (3) <b>warm-start</b> each
+evaluation from the incumbent schedule rather than rebuilding from <code>k=0, f_max</code>;
+(4) <b>early abort</b> a pipeline once its partial utility cannot beat the incumbent. None of these is
+needed at the current instance sizes, and none has been implemented.</div>
+
+<div class="callout ok"><strong>Effect.</strong> These two stages are what <code>heuristic_v6</code>
+adds to v5b. Mean gap versus the exact ILP falls <b>13.94% &rarr; 3.55%</b> (median 0.15%, optimal on
+25/50), which is better than <b>ILP v2</b> (4.79%) &mdash; a pure heuristic beating SPS+exact-ILP,
+possible only because it improves the mapping that ILP v2 is structurally stuck with. At
+&rho;=0.4 the gap drops <b>31.4% &rarr; 4.0%</b>; at &rho;&ge;0.8 it reaches <b>0.0%</b>. Against v5b
+instance by instance: better on 34, equal on 16, worse on 0.</div>
 
 <h3>Phase 2 &mdash; Left shift (diagnostic)</h3>
 <pre>start = max(proc_avail, release)   finish = start + e_eff(i,k,z)   slack = deadline - finish</pre>

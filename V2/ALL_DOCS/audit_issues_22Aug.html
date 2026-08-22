@@ -1,0 +1,317 @@
+<title>USRT V2 — Consolidated Issue Audit (22 Aug)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+ :root{--bg:#f7f7f5;--panel:#fff;--ink:#1a1a18;--muted:#5c5c56;--line:#e3e2dc;
+  --accent:#1f4d7a;--accent2:#7a1f1f;--code-bg:#f2f1ec;--ok:#1f6b45;--warn:#9a6a12;--bad:#a33;
+  --crit:#8b1a1a;--mono:"SFMono-Regular",Consolas,monospace;--serif:Georgia,serif;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+ @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#16161a;--panel:#1e1e24;--ink:#e9e8e2;--muted:#a7a69e;--line:#31313a;
+  --accent:#8ab4e0;--accent2:#e08a8a;--code-bg:#24242b;--ok:#7fd0a3;--warn:#e0bd6a;
+  --bad:#e08a8a;--crit:#ff8080;}}
+ *{box-sizing:border-box}
+ body{background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.6;margin:0}
+ .wrap{max-width:1040px;margin:0 auto;padding:2.2rem 1.3rem 5rem}
+ h1{font-family:var(--serif);font-size:1.95rem;margin:.2rem 0 .4rem}
+ h2{font-family:var(--serif);font-size:1.35rem;margin:2.2rem 0 .5rem;padding-top:1rem;border-top:1px solid var(--line)}
+ h3{font-size:1.02rem;margin:1.5rem 0 .3rem}
+ .kicker{font-family:var(--mono);font-size:.72rem;letter-spacing:.15em;text-transform:uppercase;color:var(--accent)}
+ .sub{color:var(--muted);max-width:78ch}
+ code{font-family:var(--mono);font-size:.86em;background:var(--code-bg);padding:.08em .35em;border-radius:4px}
+ pre{background:var(--code-bg);border:1px solid var(--line);border-radius:8px;padding:.75rem 1rem;
+     overflow-x:auto;font-family:var(--mono);font-size:.78rem;line-height:1.5}
+ table{border-collapse:collapse;width:100%;margin:.8rem 0;font-size:.83rem;display:block;overflow-x:auto}
+ th,td{border:1px solid var(--line);padding:.42rem .55rem;text-align:left;vertical-align:top}
+ th{background:var(--code-bg);font-weight:650}
+ .callout{border-left:4px solid var(--accent);background:var(--panel);padding:.75rem 1rem;
+          border-radius:0 8px 8px 0;margin:1rem 0}
+ .callout.bad{border-left-color:var(--bad)} .callout.ok{border-left-color:var(--ok)}
+ .muted{color:var(--muted);font-size:.83rem}
+ .tag{display:inline-block;font-family:var(--mono);font-size:.63rem;font-weight:700;letter-spacing:.05em;
+      text-transform:uppercase;color:#fff;padding:.12em .5em;border-radius:4px;white-space:nowrap}
+ .t-crit{background:var(--crit)} .t-high{background:#c0392b} .t-med{background:#b7791f}
+ .t-low{background:#4a7a4a} .t-info{background:#3a5f8a}
+ .issue{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:.9rem 1.1rem;margin:1rem 0}
+ .issue h3{margin:.1rem 0 .4rem}
+ .id{font-family:var(--mono);color:var(--accent2);font-weight:700;margin-right:.5rem}
+ hr{border:none;border-top:1px solid var(--line);margin:1.8rem 0}
+</style>
+<div class="wrap">
+<div class="kicker">USRT &middot; V2 &middot; Issue Audit</div>
+<h1>Consolidated Issue Audit &mdash; 22 August</h1>
+<p class="sub">Every open issue gathered from the documents in <code>ALL_DOCS/</code>, plus new ones
+found by scanning the codebase. <strong>Every claim below was re-verified against the live code on
+22 August</strong> &mdash; stale doc claims were dropped, and several items are new.</p>
+
+<div class="callout"><strong>Severity scale.</strong>
+<span class="tag t-crit">critical</span> silently produces wrong results &middot;
+<span class="tag t-high">high</span> blocks or invalidates real work &middot;
+<span class="tag t-med">medium</span> limits scope or correctness in a known way &middot;
+<span class="tag t-low">low</span> hygiene / cosmetic &middot;
+<span class="tag t-info">info</span> understood limitation, no action implied.</div>
+
+<h2>Summary</h2>
+<table>
+<tr><th>#</th><th>Issue</th><th>Area</th><th>Severity</th><th>Status</th></tr>
+<tr><td>A1</td><td><code>ILP.py</code> hard-codes the wrong energy constants</td><td>correctness</td>
+    <td><span class="tag t-crit">critical</span></td><td class="muted">verified live</td></tr>
+<tr><td>A2</td><td><code>testcases/</code> (18,500 files) built by the superseded generator</td><td>data</td>
+    <td><span class="tag t-high">high</span></td><td class="muted">verified live</td></tr>
+<tr><td>A3</td><td>Gurobi licence expires 2026-08-19</td><td>infrastructure</td>
+    <td><span class="tag t-high">high</span></td><td class="muted">time-bound</td></tr>
+<tr><td>B1</td><td>v5a and v5b are no longer a controlled comparison</td><td>experiment validity</td>
+    <td><span class="tag t-med">medium</span></td><td class="muted"><b>new</b></td></tr>
+<tr><td>B2</td><td>Phase 6b applied to only 3 of 6 heuristic variants</td><td>experiment validity</td>
+    <td><span class="tag t-med">medium</span></td><td class="muted"><b>new</b></td></tr>
+<tr><td>B3</td><td><code>online_demo</code> no longer matches the v5b pipeline it claims</td><td>experiment validity</td>
+    <td><span class="tag t-med">medium</span></td><td class="muted"><b>new</b></td></tr>
+<tr><td>B4</td><td><code>heuristic_v1</code> return type incompatible with the runner</td><td>tooling</td>
+    <td><span class="tag t-med">medium</span></td><td class="muted">verified live</td></tr>
+<tr><td>C1</td><td>&delta; cap arithmetically impossible at low &alpha;</td><td>generator</td>
+    <td><span class="tag t-med">medium</span></td><td class="muted">reported at generation</td></tr>
+<tr><td>C2</td><td><code>n_prc</code> sweep co-varies <code>n_tsk</code></td><td>generator</td>
+    <td><span class="tag t-low">low</span></td><td class="muted">documented</td></tr>
+<tr><td>C3</td><td>Phase 1c cost grows superlinearly; move cap shrinks coverage</td><td>scalability</td>
+    <td><span class="tag t-med">medium</span></td><td class="muted">measured</td></tr>
+<tr><td>D1</td><td>Online phase absent from the runner</td><td>coverage</td>
+    <td><span class="tag t-med">medium</span></td><td class="muted">open</td></tr>
+<tr><td>D2</td><td>Scalar-&Delta;t DP over-plans; commit-time DBF trims</td><td>online</td>
+    <td><span class="tag t-med">medium</span></td><td class="muted">measured</td></tr>
+<tr><td>D3</td><td>Aggregate-states quantisation clips the exact frontier</td><td>online</td>
+    <td><span class="tag t-low">low</span></td><td class="muted">bounded, safe</td></tr>
+<tr><td>D4</td><td>Per-event DP rebuild dominates online runtime</td><td>online</td>
+    <td><span class="tag t-low">low</span></td><td class="muted">open</td></tr>
+<tr><td>E1</td><td>Paper &sect;V.B "Heur1.0/Baseline" not implemented</td><td>paper coverage</td>
+    <td><span class="tag t-med">medium</span></td><td class="muted">open</td></tr>
+<tr><td>E2</td><td>Paper reuses &alpha;/&beta; for energy AND utilisation</td><td>paper</td>
+    <td><span class="tag t-low">low</span></td><td class="muted">paper-side</td></tr>
+<tr><td>E3</td><td>Paper &sect;VII.A.2(d)(i) says "mandatory" where "optional" is meant</td><td>paper</td>
+    <td><span class="tag t-low">low</span></td><td class="muted">paper-side</td></tr>
+<tr><td>F1</td><td><code>summary-1-Aug</code> &sect;4 describes superseded Phase 3/4/5 logic</td><td>docs</td>
+    <td><span class="tag t-med">medium</span></td><td class="muted"><b>new</b></td></tr>
+<tr><td>F2</td><td>Unused imports in <code>heuristic_v6</code>; two orphaned phase modules</td><td>hygiene</td>
+    <td><span class="tag t-low">low</span></td><td class="muted"><b>new</b></td></tr>
+<tr><td>G1</td><td>The mapping, not the search, is the dominant error at tight &rho;</td><td>finding</td>
+    <td><span class="tag t-info">info</span></td><td class="muted">measured</td></tr>
+</table>
+
+<h2>A &middot; Correctness &amp; infrastructure</h2>
+
+<div class="issue"><h3><span class="id">A1</span><span class="tag t-crit">critical</span>
+&nbsp;<code>ILP.py</code> hard-codes the wrong energy constants</h3>
+<p><code>ILP.py</code> lines 51&ndash;52 set <code>ALPHA = 1.0, BETA = 0.5</code>. The project uses
+<code>ALPHA = 0.15, BETA = 1.0</code> from <code>usrt/models.py</code>. Under the stale pair the
+energy-optimal frequency is f<sub>max</sub>; under the real pair it is f* &asymp; 0.42 &mdash; so the
+two models disagree about the entire DVFS story, not by a small margin.</p>
+<pre>Verified 22 Aug:  grep "^ALPHA = 1.0" ILP.py  ->  still present</pre>
+<p><b>Why it is critical rather than high:</b> it fails <em>silently</em>. The runner re-points these
+globals at import time, so all measured results in the 21/22 Aug docs are valid. But a standalone
+<code>python ILP.py testcase.py</code> produces a plausible-looking optimum for a <em>different
+problem</em>, with nothing to indicate it. Two docs (<code>V2_Commands_Reference</code>,
+<code>Testcases_info</code>) show that exact command.</p>
+<p><b>Fix:</b> replace both lines with <code>from usrt.models import ALPHA, BETA</code>.</p></div>
+
+<div class="issue"><h3><span class="id">A2</span><span class="tag t-high">high</span>
+&nbsp;<code>testcases/</code> was built by the superseded generator</h3>
+<p>18,500 instances across 9 sweep directories, all pre-dating the paper-&sect;VII.A alignment. Their
+manifests still carry <code>regime</code>, <code>util_per_core</code>, <code>opt_ratio</code>, and the
+old sweep names (<code>energy_rho</code>, <code>util_split</code>, <code>util_success</code>).</p>
+<p>The instances were generated under the <em>old definitions</em>: <code>U_O = opt_ratio &times;
+U_M</code> (not <code>&beta;(N_prc &minus; U_M)</code>), an affine &rho; (not
+<code>&rho; &times; E_full_fmax</code>), geometric segment shaping (not normal), and <b>no per-task
+<code>theta</code></b>. They are not comparable with anything produced today.</p>
+<p>The runner will happily consume them &mdash; it only requires a <code>file</code> column &mdash; so
+nothing errors; the results would simply describe a different experiment. <b>Fix:</b> regenerate or
+delete. It is also the largest artefact in the repo.</p></div>
+
+<div class="issue"><h3><span class="id">A3</span><span class="tag t-high">high</span>
+&nbsp;Gurobi licence expires 2026-08-19</h3>
+<p>Both ILP baselines stop working after that date. The heuristics, the generator and the online phase
+are unaffected, but <b>every optimality-gap number in the project depends on ILP v1</b>. Renew with
+<code>grbgetkey</code>, or fall back to the LP relaxation as the bound (measured integrality gap 8.8%
+at &rho;=0.4, 0.0% at &rho;=1.0).</p></div>
+
+<h2>B &middot; Experiment validity <span class="muted" style="font-size:.8rem">(all four found by code scan)</span></h2>
+
+<div class="issue"><h3><span class="id">B1</span><span class="tag t-med">medium</span>
+&nbsp;v5a and v5b are no longer a controlled comparison</h3>
+<p>The version matrix describes v5a and v5b as siblings differing <em>only</em> in Refine-Mapping
+strategy (2a linear-doublet-scan vs 2b one-swap-one-scan). That is no longer true:</p>
+<pre>heuristic_v5a   freq_trade references: 0
+heuristic_v5b   freq_trade references: 1</pre>
+<p>Phase 6b was added to v5b but not v5a, so they now differ by <b>two</b> things. Any measured v5a
+vs v5b difference can no longer be attributed to the refine strategy &mdash; which was the entire
+purpose of having both. <b>Fix:</b> add Phase 6b to v5a, or state plainly that the comparison is
+retired.</p></div>
+
+<div class="issue"><h3><span class="id">B2</span><span class="tag t-med">medium</span>
+&nbsp;Phase 6b applied to only 3 of 6 heuristic variants</h3>
+<p><code>v5b</code>, <code>claudeoptimal</code> and <code>v6</code> have the frequency&harr;segment
+trade; <code>v3</code>, <code>v4</code> and <code>v5a</code> do not. The lineup is meant to be a
+ladder where each step adds one capability, and this breaks that reading: v4 &rarr; v5a &rarr; v5b now
+mixes a mapping change and a phase addition. Deliberate or not, it should be explicit, because it
+affects how every cross-variant table is interpreted.</p></div>
+
+<div class="issue"><h3><span class="id">B3</span><span class="tag t-med">medium</span>
+&nbsp;<code>online_demo</code> no longer matches the "v5b pipeline" it claims</h3>
+<p><code>online_demo.py</code> states in three places that it builds the offline schedule "with the
+v5b pipeline". It calls <code>quantum_sps_mapping</code> &rarr; <code>refine_mapping_2b</code> &rarr;
+<code>aggressive</code> &rarr; <code>greedy</code> &rarr; <code>swap</code> directly, and therefore
+has <b>neither the Phase 3 feasibility fix nor Phase 6b</b>.</p>
+<div class="callout ok"><b>Currently harmless, and verified so.</b> Re-running the online phase on
+22 Aug gives exactly the historical numbers &mdash; offline 227.328242, online +68.356614, final
+295.684856, feasible, 0 denied. At B=400 the Phase 3 gate and Phase 6b are both no-ops, so the two
+pipelines coincide.</div>
+<p><b>But it is latent.</b> At a tight budget they diverge: <code>online_demo</code> would lack the
+Phase 3 protection (declaring infeasible where v5b succeeds) and Phase 6b's utility. Since the
+online-phase audit recommends reporting from an energy-binding budget, this <em>will</em> bite exactly
+when it is used as intended. <b>Fix:</b> have <code>offline_schedule</code> call the real v5b
+<code>run()</code>, or drop the "v5b" claim.</p></div>
+
+<div class="issue"><h3><span class="id">B4</span><span class="tag t-med">medium</span>
+&nbsp;<code>heuristic_v1</code> is unusable through the runner</h3>
+<p>It returns a <code>ScheduleState</code> object rather than the
+<code>(seg_k, freq_idx, utility, energy)</code> tuple every other variant returns. The adapter unpacks
+four values, so <code>--heur v1</code> yields a <code>status=error</code> row rather than results. It
+works via <code>run.py</code>, which ignores the return value. <b>Fix:</b> conform the return, or
+exclude it explicitly with a clear message instead of an error row.</p></div>
+
+<h2>C &middot; Generator &amp; scalability</h2>
+
+<div class="issue"><h3><span class="id">C1</span><span class="tag t-med">medium</span>
+&nbsp;The &delta; cap can be arithmetically impossible</h3>
+<p>Holding every task to optional &le; &delta;&times;mandatory requires</p>
+<pre>beta &lt;= 2*alpha / (1 - alpha)      # alpha=0.1 -> beta &lt;= 0.222</pre>
+<p>so the default &beta;=0.5 cannot comply at &alpha;=0.1 or 0.2. The generator emits the instance,
+sets <code>donate_ok=0</code>, and prints a <code>delta-cap UNMET</code> line &mdash; the paper's own
+answer is "report error". This is a genuine tension between the paper's <code>U_O</code> formula and
+the per-task ratio cap, not an implementation slip. <b>Decide:</b> constrain the (&alpha;, &beta;)
+grid, or relax &delta; and drop the constraint from the write-up.</p></div>
+
+<div class="issue"><h3><span class="id">C2</span><span class="tag t-low">low</span>
+&nbsp;The <code>n_prc</code> sweep co-varies <code>n_tsk</code></h3>
+<p><code>U_M = &alpha;&middot;N_prc</code> grows with cores, so 8 tasks cannot carry a 16-core load at
+&gamma;=0.5 (8&times;0.5 = 4.0 &lt; 8.0). <code>n_tsk</code> scales 8&rarr;12&rarr;23, which is a
+documented, printed departure from strict OFAT. The realised value is in the manifest, so it is
+visible rather than hidden &mdash; but any "effect of processor count" claim is really "effect of
+processor count with a proportionally larger task set".</p></div>
+
+<div class="issue"><h3><span class="id">C3</span><span class="tag t-med">medium</span>
+&nbsp;Phase 1c cost, and what the move cap really does</h3>
+<p>Measured at J=10&ndash;13: Phase 1 = 0.20 ms, Phase 1b&prime; = 0.23 ms, one pipeline = 1.11 ms,
+<b>Phase 1c = 30.91 ms</b> (~25 full pipelines; 156&times; Phase 1). The search is not the cost &mdash;
+1c examines fewer candidates than 1b&prime; &mdash; the <em>scoring function</em> is, because it builds
+a real schedule per candidate.</p>
+<pre>total ~ rounds x min(J.(P-1), MAP_LS_MAX_MOVES) x pipeline(J)
+                                                  ^ superlinear in J</pre>
+<p>Invisible today (whole 90-instance sweep &lt; 3 s). The concern is that
+<code>MAP_LS_MAX_MOVES = 24</code> bounds runtime by <b>shrinking neighbourhood coverage</b> as J
+grows &mdash; on a large instance 1c would examine 24 of hundreds of moves, so v6's advantage should
+be expected to decay with size and must be re-measured, not extrapolated.</p></div>
+
+<h2>D &middot; Online phase</h2>
+
+<div class="issue"><h3><span class="id">D1</span><span class="tag t-med">medium</span>
+&nbsp;Online phase is absent from the runner</h3>
+<p>Generated test cases now carry per-task <code>theta</code>, so an online run is reproducible from
+the file alone &mdash; but no online adapter exists, so the online phase has <b>no sweep-scale
+evidence at all</b>, unlike every offline model. Its result is a distribution over the ACET
+realisation rather than one number, which is the design question to settle first (report a mean over
+seeds, or sweep &xi; as its own factor).</p></div>
+
+<div class="issue"><h3><span class="id">D2</span><span class="tag t-med">medium</span>
+&nbsp;Scalar-&Delta;t DP over-plans; the commit DBF trims</h3>
+<p>The DP distributes one scalar &Delta;t across a whole downstream chain and uses the full deadline
+interval as the per-job cap, so it is an optimistic upper bound the dynamic DBF then trims. Measured
+at B=400: promised 72.90, committed 68.36 &mdash; <b>4.55 utility lost</b> over one event. Graceful
+degradation already recovers most of it; the residual is the price of the scalar (vs per-window
+vector) time state.</p></div>
+
+<div class="issue"><h3><span class="id">D3</span><span class="tag t-low">low</span>
+&nbsp;Aggregate-states quantisation clips the exact frontier</h3>
+<p>The exact Pareto frontier reaches ~16,400 points per level; the cap-256 grid keeps ~229 &mdash; a
+~70&times; clip at ~3.8 time &times; 2.0 energy per bucket. It is <b>feasibility-safe</b> (dropping
+options can only lower a reported value), so this is bounded sub-optimality, not a constraint risk.
+Worth a sensitivity sweep only if DVFS becomes a headline online result, since a coarse grid can
+bucket away precisely the low-<code>req_e</code> points Option 3 relies on.</p></div>
+
+<div class="issue"><h3><span class="id">D4</span><span class="tag t-low">low</span>
+&nbsp;Per-event DP rebuild dominates online runtime</h3>
+<p><code>on_completion</code> fully rebuilds the affected processor's DP after every completion. It is
+correct and keeps later lookups exact, but it is the bulk of the ~77 s simulation. The paper's
+"Lazy DP" improvement targets exactly this.</p></div>
+
+<h2>E &middot; Paper coverage</h2>
+
+<div class="issue"><h3><span class="id">E1</span><span class="tag t-med">medium</span>
+&nbsp;Paper &sect;V.B "Heur1.0/Baseline" is not implemented</h3>
+<p>The paper defines a 2-phase baseline &mdash; WFD-style mapping by decreasing utilisation, then a
+local search over eight operations with <b>probabilistic acceptance</b> (simulated annealing in all
+but name). Nothing in <code>usrt/</code> has probabilistic acceptance or WFD mapping.</p>
+<p>Two of its operations lie outside our design space: <b>O7 (dec freq + inc optional segment)</b> and
+the segment-<em>decreasing</em> moves. O7 is precisely the trade the heuristics lacked before 22 Aug,
+so <b>the paper's own baseline might beat v5b in the energy-bound regime</b> &mdash; worth measuring
+before any "we beat the baseline" claim. <code>greedy_sps_baseline</code> covers the no-DVFS floor but
+is <em>not</em> this algorithm.</p></div>
+
+<div class="issue"><h3><span class="id">E2</span><span class="tag t-low">low</span>
+&nbsp;&alpha;/&beta; mean two different things in the paper</h3>
+<p>&sect;II uses &alpha;, &beta; for the <em>energy model</em>; &sect;VII.A.2(c)(d) reuses them for
+<em>utilisation</em> parameters. Both appear in the same results discussion. The code sidesteps it
+(<code>u_mand_factor</code>/<code>u_opt_factor</code>), but the paper should rename one pair.</p></div>
+
+<div class="issue"><h3><span class="id">E3</span><span class="tag t-low">low</span>
+&nbsp;&sect;VII.A.2(d)(i) wording</h3>
+<p>Inside the paragraph defining <em>optional</em> utilisation it reads "Distribute <b>mandatory</b>
+utilization to each task with UUniFast" &mdash; almost certainly meant to be "optional". The
+implementation assumes the latter.</p></div>
+
+<h2>F &middot; Documentation &amp; hygiene</h2>
+
+<div class="issue"><h3><span class="id">F1</span><span class="tag t-med">medium</span>
+&nbsp;<code>summary-1-Aug</code> &sect;4 still describes superseded phase logic</h3>
+<p>Phases 1b&prime; and 1c were added on 22 Aug, but the same section's descriptions of
+<b>Phase 3</b> (pre-<code>min_possible_energy</code> terminal test), <b>Phase 4</b> (pre-efficiency
+ordering) and <b>Phase 5</b> (pre-ii.B widening) are pre-fix, and <b>Phase 6b is absent</b> there
+entirely. Two documents now describe the same phases differently; <code>dry_run_21_August</code>
+&sect;7 is the accurate one and says so, but the divergence is a trap for anyone reading only the
+summary.</p></div>
+
+<div class="issue"><h3><span class="id">F2</span><span class="tag t-low">low</span>
+&nbsp;Dead imports and orphaned modules</h3>
+<ul>
+<li><code>heuristic_v6.py</code> imports <code>compute_energy_slack</code>,
+<code>estimate_operating_freq</code> and <code>is_energy_bound</code> and uses none of them.</li>
+<li><code>phases/greedy_leftshift.py</code> and <code>phases/greedy_state.py</code> are each
+referenced from exactly one place outside themselves &mdash; likely reachable only through
+<code>heuristic_v1</code>/<code>v2</code>. Worth confirming they are still live before they rot.</li>
+</ul></div>
+
+<h2>G &middot; Findings (not defects)</h2>
+
+<div class="issue"><h3><span class="id">G1</span><span class="tag t-info">info</span>
+&nbsp;At tight &rho; the mapping, not the search, is the dominant error</h3>
+<p>Decomposing the gap with ILP v2 (SPS mapping + <em>exact</em> frequency/segment choice):</p>
+<table>
+<tr><th>&rho;</th><th>ILP v1</th><th>ILP v2</th><th>claudeoptimal</th><th>gap from mapping</th><th>gap from search</th></tr>
+<tr><td>0.4</td><td>23.19</td><td>12.98</td><td>11.13</td><td><b>44.0%</b></td><td>14.2%</td></tr>
+<tr><td>0.7</td><td>63.68</td><td>58.57</td><td>54.17</td><td>8.0%</td><td>7.5%</td></tr>
+<tr><td>1.0</td><td>66.00</td><td>65.58</td><td>65.58</td><td>0.6%</td><td>0.0%</td></tr>
+</table>
+<p>This is why v6 targets the mapping, and why a heuristic can beat ILP v2 (3.55% vs 4.79% mean gap):
+v6 improves the mapping that ILP v2 is structurally stuck with. Two consequences for the write-up:
+report gaps against <b>both</b> ILP v1 and ILP v2, since a single number conflates two error sources;
+and do not claim near-optimality versus ILP v1 at tight budgets for any SPS-based method &mdash; that
+ceiling is structural.</p>
+<p class="muted">Related and measured: LP-relaxation-<em>rounded</em> mappings did <b>not</b> reliably
+beat SPS (better at &rho;=0.4/0.7, worse at 0.5/1.0), so the LP is worth adopting as an evaluation
+bound, not as a mapping oracle.</p></div>
+
+<hr>
+<p class="muted">Generated 2026-08-22. Sources: every document in <code>ALL_DOCS/</code> plus a direct
+scan of <code>usrt/</code>, <code>ILP.py</code>, <code>run.py</code> and <code>testcases/</code>.
+Each item was re-verified against the code on 22 Aug; items that the docs listed but that are now
+fixed (the Phase 3 f_max test, the <code>feasible</code>/<code>model_feasible</code> collision, the
+Phase 8 <code>freq_idx</code> restore bug, the heuristic budget-validation gap) are deliberately
+omitted.</p>
+</div>

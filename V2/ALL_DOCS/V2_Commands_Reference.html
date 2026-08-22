@@ -110,12 +110,19 @@ on Windows cp1252 terminals. Scripts that bypass them may need
 <tr><td><code>heuristic_v5a</code></td><td>+ Refine Mapping 2a (linear doublet scan)</td><td>No</td></tr>
 <tr><td><code>heuristic_v5b</code></td><td>+ Refine Mapping 2b (one-swap-one-scan) — <strong>the reference heuristic</strong></td><td>No</td></tr>
 <tr><td><code>heuristic_claudeoptimal</code></td><td>Phases 1–6 + double-giver swap + iterated greedy</td><td>No</td></tr>
+<tr><td><code>heuristic_v6</code></td><td><b>v5b + budget-aware mapping</b> &mdash; Phase 1b&prime;
+    (objective flips on the regime test, judged at f&#770;) + Phase 1c (mapping local search).
+    Best measured variant.</td><td>No</td></tr>
+<tr><td><code>greedy_sps_baseline</code></td><td>SPS mapping only, every job pinned at f_max, greedy
+    segments by utility density. The naive floor &mdash; no DVFS at all.</td><td>No</td></tr>
 <tr><td><code>online</code></td><td>v5b offline schedule + online slack DP (see §4)</td><td>No</td></tr>
 </tbody></table>
 <h4>Examples</h4>
 <pre><code>python run.py testcase.py                       # default heuristic_v4
 python run.py testcase.py heuristic_v5b          # reference heuristic
 python run.py testcase.py ilp_v2                 # SPS + ILP
+python run.py testcase.py heuristic_v6           # budget-aware mapping (best)
+python run.py testcase.py greedy_sps_baseline    # naive floor
 python run.py testcase.py online                 # online phase demo
 
 # any generated instance works the same way

@@ -1,0 +1,396 @@
+<title>USRT Test-cases — Generation, Storage, Execution</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+ :root{--bg:#f7f7f5;--panel:#fff;--ink:#1a1a18;--muted:#5c5c56;--line:#e3e2dc;
+  --accent:#1f4d7a;--accent2:#7a1f1f;--code-bg:#f2f1ec;--ok:#1f6b45;--warn:#9a6a12;--bad:#a33;
+  --mono:"SFMono-Regular",Consolas,monospace;--serif:Georgia,serif;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+ @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#16161a;--panel:#1e1e24;--ink:#e9e8e2;--muted:#a7a69e;--line:#31313a;
+  --accent:#8ab4e0;--accent2:#e08a8a;--code-bg:#24242b;--ok:#7fd0a3;--warn:#e0bd6a;--bad:#e08a8a;}}
+ *{box-sizing:border-box}
+ body{background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.6;margin:0}
+ .wrap{max-width:1040px;margin:0 auto;padding:2.2rem 1.3rem 5rem}
+ h1{font-family:var(--serif);font-size:1.95rem;margin:.2rem 0 .4rem}
+ h2{font-family:var(--serif);font-size:1.4rem;margin:2.3rem 0 .5rem;padding-top:1rem;border-top:1px solid var(--line)}
+ h3{font-size:1.06rem;margin:1.5rem 0 .4rem}
+ h4{font-size:.95rem;margin:1.1rem 0 .3rem;color:var(--accent)}
+ .kicker{font-family:var(--mono);font-size:.72rem;letter-spacing:.15em;text-transform:uppercase;color:var(--accent)}
+ .sub{color:var(--muted);max-width:76ch}
+ code{font-family:var(--mono);font-size:.86em;background:var(--code-bg);padding:.08em .35em;border-radius:4px}
+ pre{background:var(--code-bg);border:1px solid var(--line);border-radius:8px;padding:.8rem 1rem;
+     overflow-x:auto;font-family:var(--mono);font-size:.78rem;line-height:1.5}
+ table{border-collapse:collapse;width:100%;margin:.8rem 0;font-size:.83rem;display:block;overflow-x:auto}
+ th,td{border:1px solid var(--line);padding:.42rem .55rem;text-align:left;vertical-align:top}
+ th{background:var(--code-bg);font-weight:650}
+ td.n,th.n{text-align:right;white-space:nowrap}
+ .callout{border-left:4px solid var(--accent);background:var(--panel);padding:.75rem 1rem;
+          border-radius:0 8px 8px 0;margin:1rem 0}
+ .callout.ok{border-left-color:var(--ok)} .callout.bad{border-left-color:var(--bad)}
+ .callout.warn{border-left-color:var(--warn)}
+ .muted{color:var(--muted);font-size:.83rem}
+ .ok{color:var(--ok);font-weight:650}.bad{color:var(--bad);font-weight:650}.warn{color:var(--warn);font-weight:650}
+ .toc{columns:2;column-gap:2rem;font-size:.9rem}
+ .toc a{text-decoration:none;color:var(--accent)}
+ hr{border:none;border-top:1px solid var(--line);margin:1.8rem 0}
+ @media (max-width:640px){.toc{columns:1}}
+</style>
+<div class="wrap">
+<div class="kicker">USRT &middot; V2 &middot; Experiment Infrastructure</div>
+<h1>Test-cases: Generation, Storage, Execution</h1>
+<p class="sub">How synthetic instances are built, where they live, how they reach the solvers, and
+exactly which knobs are varied and which metrics come back. Companion to
+<code>V2_Commands_Reference.html</code>, which is the quick command lookup &mdash; this document
+explains the <em>design</em>.</p>
+
+<h2 id="toc">Contents</h2>
+<div class="toc"><ol>
+<li><a href="#s1">The two pipelines</a></li>
+<li><a href="#s2">Where test-cases live</a></li>
+<li><a href="#s3">The generator: design</a></li>
+<li><a href="#s4">Knobs: system vs simulation parameters</a></li>
+<li><a href="#s5">How an instance is built</a></li>
+<li><a href="#s6">The sweeps</a></li>
+<li><a href="#s7">What a test-case file looks like</a></li>
+<li><a href="#s8">The runner: feeding models</a></li>
+<li><a href="#s9">Metrics collected</a></li>
+<li><a href="#s10">Schemas: manifest &amp; results</a></li>
+<li><a href="#s11">End-to-end workflow</a></li>
+<li><a href="#s12">Gotchas &amp; known issues</a></li>
+</ol></div>
+
+<h2 id="s1">1 &middot; The two pipelines</h2>
+<pre>GENERATE                              RUN
+usrt/gen/           gen_testcases.py  usrt/runner/          run_models.py
+  spec.py       ->  writes .py                adapters.py ->  reads manifest.csv
+  primitives.py     instances +               runner.py       runs each model
+  generate.py       manifest.csv                              writes results.csv
+  emit.py
+  sweeps.py
+
+  TestSpec + seed  ->  (processors, tasks, B)  ->  solver  ->  {utility, energy, ...}</pre>
+<p>The two halves are deliberately decoupled: the generator only writes files, the runner only reads
+them. Nothing about a model leaks into generation, so the same instances can be replayed against any
+solver, now or later.</p>
+
+<h2 id="s2">2 &middot; Where test-cases live</h2>
+<h4>Directory layout</h4>
+<pre>&lt;out&gt;/&lt;sweep&gt;/manifest.csv          one row per generated instance
+&lt;out&gt;/&lt;sweep&gt;/results.csv          written by the runner, beside the manifest
+&lt;out&gt;/&lt;sweep&gt;/set00/&lt;factor&gt;_&lt;value&gt;.py
+&lt;out&gt;/&lt;sweep&gt;/set01/...            one directory per replicate (seed)</pre>
+<p>Example:</p>
+<pre>dry_run_tc/
+  rho/
+    manifest.csv
+    results.csv
+    set00/  rho_0.3.py  rho_0.4.py  ...  rho_1.py
+    set01/  ...</pre>
+<p><b>set<i>NN</i></b> = one replicate, i.e. one random draw of the task-set shape.
+<b>&lt;factor&gt;_&lt;value&gt;.py</b> = one configuration point within that replicate. For the
+<code>rho</code> sweep the task set is <em>fixed within a set</em> and only the budget changes,
+so a &rho;-curve is a controlled experiment on one instance.</p>
+
+<h4>What is on disk right now</h4>
+<table>
+<tr><th>Directory</th><th class="n">instances</th><th class="n">manifests</th><th class="n">results</th><th>status</th></tr>
+<tr><td><code>testcases/</code></td><td class="n">18,500</td><td class="n">9</td><td class="n">0</td>
+    <td class="bad">STALE &mdash; old generator schema</td></tr>
+<tr><td><code>dry_run_tc/</code></td><td class="n">90</td><td class="n">3</td><td class="n">3</td>
+    <td class="ok">current &mdash; used by the 21/22 Aug docs</td></tr>
+<tr><td><code>tc_smoke/</code></td><td class="n">10</td><td class="n">1</td><td class="n">1</td>
+    <td class="muted">scratch smoke test</td></tr>
+</table>
+<div class="callout bad"><strong><code>testcases/</code> predates the paper-&sect;VII.A alignment.</strong>
+Its manifests still carry the old columns (<code>regime</code>, <code>util_per_core</code>,
+<code>opt_ratio</code>) and the old sweep names (<code>energy_rho</code>, <code>util_split</code>,
+<code>util_success</code>&hellip;). The instances themselves were built with the <em>old</em>
+definitions &mdash; <code>U_O = opt_ratio &times; U_M</code>, an affine &rho;, and no per-task
+<code>theta</code>. They are not comparable with anything produced today and should be regenerated
+before use.</div>
+
+<h2 id="s3">3 &middot; The generator: design</h2>
+<p>The structure follows paper &sect;VII.A and is a strict <b>OFAT</b> (one-factor-at-a-time) design:</p>
+<ul>
+<li><b>System parameters</b> are fixed across <em>every</em> test case.</li>
+<li><b>Simulation parameters</b> are swept <b>one at a time</b>, with every other parameter holding
+its default.</li>
+<li>One value of one parameter = one <b>configuration</b>. Each configuration gets
+<code>--sets</code> (default 100) independently seeded test cases, so a data point is a mean over
+replicates rather than one lucky draw.</li>
+</ul>
+<table>
+<tr><th>Module</th><th>Responsibility</th></tr>
+<tr><td><code>spec.py</code></td><td><code>TestSpec</code> dataclass &mdash; every knob, plus
+    <code>validate()</code> enforcing the locked constraints</td></tr>
+<tr><td><code>primitives.py</code></td><td>UUniFast, 0.01-unit donation, harmonic periods, random
+    frequency sets, normal segment split, &rho; budget, feasibility guard</td></tr>
+<tr><td><code>generate.py</code></td><td><code>draw_taskset(spec, seed) -&gt; TaskSet</code></td></tr>
+<tr><td><code>emit.py</code></td><td>writes the runnable <code>.py</code> + one manifest row</td></tr>
+<tr><td><code>sweeps.py</code></td><td>the OFAT drivers and <code>generate_all</code></td></tr>
+</table>
+
+<h2 id="s4">4 &middot; Knobs</h2>
+<h3>Simulation parameters &mdash; these are what we vary</h3>
+<table>
+<tr><th>Knob</th><th>Paper</th><th>Meaning</th><th class="n">default</th><th>sweep grid</th></tr>
+<tr><td><code>n_prc</code></td><td>N<sup>prc</sup></td><td>homogeneous processors</td><td class="n">2</td>
+    <td>2, 4, 8, 16</td></tr>
+<tr><td><code>n_tsk</code></td><td>N<sup>tsk</sup></td><td>periodic tasks</td><td class="n">8</td>
+    <td>4, 6, 8, 10, 12</td></tr>
+<tr><td><code>u_mand_factor</code></td><td>&alpha;</td><td><code>U_M = &alpha; &times; N_prc</code>
+    &mdash; mandatory load, drives <b>timing</b> pressure</td><td class="n">0.5</td>
+    <td>0.1 &hellip; 0.9</td></tr>
+<tr><td><code>u_opt_factor</code></td><td>&beta;</td><td><code>U_O = &beta; &times; (N_prc &minus; U_M)</code>
+    &mdash; optional headroom</td><td class="n">0.5</td><td>0.1 &hellip; 0.9</td></tr>
+<tr><td><code>rho</code></td><td>&rho;</td><td><code>B = &rho; &times; E_full_fmax</code>
+    &mdash; drives <b>energy</b> pressure</td><td class="n">0.7</td><td>0.2 &hellip; 1.0</td></tr>
+<tr><td><code>xi</code></td><td>&xi;</td><td>per-task ACET multiplier <code>&theta; ~ U(&xi;, 1)</code>
+    &mdash; online only</td><td class="n">0.6</td><td>0.3 &hellip; 0.9</td></tr>
+</table>
+<div class="callout"><strong>Why <code>&beta;</code> is defined against the <em>remaining</em>
+capacity.</strong> <code>U_M + U_O = U_M + &beta;(N_prc &minus; U_M) &le; N_prc</code> for any
+&beta; &le; 1, so total utilisation can never exceed capacity &mdash; the cap holds by construction,
+with no extra guard and no hand-picked parameter bands.</div>
+
+<h3>System parameters &mdash; fixed for every test case</h3>
+<table>
+<tr><th>Knob</th><th>Value</th><th>Note</th></tr>
+<tr><td><code>n_frq</code></td><td>5</td><td>paper fixes this</td></tr>
+<tr><td>frequency grid</td><td>{0.30, 0.35, &hellip;, 1.00}</td><td>5 drawn at random per instance,
+    <b>f_max always forced present</b></td></tr>
+<tr><td><code>max_optional_seg</code></td><td>4</td><td><code>N_seg ~ {1..4}</code> per task</td></tr>
+<tr><td>periods</td><td><code>base &times; 2^m</code>, base=10, m&isin;{0..k_max=3}</td>
+    <td>&rArr; {10,20,40,80}; harmonic by construction, <code>H = max(period)</code>;
+        &ge;3 distinct enforced</td></tr>
+<tr><td>utility</td><td><code>u_i ~ U(1.0, 5.0)</code></td><td>linear, bounded</td></tr>
+<tr><td><code>seg_var_frac</code></td><td>0.20</td><td>segment split sd = 20% of mean</td></tr>
+<tr><td><code>&gamma;</code></td><td>0.5</td><td>max per-task <em>mandatory</em> utilisation</td></tr>
+<tr><td><code>&delta;</code></td><td>2.0</td><td>max per-task optional:mandatory ratio</td></tr>
+<tr><td>&alpha;, &beta; <span class="muted">(energy)</span></td><td>0.15, 1.0</td>
+    <td><b>never swept</b> &mdash; the ENERGY constants in <code>usrt/models.py</code>, distinct from
+    the utilisation &alpha;/&beta; above</td></tr>
+</table>
+<div class="callout warn"><strong>Notation collision.</strong> The paper reuses &alpha;/&beta; for both
+the energy model (&sect;II) and the utilisation parameters (&sect;VII.A). The code renames the
+utilisation ones to <code>u_mand_factor</code> / <code>u_opt_factor</code> so nothing is ambiguous.</div>
+
+<h2 id="s5">5 &middot; How one instance is built</h2>
+<pre>draw_taskset(spec, seed):
+  1. frequency set : 5 distinct levels from the 0.05 grid, f_max forced in
+  2. periods       : base * 2^m, first tasks get distinct m so >=3 periods appear
+  3. mandatory util: UUniFast over U_M, then DONATE excess above gamma in 0.01 units
+  4. optional util : UUniFast over U_O, then donate above the per-task cap delta*u_mand_i
+  5. exec times    : e_m = u_mand_i * p_i ;  optional split across N_seg segments by a
+                     NORMAL draw (mean = U_opt_i*p_i / N_seg, sd = 20% of mean),
+                     renormalised so the task total is preserved exactly
+  6. utility       : u_i ~ U(1, 5)
+  7. theta         : per-task ACET multiplier ~ U(xi, 1)          [paper VII.A.2(f)]</pre>
+<h4>Why donation, not discard-and-redraw</h4>
+<p>The paper specifies that utilisation above a cap is <b>iteratively donated</b> to other tasks in
+units of 0.01. That preserves the shape of the UUniFast draw; discarding and redrawing until the cap
+happens to be satisfied biases the distribution toward flatter task sets. When the excess cannot be
+placed anywhere the paper says "report error" &mdash; the generator emits the instance but sets
+<code>donate_ok=0</code> and prints a <code>delta-cap UNMET</code> line.</p>
+<h4>Feasibility guard</h4>
+<p>With <code>guarantee_feasible</code> (the default) the draw is repeated under perturbed seeds until
+the mandatory part packs onto <code>n_prc</code> cores by Worst-Fit-Decreasing (per-core utilisation
+&le; 1, which is sufficient for partitioned preemptive EDF with implicit deadlines). The
+<code>schedulability</code> sweep turns this <b>off</b> on purpose, so the success-rate cliff can be
+measured.</p>
+
+<h2 id="s6">6 &middot; The sweeps</h2>
+<table>
+<tr><th>Sweep</th><th>What varies</th><th>Purpose</th></tr>
+<tr><td><code>n_prc</code></td><td>processors</td><td>architecture scaling</td></tr>
+<tr><td><code>n_tsk</code></td><td>task count</td><td>problem size / ILP tractability</td></tr>
+<tr><td><code>u_mand_factor</code></td><td>&alpha;</td><td>timing pressure</td></tr>
+<tr><td><code>u_opt_factor</code></td><td>&beta;</td><td>reward headroom</td></tr>
+<tr><td><code>rho</code></td><td>energy budget</td><td><b>energy pressure &mdash; where DVFS matters</b></td></tr>
+<tr><td><code>xi</code></td><td>ACET spread</td><td>online windfall size</td></tr>
+<tr><td><code>util_grid</code></td><td>&alpha; &times; &beta; (2-D)</td><td>joint utilisation study</td></tr>
+<tr><td><code>schedulability</code></td><td>&alpha; past capacity</td><td>success-rate cliff (allow-infeasible)</td></tr>
+<tr><td><code>all</code></td><td>everything above</td><td>full suite (~18.5k files at 100 sets)</td></tr>
+</table>
+<pre>python gen_testcases.py rho --sets 100
+python gen_testcases.py rho --sets 100 --grid 0.2,0.4,0.6,0.8,1.0
+python gen_testcases.py n_tsk --sets 100 --rho 0.2      # non-swept defaults via flags
+python gen_testcases.py all  --sets 100 --out testcases</pre>
+<div class="callout warn"><strong>Two documented OFAT deviations, both printed at generation time.</strong>
+<br>1. The <code>n_prc</code> sweep <b>scales n_tsk</b> (8&rarr;12&rarr;23 for 8&rarr;16 cores), because
+<code>U_M = &alpha;&middot;N_prc</code> cannot fit in 8 tasks at &gamma;=0.5. The realised
+<code>n_tsk</code> is recorded in the manifest.
+<br>2. The <b>&delta; cap can be arithmetically impossible</b>: satisfying it requires
+<code>&beta; &le; 2&alpha;/(1&minus;&alpha;)</code>, which at &alpha;=0.1 caps &beta; at 0.222 &mdash;
+so the default &beta;=0.5 cannot comply. Those instances get <code>donate_ok=0</code>.</div>
+
+<h2 id="s7">7 &middot; What a test-case file looks like</h2>
+<p>Every instance is a standalone, runnable Python module exposing <code>testcase()</code>, so it
+loads through the same <code>load_testcase()</code> path as the hand-written
+<code>testcase.py</code>. It carries its own provenance.</p>
+<pre>"""Auto-generated USRT testcase -- DO NOT EDIT BY HAND.
+Provenance:
+{"B": 96.6, "H": 80, "J": 24, "factor": "n_tsk", "n_frq": 5, "n_prc": 2, "n_tsk": 6,
+ "rho": 0.7, "seed": 1000, "set": 0, "sweep": "n_tsk", "u_mand_factor": 0.5,
+ "u_opt_factor": 0.5, "value": "6", "xi": 0.6}
+"""
+_SPEC = '{...same dict...}'
+
+def testcase():
+    processors = [
+        {'id': 0, 'frequencies': [0.35, 0.6, 0.8, 0.9, 1.0]},
+        {'id': 1, 'frequencies': [0.35, 0.6, 0.8, 0.9, 1.0]},
+    ]
+    tasks = [
+        {'id': 0, 'e_m': 3.019356, 'e_o_k': [0.649871, 0.484970],
+         'p_i': 10, 'u_i': 2.9499, 'theta': 0.7846},
+        ...
+    ]
+    B_BUDGET = 96.600000
+    return processors, tasks, B_BUDGET</pre>
+<p><code>theta</code> is the per-task ACET multiplier. Offline solvers ignore the extra key; the
+online simulator reads it, which is what makes an online run reproducible from the file alone rather
+than from a simulator setting.</p>
+
+<h2 id="s8">8 &middot; The runner: how instances reach the models</h2>
+<pre>run_models.py &lt;manifest.csv | sweep_dir | testcases_root&gt; [--models ...] [--heur ...]
+
+for each row in manifest.csv:
+    path = resolve(row['file'])
+    processors, tasks, B = load_testcase(path)      # same loader as run.py
+    for each model:
+        metrics = run_model(model, processors, tasks, B, ...)
+        write {**row, **metrics} -> results.csv</pre>
+<h3>Models available</h3>
+<table>
+<tr><th><code>--models</code></th><th>What it is</th><th>Gurobi</th></tr>
+<tr><td><code>ilp_v1</code></td><td>exact ILP &mdash; joint processor + frequency + segment. The optimality benchmark.</td><td>yes</td></tr>
+<tr><td><code>ilp_v2</code></td><td>SPS mapping + exact ILP for frequency/segments. The ceiling for any SPS-based heuristic.</td><td>yes</td></tr>
+<tr><td><code>heuristic</code></td><td>the staged pipeline; pick the variant with <code>--heur</code>
+    (<code>v3 v4 v5a v5b v6 claudeoptimal</code>)</td><td>no</td></tr>
+<tr><td><code>greedy_sps_baseline</code></td><td>naive floor &mdash; SPS only, f_max pinned, greedy segments</td><td>no</td></tr>
+</table>
+<h3>What the adapters do</h3>
+<table>
+<tr><th>Concern</th><th>Handling</th></tr>
+<tr><td>Solver chatter</td><td><b>Two-layer suppression</b>: fd-level <code>dup2</code> to devnull
+    (captures Gurobi's C log) <em>and</em> a <code>sys.stdout</code> swap (captures Python prints and
+    makes them encoding-proof, so box-drawing glyphs cannot crash a cp1252 console)</td></tr>
+<tr><td>ILP timeout</td><td>Gurobi <code>TimeLimit</code>; returns the best incumbent as
+    <code>time_limit</code>, or <code>timeout</code> if none was found. Bounds the <em>solve</em>, not
+    model building</td></tr>
+<tr><td>Infeasible ILPs</td><td><code>computeIIS</code>/<code>write</code> monkeypatched to no-ops
+    &mdash; they are slow and litter <code>.ilp</code> files</td></tr>
+<tr><td>Energy model consistency</td><td>ILP v1's module-globals are re-pointed to
+    <code>usrt.models</code> at runtime, and every model's energy is recomputed through
+    <code>usrt.models</code>, so all models are scored on one energy model</td></tr>
+<tr><td>Heuristic validation</td><td>the returned schedule is checked against the budget; over-budget
+    results are recorded <b>infeasible</b> rather than counted as successes</td></tr>
+<tr><td>Errors</td><td>caught per (instance, model) and written as a <code>status=error</code> row, so
+    one bad instance never aborts a sweep</td></tr>
+<tr><td>Resume</td><td>completed <code>(file, model)</code> pairs are skipped; Ctrl-C and restart is safe</td></tr>
+<tr><td>Schema drift</td><td>appending under a mismatched <code>results.csv</code> header raises
+    instead of silently misaligning rows</td></tr>
+</table>
+
+<h2 id="s9">9 &middot; Metrics collected</h2>
+<table>
+<tr><th>Metric</th><th>Meaning</th></tr>
+<tr><td><code>utility</code></td><td>total optional utility &mdash; <b>the objective</b></td></tr>
+<tr><td><code>energy</code></td><td>schedule energy, recomputed via <code>usrt.models</code> for all models</td></tr>
+<tr><td><code>util_per_energy</code></td><td>utility &divide; energy &mdash; energy efficiency</td></tr>
+<tr><td><code>model_feasible</code></td><td>did <b>this model</b> produce a valid schedule (1/0) &mdash;
+    aggregated over a configuration this is the <b>success rate</b></td></tr>
+<tr><td><code>runtime</code></td><td>wall-clock seconds &mdash; scalability</td></tr>
+<tr><td><code>gap</code></td><td>MIP relative gap (ILP only)</td></tr>
+<tr><td><code>status</code></td><td><code>optimal</code> | <code>solved</code> | <code>time_limit</code> |
+    <code>timeout</code> | <code>infeasible</code> | <code>error</code></td></tr>
+</table>
+<p>Derived after the fact, by joining on <code>file</code>:</p>
+<ul>
+<li><b>optimality gap</b> = <code>(utility[ilp_v1] &minus; utility[model]) / utility[ilp_v1]</code></li>
+<li><b>mapping vs heuristic decomposition</b> &mdash; compare against <code>ilp_v2</code> instead of
+<code>ilp_v1</code> to separate "cost of the SPS mapping" from "cost of the heuristic search"</li>
+<li><b>success rate</b> = mean <code>model_feasible</code> over a configuration</li>
+</ul>
+
+<h2 id="s10">10 &middot; Schemas</h2>
+<h4><code>manifest.csv</code> &mdash; 24 columns, one row per instance</h4>
+<pre>file, sweep, set, factor, value,
+n_prc, n_tsk, n_frq, u_mand_factor, u_opt_factor, rho, xi,
+U_M, U_O, B, H, J,
+e_mand_fmax, e_full_fmax, e_mand_min,
+feasible, donate_ok, seed, redraws</pre>
+<table>
+<tr><th>Column</th><th>Meaning</th></tr>
+<tr><td><code>factor</code>, <code>value</code></td><td>which knob this instance varies, and to what
+    &mdash; the x-axis of any plot</td></tr>
+<tr><td><code>U_M</code>, <code>U_O</code></td><td>realised total mandatory / optional utilisation</td></tr>
+<tr><td><code>H</code>, <code>J</code></td><td>hyper-period and job count (J drives ILP size)</td></tr>
+<tr><td><code>e_mand_fmax</code></td><td>mandatory energy at f_max &mdash; if <code>&gt; B</code> the
+    instance is energy-bound and DVFS is mandatory</td></tr>
+<tr><td><code>e_mand_min</code></td><td>mandatory energy at the cheapest frequency &mdash;
+    <code>B &lt; e_mand_min</code> is provably infeasible</td></tr>
+<tr><td><code>feasible</code></td><td><b>instance</b> property: does the mandatory part pack at all</td></tr>
+<tr><td><code>donate_ok</code></td><td>0 when the &delta; cap could not be met</td></tr>
+<tr><td><code>seed</code>, <code>redraws</code></td><td>full provenance &mdash; regenerates bit-identically</td></tr>
+</table>
+<h4><code>results.csv</code> &mdash; manifest columns + 9 metric columns</h4>
+<pre>... 24 manifest columns ...,
+model, status, model_feasible, utility, energy, util_per_energy, runtime, gap, error</pre>
+<div class="callout"><strong><code>feasible</code> vs <code>model_feasible</code> are different and both
+matter.</strong> <code>feasible</code> is the generator's verdict (can the mandatory part be packed at
+all); <code>model_feasible</code> is this model's verdict. The pair separates "the instance is
+impossible" from "this model's partitioning failed" &mdash; the row
+<code>feasible=1, model_feasible=0</code> is exactly the partitioning-limitation story. They were
+originally the same column name, and the model's value silently overwrote the generator's until they
+were renamed.</div>
+
+<h2 id="s11">11 &middot; End-to-end workflow</h2>
+<pre># 1. generate
+python gen_testcases.py all --sets 100 --out testcases
+
+# 2. run the cheap models everywhere
+python run_models.py testcases/ --models ilp_v2,heuristic --heur v6
+
+# 3. add the exact benchmark on the ILP-tractable sweeps only
+python run_models.py testcases/n_tsk/manifest.csv --models ilp_v1 --time-limit 60
+
+# 4. add the naive floor for a lower reference
+python run_models.py testcases/ --models greedy_sps_baseline
+
+# 5. results land beside each manifest
+#    testcases/&lt;sweep&gt;/results.csv   -- join to manifest on 'file'</pre>
+<p>Small, ILP-tractable batch (what the 21/22 Aug docs used &mdash; H=40, J=10&ndash;13, 90 instances):</p>
+<pre>python gen_testcases.py rho --sets 5 --n-prc 2 --n-tsk 5 --kmax 2 --max-seg 3 \
+       --n-frq 5 --grid 0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0 --out dry_run_tc
+python run_models.py dry_run_tc --models ilp_v1,ilp_v2,heuristic --heur v6 --time-limit 20</pre>
+
+<h2 id="s12">12 &middot; Gotchas &amp; known issues</h2>
+<table>
+<tr><th>Issue</th><th>Detail</th></tr>
+<tr><td class="bad">Stale <code>testcases/</code></td><td>18,500 instances from the pre-&sect;VII.A
+    generator. Old schema and old definitions &mdash; regenerate before use (&sect;2).</td></tr>
+<tr><td class="bad"><code>ILP.py</code> constants</td><td>hard-codes <code>ALPHA=1.0, BETA=0.5</code>.
+    The runner re-points them, but <em>standalone</em> <code>python ILP.py</code> solves the wrong
+    energy model. One-line fix: import from <code>usrt.models</code>.</td></tr>
+<tr><td class="warn"><code>heuristic_v1</code></td><td>returns a <code>ScheduleState</code>, not the
+    4-tuple every other variant returns &mdash; unusable through the runner (produces an
+    <code>error</code> row). Works via <code>run.py</code>.</td></tr>
+<tr><td class="warn">Schema changes</td><td>after changing manifest or metric columns, delete the old
+    <code>results.csv</code>; the runner refuses to append under a mismatched header.</td></tr>
+<tr><td class="warn">Regenerating with fewer <code>--sets</code></td><td>leaves stale <code>.py</code>
+    files on disk. The manifest is the source of truth and ignores them.</td></tr>
+<tr><td class="warn">Gurobi licence</td><td>expires 2026-08-19; both ILPs stop working after that.
+    Heuristics and the online phase are unaffected.</td></tr>
+<tr><td class="warn">Online phase</td><td>not in the runner. Generated <code>theta</code> makes online
+    runs reproducible, but no online adapter exists yet &mdash; its result is a distribution over the
+    ACET realisation, not one number per instance.</td></tr>
+</table>
+
+<hr>
+<p class="muted">USRT V2 &middot; experiment infrastructure &middot; generated 2026-08-22.
+Companions: <code>V2_Commands_Reference.html</code> (command lookup),
+<code>dry_run_21_August.html</code> (phase pipeline + first results),
+<code>22Aug_big_change_result.html</code> (current results).</p>
+</div>

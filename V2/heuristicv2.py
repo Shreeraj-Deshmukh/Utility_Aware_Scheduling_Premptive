@@ -70,8 +70,14 @@ import importlib.util
 from math import gcd as _gcd
 from collections import defaultdict
 
-ALPHA = 1.0
-BETA  = 0.5
+# ── energy model coefficients ─────────────────────────────────────────────────
+# Imported from the single source of truth (usrt/models.py) so this legacy
+# monolith can never drift from the rest of the project.  Previously hard-coded
+# to ALPHA=1.0, BETA=0.5 -- the stale pair -- under which the energy optimum is
+# f_max, whereas under the project's 0.15/1.0 it is f* ~= 0.42.  The two
+# disagree about the entire DVFS trade-off, so a standalone run of this file was
+# silently solving a different problem.
+from usrt.models import ALPHA, BETA
 
 
 # ══════════════════════════════════════════════════════════════════════════════
