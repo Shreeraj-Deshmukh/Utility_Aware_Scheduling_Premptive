@@ -45,7 +45,7 @@ from usrt.utils       import (lcm_list, gcd_list, build_cum, build_job_times,
 from usrt.mapping.quantum import quantum_sps_mapping
 from usrt.dbf.check   import check_all_timing
 
-MODELS = ("ilp_v1", "ilp_v2", "heuristic")
+MODELS = ("ilp_v1", "ilp_v2", "heuristic", "greedy_sps_baseline")
 
 _YRE = re.compile(r"^Y\[(\d+),(\d+),(\d+),(\d+)\]$")
 
@@ -192,6 +192,29 @@ def _mandatory_feasible(processors, tasks):
                             freq_set, cum, len(processors))
 
 
+def run_baseline(processors, tasks, B, time_limit=None):
+    """greedy_SPS_Baseline: SPS mapping, f_max fixed, greedy segments."""
+    if not _mandatory_feasible(processors, tasks):
+        return dict(model="greedy_sps_baseline", status="infeasible",
+                    model_feasible=0, utility="", energy="", util_per_energy="",
+                    runtime=0.0, gap="", error="")
+    from usrt.solvers import greedy_sps_baseline as _gsb
+    t0 = time.perf_counter()
+    with _suppress():
+        seg_k, freq_idx, tot_u, tot_e = _gsb.run(processors, tasks, B)
+    rt = time.perf_counter() - t0
+    if tot_e > B + 1e-6:
+        return dict(model="greedy_sps_baseline", status="infeasible",
+                    model_feasible=0, utility="", energy=round(tot_e, 6),
+                    util_per_energy="", runtime=round(rt, 4), gap="",
+                    error=f"over budget: E={tot_e:.4f} > B={B:.4f}")
+    upe = tot_u / tot_e if tot_e > 1e-12 else ""
+    return dict(model="greedy_sps_baseline", status="solved", model_feasible=1,
+                utility=round(tot_u, 6), energy=round(tot_e, 6),
+                util_per_energy=(round(upe, 6) if upe != "" else ""),
+                runtime=round(rt, 4), gap="", error="")
+
+
 def run_heuristic(processors, tasks, B, variant="v5b", time_limit=None):
     feasible = _mandatory_feasible(processors, tasks)
     if not feasible:
@@ -230,6 +253,8 @@ def run_model(name, processors, tasks, B, time_limit=30, heur_variant="v5b",
             return run_ilp_v1(processors, tasks, B, time_limit, mip_gap)
         if name == "ilp_v2":
             return run_ilp_v2(processors, tasks, B, time_limit, mip_gap)
+        if name == "greedy_sps_baseline":
+            return run_baseline(processors, tasks, B)
         if name in ("heuristic", "heuristic_v5b", "heuristic_v5a", "heuristic_v4",
                     "heuristic_v3", "heuristic_claudeoptimal"):
             variant = heur_variant if name == "heuristic" else name.split("_", 1)[1]

@@ -86,43 +86,79 @@ def phase_optional_segments(seg_k, freq_idx, freq_set, N_frq, cum, N_seg,
                         freq_idx[(i_s, j_s)] = z_cur
                         seg_k[(i_s, j_s)]    = k_cur
 
-            # ── Case (ii.B) ─────────────────────────────────────────────────
-            if not added:
-                others = sorted(
-                    [(i2, j2) for (i2, j2) in proc_jobs[x_s]
-                     if (i2, j2) != (i_s, j_s)
-                     and tasks[i2]['u_i'] <= tasks[i_s]['u_i']
-                     and freq_idx[(i2, j2)] > 0],
-                    key=lambda ij: (tasks[ij[0]]['u_i'], ij[0], ij[1])
-                )
-                for (i2, j2) in others:
-                    z2c = freq_idx[(i2, j2)]; z2n = z2c - 1
-                    c2  = cum[i2][seg_k[(i2, j2)]]
-                    esaved   = energy_val(c2, freq_set[z2c]) - energy_val(c2, freq_set[z2n])
-                    if esaved <= 1e-12:
+            # ── Case (ii.B) — GLOBAL energy donation ────────────────────────
+            # Energy is a GLOBAL budget, so a donor on ANY processor can fund
+            # this segment; restricting donors to x_s was an artificial limit.
+            # Lowering a donor's frequency also costs it ZERO utility (frequency
+            # does not appear in the utility function, paper Eq. 8), so the old
+            # "donor must have u_i <= u_j*" rule guarded against a cost that does
+            # not exist.  Donors are therefore ranked purely by how cheaply they
+            # yield energy (time paid per unit energy freed), and SEVERAL may
+            # contribute until the segment becomes affordable.
+            #
+            # ii.B only helps when ENERGY is the blocker: donating energy cannot
+            # fix a timing shortfall for j* (and donors on j*'s own processor
+            # make its timing worse, which the final DBF check catches).
+            if not added and min_sl >= add_time - 1e-9 and E_slack < add_energy - 1e-9:
+                need  = add_energy - E_slack
+                cands = []
+                for i2 in range(N_tsk):
+                    for j2 in range(N_job[i2]):
+                        if (i2, j2) == (i_s, j_s):
+                            continue
+                        z2c = freq_idx[(i2, j2)]
+                        if z2c == 0:
+                            continue
+                        c2 = cum[i2][seg_k[(i2, j2)]]
+                        es = (energy_val(c2, freq_set[z2c]) -
+                              energy_val(c2, freq_set[z2c - 1]))
+                        if es <= 1e-12:
+                            continue          # at/below f*: slowing costs energy too
+                        tc = (e_eff_val(c2, freq_set[z2c - 1]) -
+                              e_eff_val(c2, freq_set[z2c]))
+                        cands.append((tc / (es + 1e-12), i2, j2))
+                cands.sort()                  # cheapest time-per-energy first
+
+                applied, gained = [], 0.0
+                for (_, i2, j2) in cands:
+                    if gained >= need - 1e-9:
+                        break
+                    z2c = freq_idx[(i2, j2)]
+                    if z2c == 0:
                         continue
-                    tcost    = e_eff_val(c2, freq_set[z2n]) - e_eff_val(c2, freq_set[z2c])
-                    ms2      = min_slack_for_job(i2, j2, x_s, proc_jobs, job_r, job_d,
-                                                  seg_k, freq_idx, freq_set, cum)
-                    if ms2 < tcost - 1e-9:
+                    c2 = cum[i2][seg_k[(i2, j2)]]
+                    es = (energy_val(c2, freq_set[z2c]) -
+                          energy_val(c2, freq_set[z2c - 1]))
+                    if es <= 1e-12:
                         continue
-                    new_Esl  = E_slack + esaved
-                    if new_Esl < add_energy - 1e-9:
+                    tc = (e_eff_val(c2, freq_set[z2c - 1]) -
+                          e_eff_val(c2, freq_set[z2c]))
+                    x2  = proc_jobs_map[(i2, j2)]
+                    ms2 = min_slack_for_job(i2, j2, x2, proc_jobs, job_r, job_d,
+                                            seg_k, freq_idx, freq_set, cum)
+                    if ms2 < tc - 1e-9:
                         continue
-                    freq_idx[(i2, j2)] = z2n
-                    seg_k[(i_s, j_s)]  = k_cur + 1
+                    freq_idx[(i2, j2)] = z2c - 1
+                    applied.append((i2, j2))
+                    gained += es
+
+                if applied and gained >= need - 1e-9:
+                    seg_k[(i_s, j_s)] = k_cur + 1
                     if check_all_timing(proc_jobs, job_r, job_d, seg_k,
                                         freq_idx, freq_set, cum, N_prc):
-                        E_slack = new_Esl - add_energy
+                        E_slack = E_slack + gained - add_energy
                         improved = True; added = True
                         log.append(f"    [ii.B]  T{tasks[i_s]['id']},j{j_s}"
-                                   f"  k:{k_cur}→{k_cur+1}"
-                                   f"  via T{tasks[i2]['id']},j{j2} z:{z2c}→{z2n}"
+                                   f"  k:{k_cur}\u2192{k_cur+1}"
+                                   f"  via {len(applied)} donor(s)"
                                    f"  E_slack={E_slack:.3f}")
-                        break
                     else:
-                        freq_idx[(i2, j2)] = z2c
-                        seg_k[(i_s, j_s)]  = k_cur
+                        seg_k[(i_s, j_s)] = k_cur
+                        for (i2, j2) in applied:
+                            freq_idx[(i2, j2)] += 1
+                else:
+                    for (i2, j2) in applied:
+                        freq_idx[(i2, j2)] += 1
 
         if not improved:
             break

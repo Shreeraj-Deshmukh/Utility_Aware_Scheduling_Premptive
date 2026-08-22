@@ -27,7 +27,7 @@ the loop stops the instant it fits.  With B_BUDGET=None the legacy behaviour
 Under ALPHA=1, BETA=0.5 (f_max is energy-optimal) this is a no-op either way.
 """
 
-from ..models import energy_val, total_energy
+from ..models import energy_val, e_eff_val, total_energy
 from ..dbf.check import check_all_timing
 
 
@@ -51,26 +51,48 @@ def phase_aggressive_scaling(seg_k, freq_idx, freq_set, N_frq, cum,
     changed  = True
     while changed:
         changed = False
+        # Visit candidates in order of ENERGY SAVED PER UNIT TIME COST
+        # (descending) rather than task-index order.  Feasibility is reached by
+        # spending the least DBF slack per unit of energy recovered; index order
+        # can burn timing slack on poor trades and then fail to reach the budget
+        # on instances that are in fact schedulable.
+        cands = []
         for i in range(N_tsk):
             for j in range(N_job[i]):
                 z_cur = freq_idx[(i, j)]
                 if z_cur == 0:
                     continue
-                E_cur = energy_val(cum[i][seg_k[(i, j)]], freq_set[z_cur])
-                E_new = energy_val(cum[i][seg_k[(i, j)]], freq_set[z_cur - 1])
+                c     = cum[i][seg_k[(i, j)]]
+                E_cur = energy_val(c, freq_set[z_cur])
+                E_new = energy_val(c, freq_set[z_cur - 1])
                 if E_new >= E_cur - 1e-12:
-                    continue    # no energy saving → skip
-                freq_idx[(i, j)] = z_cur - 1
-                if check_all_timing(proc_jobs, job_r, job_d, seg_k,
-                                    freq_idx, freq_set, cum, N_prc):
-                    changed  = True
-                    n_scaled += 1
-                    if E_tot is not None:
-                        E_tot -= (E_cur - E_new)          # energy just saved
-                        if E_tot <= B_BUDGET + 1e-9:      # feasible now → stop
-                            return n_scaled
-                else:
-                    freq_idx[(i, j)] = z_cur    # revert
+                    continue                 # no energy saving (at/below f*)
+                saved = E_cur - E_new
+                tcost = (e_eff_val(c, freq_set[z_cur - 1]) -
+                         e_eff_val(c, freq_set[z_cur]))
+                cands.append((-(saved / (tcost + 1e-12)), i, j))
+        cands.sort()
+
+        for (_, i, j) in cands:
+            z_cur = freq_idx[(i, j)]
+            if z_cur == 0:
+                continue
+            c     = cum[i][seg_k[(i, j)]]
+            E_cur = energy_val(c, freq_set[z_cur])
+            E_new = energy_val(c, freq_set[z_cur - 1])
+            if E_new >= E_cur - 1e-12:
+                continue
+            freq_idx[(i, j)] = z_cur - 1
+            if check_all_timing(proc_jobs, job_r, job_d, seg_k,
+                                freq_idx, freq_set, cum, N_prc):
+                changed   = True
+                n_scaled += 1
+                if E_tot is not None:
+                    E_tot -= (E_cur - E_new)
+                    if E_tot <= B_BUDGET + 1e-9:
+                        return n_scaled
+            else:
+                freq_idx[(i, j)] = z_cur     # revert
     return n_scaled
 
 

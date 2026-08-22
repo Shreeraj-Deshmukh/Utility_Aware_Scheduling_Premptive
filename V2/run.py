@@ -14,6 +14,7 @@ Usage
     heuristic_v5a — Quantum SPS + Refine Mapping 2a (linear doublet scan) + Phases 2-6
     heuristic_v5b — Quantum SPS + Refine Mapping 2b (one-swap-one-scan)  + Phases 2-6
     heuristic_claudeoptimal — Phases 1-6 + double-giver swap + iterated greedy
+    greedy_sps_baseline — SPS mapping only, f_max fixed, greedy segments (naive floor)
     online        — Offline v5b schedule + online slack-distribution DP (Section VI)
 
 Examples
@@ -50,6 +51,7 @@ SOLVERS = {
     "heuristic_v5a":          "usrt.solvers.heuristic_v5a",
     "heuristic_v5b":          "usrt.solvers.heuristic_v5b",
     "heuristic_claudeoptimal":"usrt.solvers.heuristic_claudeoptimal",
+    "greedy_sps_baseline":    "usrt.solvers.greedy_sps_baseline",
     "online":                 "usrt.solvers.online_demo",
 }
 

@@ -27,6 +27,7 @@ from ..phases.energy_slack import compute_energy_slack, min_possible_energy
 from ..phases.aggressive   import phase_aggressive_scaling
 from ..phases.greedy       import phase_optional_segments
 from ..phases.swap         import phase_swap_local_search
+from ..phases.freq_trade   import phase_freq_utility_trade
 
 _S  = "=" * 76
 _S2 = "-" * 76
@@ -191,6 +192,11 @@ def _phase_iterated_greedy(seg_k, freq_idx, freq_set, N_frq, cum, N_seg,
     Returns: (iterations_run, final_E_slack, log_entries).
     """
     best_seg_k  = dict(seg_k)
+    # Phase 5 (case ii.A/ii.B) and Phase 6 both MUTATE freq_idx during the
+    # reconstruct step, so the frequency assignment must be snapshotted and
+    # rolled back together with seg_k.  Restoring seg_k alone leaves an
+    # inconsistent (seg_k, freq_idx) pair whose energy can exceed the budget.
+    best_freq_idx = dict(freq_idx)
     best_utility = total_utility(seg_k, tasks, cum, N_tsk, N_job)
     log = []
 
@@ -242,15 +248,20 @@ def _phase_iterated_greedy(seg_k, freq_idx, freq_set, N_frq, cum, N_seg,
         )
 
         if accepted:
-            best_seg_k   = dict(seg_k)
-            best_utility = new_utility
+            best_seg_k    = dict(seg_k)
+            best_freq_idx = dict(freq_idx)
+            best_utility  = new_utility
         else:
             for key in seg_k:
                 seg_k[key] = best_seg_k[key]
+            for key in freq_idx:
+                freq_idx[key] = best_freq_idx[key]
 
-    # Guarantee best solution is active
+    # Guarantee best solution is active (segments AND frequencies)
     for key in seg_k:
         seg_k[key] = best_seg_k[key]
+    for key in freq_idx:
+        freq_idx[key] = best_freq_idx[key]
 
     E_final = B_BUDGET - total_energy(seg_k, freq_idx, freq_set, cum, N_tsk, N_job)
     return n_iter, E_final, log
@@ -368,6 +379,21 @@ def run(processors, tasks, B_BUDGET):
         print(f"  No improving swaps found.")
     print(f"\n  Phase 6 result: utility={u_after6:.6f}  E_slack={E_after6:.4f}")
     print(f"  Utility gain from Phase 6: {u_after6 - u_after5:+.6f}")
+
+    # Phase 6b: frequency<->segment trade (shadow-price governed)
+    print(f"\n{_S}")
+    print(f"  PHASE 6b: FREQUENCY <-> SEGMENT TRADE  (lambda*dE > mu*dT)")
+    print(_S2)
+    n_tr, E_after6b, log6b = phase_freq_utility_trade(
+        seg_k, freq_idx, freq_set, N_frq, cum, N_seg,
+        N_tsk, N_job, proc_jobs, proc_jobs_map,
+        job_r, job_d, tasks, N_prc, B_BUDGET)
+    if log6b:
+        print(f"  {n_tr} profitable trade(s):")
+        for e in log6b: print(e)
+    else:
+        print(f"  No profitable frequency/segment trade found.")
+    print(f"  Phase 6b utility={total_utility(seg_k, tasks, cum, N_tsk, N_job):.6f}")
 
     # ── Phase 7: Double-giver swap ────────────────────────────────────────────
     print(f"\n{_S}")

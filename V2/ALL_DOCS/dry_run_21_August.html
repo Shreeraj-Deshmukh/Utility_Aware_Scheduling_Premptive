@@ -144,7 +144,188 @@ infeasible budgets. claudeoptimal now matches the exact solver on feasibility ev
 <tr><td>Heuristic claudeoptimal</td><td>0.0058</td><td>0.0060</td><td>0.0159</td><td>90</td></tr>
 </table>
 <p class="muted">At this size (J=10&ndash;13) the exact ILP is not a bottleneck &mdash; every solve proved optimality well inside the 20&nbsp;s limit. The heuristics are still 1&ndash;2 orders of magnitude faster, which is the scalability argument, but on <em>these</em> instances speed is not the differentiator.</p>
-<h2>7 &middot; The defect: Phase 3 tested feasibility at the wrong frequency</h2>
+<h2 id="phases">7 &middot; The phase pipeline, as it stands today</h2>
+<p class="sub">Every phase is a separate module; the heuristic <em>versions</em> are different
+assemblies of them. This section documents the <strong>current</strong> logic, including the
+Phase&nbsp;3 fix described in &sect;8 and the frequency-trade work that followed it &mdash; so it
+supersedes the phase description in <code>summary-1-Aug.html</code>.</p>
+
+<div class="callout"><strong>Invariant entering Phase 2:</strong> every job sits at <code>f_max</code>
+with <b>zero</b> optional segments. Phases 4&ndash;8 exist to convert the energy and timing budget
+into utility. Utility comes <em>only</em> from optional segments &mdash; frequency never appears in
+the utility function (paper Eq.&nbsp;8), so it is purely a time&harr;energy converter.</div>
+
+<table>
+<tr><th>Phase</th><th>Module</th><th>Role</th><th>In</th></tr>
+<tr><td><b>1</b> Quantum SPS mapping</td><td><code>mapping/quantum.py</code></td>
+    <td>job &rarr; processor</td><td>all</td></tr>
+<tr><td><b>1b</b> Refine mapping</td><td><code>mapping/refine_mapping.py</code></td>
+    <td>rebalance utility density</td><td>v5a / v5b</td></tr>
+<tr><td><b>2</b> Left shift</td><td><code>phases/left_shift.py</code></td>
+    <td>diagnostic only</td><td>all</td></tr>
+<tr><td><b>3</b> Energy slack</td><td><code>phases/energy_slack.py</code></td>
+    <td>terminal feasibility test</td><td>all</td></tr>
+<tr><td><b>4</b> Aggressive scaling</td><td><code>phases/aggressive.py</code></td>
+    <td>frequency &darr; for feasibility</td><td>all</td></tr>
+<tr><td><b>5</b> Greedy segments</td><td><code>phases/greedy.py</code></td>
+    <td>main utility engine</td><td>all</td></tr>
+<tr><td><b>6</b> Pairwise swap</td><td><code>phases/swap.py</code></td>
+    <td>segment local search</td><td>v4 / v5a / v5b / co</td></tr>
+<tr><td><b>6b</b> Frequency&harr;segment trade</td><td><code>phases/freq_trade.py</code></td>
+    <td>shadow-price exchange</td><td>v5b / co</td></tr>
+<tr><td><b>7</b> Double-giver swap</td><td><code>heuristic_claudeoptimal.py</code></td>
+    <td>2 givers &rarr; 1 receiver</td><td>co</td></tr>
+<tr><td><b>8</b> Iterated greedy</td><td><code>heuristic_claudeoptimal.py</code></td>
+    <td>destroy / reconstruct</td><td>co</td></tr>
+</table>
+
+<h3>Phase 1 &mdash; Quantum SPS mapping</h3>
+<p>Assigns each <em>job</em> to a processor using mandatory work only, at <code>f_max</code>. Runs one
+<em>quantum</em> at a time (the <code>gcd</code> of all periods, so every job boundary lands on a
+quantum edge). Per quantum <code>[q_start, q_end]</code>:</p>
+<ol>
+<li>Collect newly-arrived jobs plus any <em>leftover</em> deferred from earlier quanta.</li>
+<li>Classify each as <b>mandatory-now</b> (<code>d == q_end</code>) or <b>deferrable</b>
+    (<code>d &gt; q_end</code>).</li>
+<li><b>Pre-filter</b>: if total utilisation exceeds remaining capacity, defer the
+    <em>latest-deadline</em> deferrable jobs until it fits.</li>
+<li>Run <b>DPS + SPS</b> for a balanced assignment.</li>
+<li>Verify per-processor utilisation <code>&le; 1.0</code>; defer more if violated.</li>
+<li>Commit and update the running <code>proc_util</code>.</li>
+</ol>
+<p>Afterwards: a full mandatory-only DBF check at <code>f_max</code>, then <b>greedy repair</b> if any
+window fails. Load metric is <code>u_i = e_m_i / p_i</code>, correct for preemptive EDF.</p>
+
+<h3>Phase 1b &mdash; Refine mapping (v5a / v5b only)</h3>
+<p>SPS balances <em>load</em>, not <em>value</em>. If high-utility tasks pile onto one core, timing
+blocks their optional segments even when energy is plentiful. Phase 1b rebalances utility density:</p>
+<pre>ud(i) = u_i * (cum[i][N_seg] - cum[i][0]) / p_i
+UD(x) = sum of ud(i) over jobs mapped to processor x</pre>
+<p>A swap is accepted only when <b>all three</b> hold:</p>
+<ol>
+<li>UD imbalance <b>strictly decreases</b>;</li>
+<li>mandatory-utilisation imbalance does <b>not worsen</b> &mdash; disturbing SPS's load balance
+    steals timing slack from Phase 5 <em>even when DBF still passes</em>;</li>
+<li>mandatory-only DBF at <code>f_max</code> stays feasible on both processors.</li>
+</ol>
+<p><b>2a</b> = linear doublet scan over pairs sorted by ascending <code>|ud_a - ud_b|</code>.
+<b>2b</b> = one-swap-one-scan: fix the highest-UD processor pair, swap its first eligible pair, re-scan.</p>
+<div class="callout warn"><strong>This is now the dominant error source at tight budgets.</strong>
+SPS (and this refinement) balance on utilisation at <code>f_max</code>. When the budget forces slow
+execution, effective times inflate 1.5&ndash;2.5&times; and a partition balanced for <code>f_max</code>
+is badly balanced for the operating point actually used. Neither step is energy-budget-aware.</div>
+
+<h3>Phase 2 &mdash; Left shift (diagnostic)</h3>
+<pre>start = max(proc_avail, release)   finish = start + e_eff(i,k,z)   slack = deadline - finish</pre>
+<p>Simulates <b>non-preemptive</b> EDF packing, but the real system is <em>preemptive</em> EDF, so this
+only estimates where idle time sits. Hard feasibility is always decided by <b>DBF</b>. Run once; its
+output is printed but gates nothing.</p>
+
+<h3>Phase 3 &mdash; Energy slack (terminal feasibility test)</h3>
+<p>Computes <code>&Delta;e = B - E_consumed</code> at the current state. The <b>terminal</b> test is
+the part that was wrong until 21 August &mdash; see &sect;8. It now compares the budget against a true
+lower bound rather than the f_max cost:</p>
+<pre>E_floor = SUM over jobs of  min over z of  E(cum[i][0], f_z)
+if B &lt; E_floor:   infeasible at ANY frequency   -> terminate
+else:             continue to Phase 4 and let it scale</pre>
+<p>Ignoring timing only loosens the bound, so this is a sound <em>necessary</em> condition and can
+never wrongly reject a solvable instance.</p>
+
+<h3>Phase 4 &mdash; Aggressive frequency scaling</h3>
+<p>Steps frequencies <b>down one level</b> until the schedule fits the budget. Rules:</p>
+<ul>
+<li>skip any step with <b>no energy saving</b> (<code>E_new &ge; E_cur</code>) &mdash; below
+    <code>f*</code> slowing down <em>costs</em> energy;</li>
+<li><b>revert</b> the step if the DBF check fails;</li>
+<li><b>stop the instant</b> <code>E_total &le; B</code> &mdash; this phase targets feasibility, not
+    efficiency;</li>
+<li>candidates are visited in order of <b>energy saved per unit time cost</b> (descending), not task
+    index &mdash; index order can burn DBF slack on poor trades and then fail to reach the budget on
+    instances that are in fact schedulable.</li>
+</ul>
+<p>The phase is gated: if <code>f_max</code> already fits the budget it does nothing, because
+lowering frequency inflates effective times and would starve Phase 5 of timing slack.</p>
+
+<h3>Phase 5 &mdash; Greedy optional segments</h3>
+<p>The main utility engine. Jobs are visited in a stable order sorted by
+<code>(-u_i, task_id, job_id)</code>; each outer pass adds <b>at most one segment per job</b>, and the
+outer loop repeats until nothing more can be added. Three cases, tried in order:</p>
+<table>
+<tr><th>Case</th><th>Condition</th><th>Action</th></tr>
+<tr><td><b>(i)</b> add outright</td>
+    <td><code>min_slack &ge; add_time</code> AND <code>E_slack &ge; add_energy</code></td>
+    <td>commit; nothing else disturbed</td></tr>
+<tr><td><b>(ii.A)</b> raise j*'s frequency</td>
+    <td>timing blocks, energy available</td>
+    <td>step <code>j*</code> up one level to shrink its execution time, then full
+        <code>check_all_timing</code></td></tr>
+<tr><td><b>(ii.B)</b> global energy donation</td>
+    <td>energy blocks, timing available</td>
+    <td>lower <em>other</em> jobs' frequencies to fund it &mdash; see below</td></tr>
+</table>
+<p>Case ii.B was substantially widened on 22 August. Donors are drawn from <b>all processors</b>
+(energy is a global budget, so the old same-processor restriction was arbitrary), the old
+"donor must have lower utility rate" rule was removed (downshifting costs the donor <b>zero</b>
+utility, so it guarded a cost that does not exist), and <b>several donors</b> may contribute until the
+segment becomes affordable. Donors are ranked by <b>time paid per unit energy freed</b>; any donor at
+or below <code>f*</code> is skipped; all donors are reverted if the final DBF check fails.</p>
+
+<h3>Phase 6 &mdash; Best-first pairwise swap</h3>
+<ol>
+<li><b>Search</b> every (giver, receiver) pair &mdash; giver has <code>&ge;1</code> active segment,
+    receiver has <code>&lt; N_seg</code>. With the giver's last segment tentatively removed, require
+    <code>net = u_recv*e_recv_next - u_give*e_give_last &gt; 0</code>, the energy balance
+    <code>E_freed - E_cost &le; E_slack</code>, and the receiver's timing
+    <code>min_slack &ge; add_time</code>.</li>
+<li><b>Execute</b> the highest-net-gain swap; re-verify with full <code>check_all_timing</code>.</li>
+<li><b>Fill pass</b> &mdash; re-run Phase 5 on whatever the swap freed.</li>
+<li>Repeat until no improving swap exists.</li>
+</ol>
+<p>Swaps may cross processors, since energy is global: dropping a low-value segment on P0 can fund a
+high-value one on P1.</p>
+
+<h3>Phase 6b &mdash; Frequency&harr;segment trade (v5b / claudeoptimal)</h3>
+<p>Added 22 August. Two resources are scarce &mdash; energy (global) and time (per-processor DBF
+slack) &mdash; and frequency is the exchange rate between them. For a segment of work <code>w</code>
+on task <code>i</code> at frequency <code>f</code> the marginal rates are independent of
+<code>w</code>:</p>
+<pre>utility per ENERGY = u_i / g(f)        g(f) = alpha/f + beta*f^2
+utility per TIME   = u_i * f</pre>
+<p>Shadow prices are read off the current solution each round &mdash; <b>no tuned constants</b>:</p>
+<pre>lambda = max u_i/g(f)  over segments blocked ONLY by energy
+mu     = max u_i*f     over segments blocked ONLY by time
+
+accept a downshift  iff  lambda * dE  >  mu * dT</pre>
+<p>Then Phase 5 is re-run to spend the freed energy. The phase keeps a best-so-far snapshot and
+restores it unless utility <em>strictly</em> improves, so it can never return a worse schedule than it
+was handed &mdash; the worst case is a no-op. It never crosses <code>f*</code> (requires
+<code>dE &gt; 0</code>), and every move is DBF-verified.</p>
+
+<h3>Phase 7 &mdash; Double-giver swap (claudeoptimal)</h3>
+<p>Some receivers are too expensive for <em>any</em> single-giver swap. Phase 7 removes the last
+segment of <b>two</b> givers at once to open enough combined timing + energy room for <b>one</b>
+receiver. The giver pool is sorted by <b>ascending marginal utility</b> (cheapest destroyed first) and
+truncated to <code>_MAX_DG_CANDIDATES = 20</code>; without the cap the pair enumeration is
+O(n&sup3;).</p>
+
+<h3>Phase 8 &mdash; Iterated greedy (claudeoptimal)</h3>
+<p>Escapes optima no local move can reach. Each of <code>_IG_ITERATIONS = 8</code> rounds:</p>
+<ol>
+<li><b>Score</b> every active segment by utility per unit execution time:
+    <code>density = u_i*(cum[k]-cum[k-1]) / add_time</code>, <code>add_time = (cum[k]-cum[k-1])/f_z</code>.</li>
+<li><b>Destroy</b> the lowest-density <code>_IG_DESTROY_FRAC = 33%</code> &mdash; the segments occupying
+    the most schedule for the least value.</li>
+<li><b>Reconstruct</b> with Phase 5 then Phase 6.</li>
+<li><b>Accept</b> only on strict utility improvement; otherwise restore the incumbent.</li>
+</ol>
+<div class="callout bad"><strong>Bug fixed 22 August.</strong> Phase 8 snapshotted and rolled back
+<code>seg_k</code> but <b>not</b> <code>freq_idx</code> &mdash; even though the Phase 5 and Phase 6
+calls inside its reconstruct step both mutate frequencies. A rejected round therefore left an
+inconsistent <code>(seg_k, freq_idx)</code> pair whose energy could exceed the budget. The defect was
+latent while case ii.B rarely moved frequencies; widening ii.B exposed it immediately
+(claudeoptimal feasibility fell 84 &rarr; 79 until <code>freq_idx</code> was restored too).</div>
+
+<h2>8 &middot; The defect: Phase 3 tested feasibility at the wrong frequency</h2>
 <p>The original failures were not gradual degradation &mdash; they were all-or-nothing, and lined up
 exactly with one condition: <strong>does the mandatory workload fit the budget at f_max?</strong></p>
 <pre>rho_0.5.py            B= 34.50   E_mand@f_max= 46.00   E_mand@cheapest= 22.04
@@ -184,7 +365,7 @@ fits only when</p>
 <p>so shrinking the optional part shrinks the budget while leaving the mandatory cost unchanged: at
 &beta;=0.2 the threshold is &asymp;0.83, above the &rho;=0.7 used here; at &beta;=0.8 it falls to
 &asymp;0.56 and passed. Post-fix the anomaly is gone &mdash; every &beta; value now solves 5/5.</p>
-<h2>8 &middot; What to take from this</h2>
+<h2>9 &middot; What to take from this</h2>
 <ol>
 <li><strong>The heuristics are far more robust than the pre-fix numbers suggested.</strong> Their
 apparent schedulability collapse was an artifact of one mis-placed test, not the algorithm.
