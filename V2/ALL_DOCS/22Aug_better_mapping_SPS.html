@@ -1,0 +1,168 @@
+<title>USRT - Better SPS Mapping (22 Aug)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+ :root{--bg:#f7f7f5;--panel:#fff;--ink:#1a1a18;--muted:#5c5c56;--line:#e3e2dc;
+  --accent:#1f4d7a;--accent2:#7a1f1f;--code-bg:#f2f1ec;--ok:#1f6b45;--warn:#9a6a12;--bad:#a33;
+  --mono:"SFMono-Regular",Consolas,monospace;--serif:Georgia,serif;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+ @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#16161a;--panel:#1e1e24;--ink:#e9e8e2;--muted:#a7a69e;--line:#31313a;
+  --accent:#8ab4e0;--accent2:#e08a8a;--code-bg:#24242b;--ok:#7fd0a3;--warn:#e0bd6a;--bad:#e08a8a;}}
+ *{box-sizing:border-box}
+ body{background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.6;margin:0}
+ .wrap{max-width:1040px;margin:0 auto;padding:2.2rem 1.3rem 5rem}
+ h1{font-family:var(--serif);font-size:1.95rem;margin:.2rem 0 .4rem}
+ h2{font-family:var(--serif);font-size:1.38rem;margin:2.2rem 0 .5rem;padding-top:1rem;border-top:1px solid var(--line)}
+ h3{font-size:1.04rem;margin:1.4rem 0 .4rem}
+ .kicker{font-family:var(--mono);font-size:.72rem;letter-spacing:.15em;text-transform:uppercase;color:var(--accent)}
+ .sub{color:var(--muted);max-width:76ch}
+ code{font-family:var(--mono);font-size:.86em;background:var(--code-bg);padding:.08em .35em;border-radius:4px}
+ pre{background:var(--code-bg);border:1px solid var(--line);border-radius:8px;padding:.8rem 1rem;
+     overflow-x:auto;font-family:var(--mono);font-size:.78rem;line-height:1.5}
+ table{border-collapse:collapse;width:100%;margin:.8rem 0;font-size:.83rem;display:block;overflow-x:auto}
+ th,td{border:1px solid var(--line);padding:.42rem .55rem;text-align:right;white-space:nowrap}
+ th:first-child,td:first-child{text-align:left}
+ th{background:var(--code-bg);font-weight:650}
+ .callout{border-left:4px solid var(--accent);background:var(--panel);padding:.75rem 1rem;
+          border-radius:0 8px 8px 0;margin:1rem 0}
+ .callout.ok{border-left-color:var(--ok)} .callout.bad{border-left-color:var(--bad)}
+ .callout.warn{border-left-color:var(--warn)}
+ .muted{color:var(--muted);font-size:.83rem}
+ .ok{color:var(--ok);font-weight:650}.bad{color:var(--bad);font-weight:650}.warn{color:var(--warn);font-weight:650}
+ hr{border:none;border-top:1px solid var(--line);margin:1.8rem 0}
+</style>
+<div class="wrap">
+<div class="kicker">USRT &middot; V2 &middot; branch: mapping-strategies</div>
+<h1>Better SPS Mapping &mdash; 22 August</h1>
+<p class="sub">The gap decomposition showed the <strong>mapping</strong>, not the frequency/segment
+search, is the dominant error at tight budgets. Phase&nbsp;1c (v6) attacks it but costs ~25 full
+pipelines. This is an attempt to buy the same quality far more cheaply, measured on the identical
+90 test cases.</p>
+<h2>1 &middot; Headline</h2>
+<div class="callout"><strong>v7 reaches 3.97% mean gap in
+15.1 ms, against v6's 3.52% in
+28.8 ms.</strong> Roughly <b>half the cost for ~0.45 points more gap</b> &mdash;
+a real trade, not a clear win. Both still beat ILP v2 (4.99%), which is exact given
+the SPS mapping, because both improve the mapping ILP v2 is stuck with.</div>
+<table>
+<tr><th>Model</th><th>mean gap</th><th>median</th><th>optimal</th><th>feasible</th><th>runtime</th></tr>
+<tr><td>greedy_SPS_Baseline</td><td class="bad">51.44%</td><td>53.48%</td><td>3/50</td><td>50/90</td><td>0.66 ms</td></tr>
+<tr><td>heuristic v5b</td><td class="warn">10.77%</td><td>7.27%</td><td>12/50</td><td>83/90</td><td>1.69 ms</td></tr>
+<tr><td>claudeoptimal</td><td class="warn">9.58%</td><td>5.49%</td><td>13/50</td><td>84/90</td><td>3.92 ms</td></tr>
+<tr><td>ILP v2 (exact, given SPS)</td><td class="ok">4.99%</td><td>1.54%</td><td>20/50</td><td>84/90</td><td>23.62 ms</td></tr>
+<tr><td>heuristic v6 (Phase 1c)</td><td class="ok">3.52%</td><td>0.15%</td><td>25/50</td><td>84/90</td><td>28.85 ms</td></tr>
+<tr><td>heuristic v7 (multi-start)</td><td class="ok">3.97%</td><td>0.46%</td><td>24/50</td><td>84/90</td><td>15.08 ms</td></tr>
+</table>
+<p class="muted">Gaps are per-instance vs ILP v1 over the 50 instances every model solved
+(the naive baseline solves only 50/90, which sets that intersection).</p>
+<table>
+<tr><th>Head-to-head</th><th>v7 better</th><th>equal</th><th>v7 worse</th></tr>
+<tr><td>v7 vs v6</td><td>6</td><td>34</td><td class="bad">10</td></tr>
+<tr><td>v7 vs v5b</td><td class="ok">31</td><td>19</td><td class="ok">0</td></tr>
+</table>
+<div class="callout ok"><strong>v7 never loses to v5b</strong> &mdash; 31 better, 19 equal,
+<b>0 worse</b> &mdash; while costing under 10&times; less than v6.</div>
+<h2>2 &middot; What v7 does</h2>
+<p>The reframe that drove the design: <b>Phase 1c's expense is the SCORING, not the search.</b>
+It examines only <code>J&times;(P&minus;1)</code> single-job moves &mdash; fewer candidates than
+Phase&nbsp;1b considers &mdash; but scores each by running the entire downstream pipeline
+(1.11&nbsp;ms), ~25 times. So the lever is not "search less"; it is "spend those evaluations on
+better candidates".</p>
+
+<h3>Phase 1M &mdash; multi-start</h3>
+<p>Build several <b>structurally different</b> mappings and score each with exactly one pipeline:</p>
+<table>
+<tr><th>Candidate</th><th>What it is</th></tr>
+<tr><td><code>sps</code></td><td>Quantum SPS, as today</td></tr>
+<tr><td><code>sps+refine2b</code></td><td>SPS + Refine Mapping 2b (v5b's mapping)</td></tr>
+<tr><td><code>sps+budget</code></td><td>SPS + budget-aware refine (v6's Phase 1b&prime;)</td></tr>
+<tr><td><code>wfd</code></td><td><b>Worst-Fit Decreasing</b> &mdash; also exactly the mapping the
+    paper's &sect;V.B "Heur1.0/Baseline" prescribes</td></tr>
+<tr><td><code>ffd</code> / <code>bfd</code></td><td>First-Fit / Best-Fit Decreasing</td></tr>
+<tr><td><code>donor</code></td><td>deliberately CONCENTRATES utility density &mdash; low-value jobs
+    segregated onto donor cores that can run slowly without costing optional work</td></tr>
+</table>
+<p>Five structurally different mappings explore far more than twenty-five single-job moves away from
+one basin. Every candidate is DBF-verified before scoring, so an infeasible mapping can never be
+returned.</p>
+<div class="callout"><strong>The multi-start justified itself immediately.</strong> On
+<code>testcase.py</code>: <code>sps</code> 222.24, <code>sps+refine2b</code> 227.33,
+<code>sps+budget</code> 227.51, <b><code>wfd</code> 234.54</b>, <code>ffd</code>/<code>bfd</code>
+178.80, <code>donor</code> 207.23. Plain <b>WFD beat every SPS variant</b> &mdash; the basin SPS
+lands in is not always the best one, and no amount of local search from SPS would have found it.</div>
+
+<h3>Phase 1R &mdash; guided repair</h3>
+<p>Rather than trying all <code>J&times;(P&minus;1)</code> moves blindly, diagnose <em>why</em> a
+processor still has unscheduled optional utility:</p>
+<pre>for each processor, classify each blocked segment:
+    min_slack &lt; add_time   -> TIME-blocked
+    E_slack   &lt; add_energy -> ENERGY-blocked
+
+target  = processor with the most TIME-blocked utility
+move    = its LOWEST utility-density job -> the least congested processor
+skip    = ENERGY-blocked processors entirely</pre>
+<div class="callout"><strong>The skip is the point.</strong> Energy is a <em>global</em> budget, so
+no reassignment can create any &mdash; a processor blocked on energy cannot be helped by moving jobs
+around. Blind local search spends most of its evaluations on exactly those processors.</div>
+<h2>3 &middot; A negative result worth recording</h2>
+<div class="callout bad"><strong>Adding a short local search on top of the multi-start winner did not
+pay.</strong> A 10-move, 1-round search raised the cost from <b>14.0 ms to 27.9 ms</b> &mdash;
+erasing the entire speed advantage &mdash; while the gap stayed <em>worse</em> than v6
+(5.10% vs 4.77%). Starting from the best of seven structurally different mappings, extra single-job
+moves buy almost nothing: the diversity has already been spent. It is disabled in the code
+(<code>LS_ROUNDS = 0</code>) with the measurement recorded alongside it.</div>
+<p>This is the same lesson as the LP experiment: a better-informed <em>starting</em> mapping helps,
+but grinding local moves around any single mapping has sharply diminishing returns.</p>
+
+<h3>A bug this exposed</h3>
+<p>Setting <code>LS_ROUNDS = 0</code> made every v7 run crash &mdash; 84 error rows. The cause was a
+latent defect in <code>mapping_local_search</code> (written for v6): it returns
+<code>dict(rounds=rnd + 1, ...)</code> referencing the loop variable, which is undefined when the
+loop body never executes. Dormant while <code>max_rounds</code> was always &ge; 1. Fixed.</p>
+<h2>4 &middot; Energy budget &rho;</h2>
+<table>
+<tr><th>value</th><th>n</th><th>ILP v1</th><th>v5b</th><th>claudeoptimal</th><th>ILP v2</th><th>v6</th><th>v7</th><th>v6 gap</th><th>v7 gap</th></tr>
+<tr><td><code>0.7</code></td><td>5</td><td>63.68</td><td class="muted">53.71</td><td class="muted">53.81</td><td class="muted">57.72</td><td>61.87</td><td><b>59.51</b></td><td class="ok">2.8%</td><td class="warn">6.6%</td></tr>
+<tr><td><code>0.8</code></td><td>5</td><td>66.00</td><td class="muted">60.42</td><td class="muted">60.43</td><td class="muted">63.39</td><td>66.00</td><td><b>66.00</b></td><td class="ok">0.0%</td><td class="ok">0.0%</td></tr>
+<tr><td><code>0.9</code></td><td>5</td><td>66.00</td><td class="muted">63.48</td><td class="muted">64.18</td><td class="muted">65.94</td><td>66.00</td><td><b>66.00</b></td><td class="ok">0.0%</td><td class="ok">0.0%</td></tr>
+<tr><td><code>1</code></td><td>5</td><td>66.00</td><td class="muted">64.13</td><td class="muted">65.94</td><td class="muted">65.94</td><td>66.00</td><td><b>66.00</b></td><td class="ok">0.0%</td><td class="ok">0.0%</td></tr>
+</table>
+<h2>5 &middot; Mandatory utilisation &alpha;</h2>
+<table>
+<tr><th>value</th><th>n</th><th>ILP v1</th><th>v5b</th><th>claudeoptimal</th><th>ILP v2</th><th>v6</th><th>v7</th><th>v6 gap</th><th>v7 gap</th></tr>
+<tr><td><code>0.2</code></td><td>5</td><td>100.96</td><td class="muted">93.99</td><td class="muted">94.36</td><td class="muted">99.25</td><td>94.36</td><td><b>94.36</b></td><td class="warn">6.5%</td><td class="warn">6.5%</td></tr>
+<tr><td><code>0.3</code></td><td>5</td><td>90.88</td><td class="muted">80.35</td><td class="muted">84.40</td><td class="muted">89.20</td><td>85.31</td><td><b>85.31</b></td><td class="warn">6.1%</td><td class="warn">6.1%</td></tr>
+<tr><td><code>0.4</code></td><td>5</td><td>77.00</td><td class="muted">67.49</td><td class="muted">73.43</td><td class="muted">75.89</td><td>75.54</td><td><b>75.54</b></td><td class="ok">1.9%</td><td class="ok">1.9%</td></tr>
+<tr><td><code>0.5</code></td><td>5</td><td>63.68</td><td class="muted">53.71</td><td class="muted">53.81</td><td class="muted">57.72</td><td>61.87</td><td><b>59.51</b></td><td class="ok">2.8%</td><td class="warn">6.6%</td></tr>
+</table>
+<h2>6 &middot; Optional utilisation &beta;</h2>
+<table>
+<tr><th>value</th><th>n</th><th>ILP v1</th><th>v5b</th><th>claudeoptimal</th><th>ILP v2</th><th>v6</th><th>v7</th><th>v6 gap</th><th>v7 gap</th></tr>
+<tr><td><code>0.6</code></td><td>5</td><td>70.94</td><td class="muted">62.24</td><td class="muted">59.55</td><td class="muted">63.69</td><td>69.47</td><td><b>69.35</b></td><td class="ok">2.1%</td><td class="ok">2.2%</td></tr>
+<tr><td><code>0.8</code></td><td>5</td><td>87.33</td><td class="muted">72.26</td><td class="muted">72.28</td><td class="muted">76.70</td><td>79.28</td><td><b>82.05</b></td><td class="warn">9.2%</td><td class="warn">6.0%</td></tr>
+</table>
+<h2>7 &middot; Verdict</h2>
+<ol>
+<li><strong>Multi-start is the right idea; it is not a free win.</strong> v7 gets within
+3.97% at 15.1 ms versus v6's
+3.52% at 28.8 ms. If runtime matters &mdash; and it is
+the entire argument for a heuristic over an ILP &mdash; v7 is the better engineering choice. If only
+quality matters, v6 still edges it.</li>
+<li><strong>v7 dominates v5b outright</strong> (31 better, 19 equal, 0 worse) at under
+10&times; v6's cost, so it is a strictly better default than the current v5b.</li>
+<li><strong>WFD earns its place twice</strong> &mdash; it won the multi-start on
+<code>testcase.py</code>, and it is the mapping the paper's unimplemented &sect;V.B baseline
+requires. That gap is now closed as a side effect.</li>
+<li><strong>Diminishing returns are real.</strong> Local search on top of multi-start did not pay;
+neither did LP-rounded mappings earlier. Both point the same way: the mapping sub-problem is
+genuinely hard, and the remaining gap will not fall to more search around one incumbent.</li>
+<li><strong>Still to try:</strong> sizing the donor/harvester split from the measured energy deficit
+rather than defaulting to one core; and incremental evaluation (a single-job move perturbs exactly
+two processors, yet the whole pipeline is re-run), which would cut the cost of every mapping stage
+at once.</li>
+</ol>
+<hr>
+<p class="muted">Generated 2026-08-22 on branch <code>mapping-strategies</code>; 90 instances,
+identical to the 22 Aug batch. Baseline snapshot kept at <code>V2/baseline_22aug/</code>.
+Reproduce: <code>python run_models.py dry_run_tc --models heuristic --heur v7</code></p>
+</div>

@@ -210,6 +210,7 @@ def mapping_local_search(mapping, evaluate, N_prc, max_rounds=3,
 
     jobs = sorted(best_map.keys())
     moves = 0
+    rnd = -1                      # max_rounds may be 0: keep `rnd` defined
     for rnd in range(max_rounds):
         cand_best, cand_u = None, best_u
         tried = 0

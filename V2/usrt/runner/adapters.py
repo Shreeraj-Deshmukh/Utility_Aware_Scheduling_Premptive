@@ -255,7 +255,7 @@ def run_model(name, processors, tasks, B, time_limit=30, heur_variant="v5b",
             return run_ilp_v2(processors, tasks, B, time_limit, mip_gap)
         if name == "greedy_sps_baseline":
             return run_baseline(processors, tasks, B)
-        if name in ("heuristic", "heuristic_v6", "heuristic_v5b", "heuristic_v5a", "heuristic_v4",
+        if name in ("heuristic", "heuristic_v7", "heuristic_v6", "heuristic_v5b", "heuristic_v5a", "heuristic_v4",
                     "heuristic_v3", "heuristic_claudeoptimal"):
             variant = heur_variant if name == "heuristic" else name.split("_", 1)[1]
             return run_heuristic(processors, tasks, B, variant=variant)
