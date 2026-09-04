@@ -42,6 +42,10 @@ GRID_U_MAND  = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
 GRID_U_OPT   = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
 GRID_RHO     = [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
 GRID_XI      = [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+# Number of discrete DVFS levels.  The paper FIXES this at 5; sweeping it asks
+# how much the heuristics depend on a fine frequency grid.  n_frq=2 is the
+# coarse-DVFS extreme (f_max plus one other level).
+GRID_N_FRQ   = [2, 3, 5, 8, 12]
 
 FACTORS = {
     "n_prc":         GRID_N_PRC,
@@ -50,6 +54,7 @@ FACTORS = {
     "u_opt_factor":  GRID_U_OPT,
     "rho":           GRID_RHO,
     "xi":            GRID_XI,
+    "n_frq":         GRID_N_FRQ,
 }
 
 

@@ -1,0 +1,174 @@
+<title>USRT OFAT Test-case Run - 4 Sept</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+ :root{--bg:#f7f7f5;--panel:#fff;--ink:#1a1a18;--muted:#5c5c56;--line:#e3e2dc;
+  --accent:#1f4d7a;--code-bg:#f2f1ec;--ok:#1f6b45;--warn:#9a6a12;--bad:#a33;
+  --mono:"SFMono-Regular",Consolas,monospace;--serif:Georgia,serif;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+ @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#16161a;--panel:#1e1e24;--ink:#e9e8e2;--muted:#a7a69e;--line:#31313a;
+  --accent:#8ab4e0;--code-bg:#24242b;--ok:#7fd0a3;--warn:#e0bd6a;--bad:#e08a8a;}}
+ *{box-sizing:border-box}
+ body{background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.6;margin:0}
+ .wrap{max-width:1120px;margin:0 auto;padding:2.2rem 1.3rem 5rem}
+ h1{font-family:var(--serif);font-size:1.95rem;margin:.2rem 0 .4rem}
+ h2{font-family:var(--serif);font-size:1.35rem;margin:2.2rem 0 .5rem;padding-top:1rem;border-top:1px solid var(--line)}
+ h3{font-size:1.02rem;margin:1.4rem 0 .35rem}
+ .kicker{font-family:var(--mono);font-size:.72rem;letter-spacing:.15em;text-transform:uppercase;color:var(--accent)}
+ .sub{color:var(--muted);max-width:78ch}
+ code{font-family:var(--mono);font-size:.86em;background:var(--code-bg);padding:.08em .35em;border-radius:4px}
+ pre{background:var(--code-bg);border:1px solid var(--line);border-radius:8px;padding:.75rem 1rem;
+     overflow-x:auto;font-family:var(--mono);font-size:.78rem;line-height:1.5}
+ table{border-collapse:collapse;width:100%;margin:.7rem 0;font-size:.8rem;display:block;overflow-x:auto}
+ th,td{border:1px solid var(--line);padding:.36rem .5rem;text-align:right;white-space:nowrap}
+ th:first-child,td:first-child{text-align:left}
+ th{background:var(--code-bg);font-weight:650}
+ .callout{border-left:4px solid var(--accent);background:var(--panel);padding:.72rem 1rem;
+          border-radius:0 8px 8px 0;margin:1rem 0}
+ .callout.ok{border-left-color:var(--ok)}.callout.bad{border-left-color:var(--bad)}
+ .callout.warn{border-left-color:var(--warn)}
+ .muted{color:var(--muted);font-size:.82rem}
+ .ok{color:var(--ok);font-weight:650}.bad{color:var(--bad);font-weight:650}.warn{color:var(--warn);font-weight:650}
+ hr{border:none;border-top:1px solid var(--line);margin:1.8rem 0}
+</style>
+<div class="wrap"><div class="kicker">USRT &middot; V2 &middot; OFAT campaign</div>
+<h1>OFAT Test-case Run &mdash; 4 September</h1>
+<p class="sub">One-factor-at-a-time sweep over every simulation parameter, 100 test cases per configuration, across two instance-size tiers and all ten models. Each factor varies while every other parameter holds its default.</p>
+<h2>1 &middot; Experiment design</h2><table><tr><th>Factor</th><th>Grid</th><th>configs</th><th>sets</th><th>instances/tier</th></tr>
+<tr><td>Energy budget &rho;</td><td class="muted">0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1</td><td>9</td><td>100</td><td>900</td></tr>
+<tr><td>Mandatory utilisation &alpha;</td><td class="muted">0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9</td><td>9</td><td>100</td><td>900</td></tr>
+<tr><td>Optional utilisation &beta;</td><td class="muted">0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9</td><td>9</td><td>100</td><td>900</td></tr>
+<tr><td>Processor count N<sub>prc</sub></td><td class="muted">2, 4, 8, 16</td><td>4</td><td>100</td><td>400</td></tr>
+<tr><td>Task count N<sub>tsk</sub></td><td class="muted">4, 6, 8, 10, 12</td><td>5</td><td>100</td><td>500</td></tr>
+<tr><td>Frequency levels N<sub>frq</sub></td><td class="muted">2, 3, 5, 8, 12</td><td>5</td><td>100</td><td>500</td></tr>
+<tr><td>ACET spread &xi;</td><td class="muted">0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9</td><td>7</td><td>100</td><td>700</td></tr>
+</table>
+<div class="callout warn"><strong>Two documented generator caveats appear in this run.</strong> The <code>n_prc</code> sweep scales <code>n_tsk</code> with the core count (8&rarr;12&rarr;23), because U_M = &alpha;&middot;N_prc cannot fit in a fixed task count &mdash; so that row is "effect of cores <em>with a proportionally larger task set</em>". And at <code>&alpha;=0.1/0.2</code> the per-task &delta; cap is arithmetically impossible (it needs &beta; &le; 2&alpha;/(1&minus;&alpha;)), so those configurations carry <code>donate_ok=0</code>.</div>
+<div class="callout bad"><strong>v3, v4 and v5a lack Phase 6b.</strong> Their columns therefore conflate a mapping change with a missing phase, and are not directly comparable with v5b/v6/v7/claudeopt. Audit issue B2, still open.</div>
+<h2>2 &middot; Tier S &mdash; ILP-tractable</h2>
+<p class="sub"><code>n_prc=2, n_tsk=5, k_max=2, max_seg=3</code> &mdash; J from 8 to 68 (median 12). Gaps measured against <b>ILP v1</b>.</p>
+<table><tr><th>Model</th><th>mean gap</th><th>median</th><th>best</th><th>worst</th><th>optimal</th><th>feasible</th><th>runtime</th></tr>
+<tr><td>baseline</td><td class="bad">72.85%</td><td>84.62%</td><td>0.0%</td><td>99.8%</td><td>46/3500</td><td>3500/4800</td><td>2.50 ms</td></tr>
+<tr><td>v3</td><td class="bad">20.49%</td><td>18.72%</td><td>0.0%</td><td>85.6%</td><td>363/3500</td><td>4398/4800</td><td>5.29 ms</td></tr>
+<tr><td>v4</td><td class="warn">19.22%</td><td>17.27%</td><td>0.0%</td><td>85.6%</td><td>371/3500</td><td>4398/4800</td><td>5.49 ms</td></tr>
+<tr><td>v5a</td><td class="warn">19.04%</td><td>17.26%</td><td>0.0%</td><td>85.6%</td><td>411/3500</td><td>4400/4800</td><td>5.96 ms</td></tr>
+<tr><td>v5b</td><td class="warn">18.52%</td><td>16.77%</td><td>0.0%</td><td>85.6%</td><td>459/3500</td><td>4405/4800</td><td>6.69 ms</td></tr>
+<tr><td>claudeopt</td><td class="warn">16.70%</td><td>13.24%</td><td>0.0%</td><td>85.6%</td><td>455/3500</td><td>4398/4800</td><td>16.74 ms</td></tr>
+<tr><td>v6</td><td class="warn">7.51%</td><td>3.04%</td><td>-0.0%</td><td>85.6%</td><td>1167/3500</td><td>4398/4800</td><td>172.10 ms</td></tr>
+<tr><td>v7</td><td class="warn">8.32%</td><td>4.53%</td><td>-0.0%</td><td>85.6%</td><td>1018/3500</td><td>4438/4800</td><td>57.46 ms</td></tr>
+<tr><td>ILP v2</td><td class="warn">10.24%</td><td>7.08%</td><td>-0.0%</td><td>85.6%</td><td>795/3500</td><td>4400/4800</td><td>57.58 ms</td></tr>
+<tr><td>ILP v1</td><td class="ok">0.00%</td><td>0.00%</td><td>0.0%</td><td>0.0%</td><td>3500/3500</td><td>4466/4800</td><td>988.15 ms</td></tr>
+</table><p class="muted">n=3500 instances solved by every model listed.</p>
+<h3>Energy budget &rho;</h3><table><tr><th>value</th><th>n</th><th>ILP v1</th><th>baseline</th><th>v3</th><th>v4</th><th>v5a</th><th>v5b</th><th>claudeopt</th><th>v6</th><th>v7</th><th>ILP v2</th></tr>
+<tr><td><code>0.7</code></td><td>100</td><td class="muted">59.47</td><td class="bad">87.9%</td><td class="bad">24.7%</td><td class="bad">23.1%</td><td class="bad">22.1%</td><td class="bad">21.4%</td><td class="bad">20.0%</td><td class="warn">8.6%</td><td class="warn">9.4%</td><td class="warn">12.4%</td></tr>
+<tr><td><code>0.8</code></td><td>100</td><td class="muted">61.50</td><td class="bad">52.7%</td><td class="warn">14.6%</td><td class="warn">13.6%</td><td class="warn">13.8%</td><td class="warn">13.2%</td><td class="warn">11.6%</td><td class="ok">3.5%</td><td class="ok">3.7%</td><td class="warn">5.0%</td></tr>
+<tr><td><code>0.9</code></td><td>100</td><td class="muted">61.69</td><td class="bad">24.0%</td><td class="warn">8.4%</td><td class="warn">7.7%</td><td class="warn">6.8%</td><td class="warn">6.2%</td><td class="warn">6.5%</td><td class="ok">0.3%</td><td class="ok">0.4%</td><td class="ok">3.5%</td></tr>
+<tr><td><code>1</code></td><td>100</td><td class="muted">61.69</td><td class="warn">5.8%</td><td class="warn">5.3%</td><td class="ok">4.7%</td><td class="ok">3.9%</td><td class="ok">3.6%</td><td class="ok">4.2%</td><td class="ok">0.0%</td><td class="ok">0.0%</td><td class="ok">3.4%</td></tr>
+</table><p class="muted">cells are % gap vs ILP v1; the ILP v1 column is mean utility over the n instances.</p>
+<h3>Mandatory utilisation &alpha;</h3><table><tr><th>value</th><th>n</th><th>ILP v1</th><th>baseline</th><th>v3</th><th>v4</th><th>v5a</th><th>v5b</th><th>claudeopt</th><th>v6</th><th>v7</th><th>ILP v2</th></tr>
+<tr><td><code>0.1</code></td><td>100</td><td class="muted">109.92</td><td class="bad">28.2%</td><td class="ok">4.1%</td><td class="ok">3.7%</td><td class="ok">4.0%</td><td class="ok">2.8%</td><td class="ok">2.8%</td><td class="ok">1.8%</td><td class="ok">1.8%</td><td class="ok">0.3%</td></tr>
+<tr><td><code>0.2</code></td><td>100</td><td class="muted">92.91</td><td class="bad">35.0%</td><td class="warn">6.3%</td><td class="warn">5.8%</td><td class="warn">6.6%</td><td class="warn">6.0%</td><td class="ok">4.6%</td><td class="ok">2.9%</td><td class="ok">3.2%</td><td class="ok">1.8%</td></tr>
+<tr><td><code>0.3</code></td><td>100</td><td class="muted">80.31</td><td class="bad">45.3%</td><td class="warn">10.1%</td><td class="warn">9.2%</td><td class="warn">7.9%</td><td class="warn">7.1%</td><td class="warn">7.4%</td><td class="ok">3.6%</td><td class="ok">4.0%</td><td class="ok">3.1%</td></tr>
+<tr><td><code>0.4</code></td><td>100</td><td class="muted">70.96</td><td class="bad">62.4%</td><td class="warn">14.0%</td><td class="warn">13.5%</td><td class="warn">13.6%</td><td class="warn">12.4%</td><td class="warn">11.1%</td><td class="warn">5.6%</td><td class="warn">6.1%</td><td class="warn">5.5%</td></tr>
+<tr><td><code>0.5</code></td><td>100</td><td class="muted">59.47</td><td class="bad">87.9%</td><td class="bad">24.7%</td><td class="bad">23.1%</td><td class="bad">22.1%</td><td class="bad">21.4%</td><td class="bad">20.0%</td><td class="warn">8.6%</td><td class="warn">9.4%</td><td class="warn">12.4%</td></tr>
+</table><p class="muted">cells are % gap vs ILP v1; the ILP v1 column is mean utility over the n instances.</p>
+<h3>Optional utilisation &beta;</h3><table><tr><th>value</th><th>n</th><th>ILP v1</th><th>baseline</th><th>v3</th><th>v4</th><th>v5a</th><th>v5b</th><th>claudeopt</th><th>v6</th><th>v7</th><th>ILP v2</th></tr>
+<tr><td><code>0.5</code></td><td>100</td><td class="muted">59.47</td><td class="bad">87.9%</td><td class="bad">24.7%</td><td class="bad">23.1%</td><td class="bad">22.1%</td><td class="bad">21.4%</td><td class="bad">20.0%</td><td class="warn">8.6%</td><td class="warn">9.4%</td><td class="warn">12.4%</td></tr>
+<tr><td><code>0.6</code></td><td>100</td><td class="muted">67.34</td><td class="bad">73.0%</td><td class="bad">23.3%</td><td class="bad">22.3%</td><td class="bad">22.0%</td><td class="bad">21.4%</td><td class="warn">19.5%</td><td class="warn">8.7%</td><td class="warn">10.2%</td><td class="warn">12.8%</td></tr>
+<tr><td><code>0.7</code></td><td>100</td><td class="muted">74.56</td><td class="bad">61.6%</td><td class="bad">22.4%</td><td class="bad">21.1%</td><td class="bad">21.9%</td><td class="bad">20.8%</td><td class="warn">18.2%</td><td class="warn">8.3%</td><td class="warn">9.2%</td><td class="warn">12.2%</td></tr>
+<tr><td><code>0.8</code></td><td>100</td><td class="muted">81.04</td><td class="bad">52.0%</td><td class="bad">22.1%</td><td class="bad">20.8%</td><td class="bad">21.5%</td><td class="bad">20.4%</td><td class="warn">18.1%</td><td class="warn">7.9%</td><td class="warn">8.9%</td><td class="warn">11.8%</td></tr>
+<tr><td><code>0.9</code></td><td>100</td><td class="muted">86.52</td><td class="bad">43.9%</td><td class="bad">21.8%</td><td class="warn">19.9%</td><td class="warn">19.5%</td><td class="warn">19.4%</td><td class="warn">17.7%</td><td class="warn">8.5%</td><td class="warn">9.1%</td><td class="warn">12.3%</td></tr>
+</table><p class="muted">cells are % gap vs ILP v1; the ILP v1 column is mean utility over the n instances.</p>
+<h3>Processor count N<sub>prc</sub></h3><table><tr><th>value</th><th>n</th><th>ILP v1</th><th>baseline</th><th>v3</th><th>v4</th><th>v5a</th><th>v5b</th><th>claudeopt</th><th>v6</th><th>v7</th><th>ILP v2</th></tr>
+<tr><td><code>2</code></td><td>100</td><td class="muted">59.47</td><td class="bad">87.9%</td><td class="bad">24.7%</td><td class="bad">23.1%</td><td class="bad">22.1%</td><td class="bad">21.4%</td><td class="bad">20.0%</td><td class="warn">8.6%</td><td class="warn">9.4%</td><td class="warn">12.4%</td></tr>
+<tr><td><code>4</code></td><td>100</td><td class="muted">104.43</td><td class="bad">85.7%</td><td class="bad">34.1%</td><td class="bad">33.2%</td><td class="bad">34.5%</td><td class="bad">33.4%</td><td class="bad">30.7%</td><td class="warn">13.0%</td><td class="warn">14.7%</td><td class="bad">22.3%</td></tr>
+<tr><td><code>8</code></td><td>100</td><td class="muted">215.55</td><td class="bad">83.9%</td><td class="bad">30.6%</td><td class="bad">30.0%</td><td class="bad">36.1%</td><td class="bad">35.9%</td><td class="bad">27.6%</td><td class="warn">19.6%</td><td class="bad">20.1%</td><td class="bad">21.6%</td></tr>
+<tr><td><code>16</code></td><td>100</td><td class="muted">427.26</td><td class="bad">83.0%</td><td class="bad">33.1%</td><td class="bad">32.0%</td><td class="bad">37.1%</td><td class="bad">36.1%</td><td class="bad">28.8%</td><td class="bad">24.1%</td><td class="bad">22.7%</td><td class="bad">23.2%</td></tr>
+</table><p class="muted">cells are % gap vs ILP v1; the ILP v1 column is mean utility over the n instances.</p>
+<h3>Task count N<sub>tsk</sub></h3><table><tr><th>value</th><th>n</th><th>ILP v1</th><th>baseline</th><th>v3</th><th>v4</th><th>v5a</th><th>v5b</th><th>claudeopt</th><th>v6</th><th>v7</th><th>ILP v2</th></tr>
+<tr><td><code>4</code></td><td>100</td><td class="muted">54.11</td><td class="bad">88.4%</td><td class="bad">26.5%</td><td class="bad">25.3%</td><td class="bad">25.7%</td><td class="bad">24.9%</td><td class="bad">21.5%</td><td class="warn">9.9%</td><td class="warn">10.1%</td><td class="warn">14.0%</td></tr>
+<tr><td><code>6</code></td><td>100</td><td class="muted">55.71</td><td class="bad">86.5%</td><td class="warn">19.4%</td><td class="warn">17.9%</td><td class="warn">17.7%</td><td class="warn">17.8%</td><td class="warn">15.0%</td><td class="warn">5.6%</td><td class="warn">6.7%</td><td class="warn">8.5%</td></tr>
+<tr><td><code>8</code></td><td>100</td><td class="muted">57.63</td><td class="bad">85.8%</td><td class="warn">15.6%</td><td class="warn">14.1%</td><td class="warn">13.5%</td><td class="warn">13.6%</td><td class="warn">12.0%</td><td class="ok">3.9%</td><td class="ok">4.8%</td><td class="warn">6.0%</td></tr>
+<tr><td><code>10</code></td><td>100</td><td class="muted">59.35</td><td class="bad">86.2%</td><td class="warn">10.2%</td><td class="warn">8.7%</td><td class="warn">9.1%</td><td class="warn">9.2%</td><td class="warn">7.1%</td><td class="ok">2.2%</td><td class="ok">3.1%</td><td class="ok">2.9%</td></tr>
+<tr><td><code>12</code></td><td>100</td><td class="muted">57.82</td><td class="bad">85.0%</td><td class="warn">9.9%</td><td class="warn">8.6%</td><td class="warn">8.2%</td><td class="warn">8.6%</td><td class="warn">6.8%</td><td class="ok">1.3%</td><td class="ok">3.0%</td><td class="ok">2.3%</td></tr>
+</table><p class="muted">cells are % gap vs ILP v1; the ILP v1 column is mean utility over the n instances.</p>
+<h3>Frequency levels N<sub>frq</sub></h3><table><tr><th>value</th><th>n</th><th>ILP v1</th><th>baseline</th><th>v3</th><th>v4</th><th>v5a</th><th>v5b</th><th>claudeopt</th><th>v6</th><th>v7</th><th>ILP v2</th></tr>
+<tr><td><code>2</code></td><td>100</td><td class="muted">44.37</td><td class="bad">83.9%</td><td class="bad">27.1%</td><td class="bad">24.4%</td><td class="bad">23.3%</td><td class="bad">23.0%</td><td class="bad">22.5%</td><td class="warn">8.8%</td><td class="warn">11.6%</td><td class="warn">12.8%</td></tr>
+<tr><td><code>3</code></td><td>100</td><td class="muted">51.25</td><td class="bad">86.2%</td><td class="bad">25.1%</td><td class="bad">23.6%</td><td class="bad">20.9%</td><td class="bad">20.9%</td><td class="bad">21.1%</td><td class="warn">7.3%</td><td class="warn">9.3%</td><td class="warn">11.8%</td></tr>
+<tr><td><code>5</code></td><td>100</td><td class="muted">59.47</td><td class="bad">87.9%</td><td class="bad">24.7%</td><td class="bad">23.1%</td><td class="bad">22.1%</td><td class="bad">21.4%</td><td class="bad">20.0%</td><td class="warn">8.6%</td><td class="warn">9.4%</td><td class="warn">12.4%</td></tr>
+<tr><td><code>8</code></td><td>100</td><td class="muted">57.28</td><td class="bad">87.9%</td><td class="bad">21.3%</td><td class="bad">20.1%</td><td class="bad">20.9%</td><td class="bad">21.3%</td><td class="warn">17.3%</td><td class="warn">5.6%</td><td class="warn">6.3%</td><td class="warn">10.5%</td></tr>
+<tr><td><code>12</code></td><td>100</td><td class="muted">59.17</td><td class="bad">87.7%</td><td class="bad">26.9%</td><td class="bad">26.0%</td><td class="bad">25.2%</td><td class="bad">24.8%</td><td class="bad">20.9%</td><td class="warn">11.9%</td><td class="warn">12.9%</td><td class="warn">7.7%</td></tr>
+</table><p class="muted">cells are % gap vs ILP v1; the ILP v1 column is mean utility over the n instances.</p>
+<h3>ACET spread &xi;</h3><table><tr><th>value</th><th>n</th><th>ILP v1</th><th>baseline</th><th>v3</th><th>v4</th><th>v5a</th><th>v5b</th><th>claudeopt</th><th>v6</th><th>v7</th><th>ILP v2</th></tr>
+<tr><td><code>0.3</code></td><td>100</td><td class="muted">59.47</td><td class="bad">87.9%</td><td class="bad">24.7%</td><td class="bad">23.1%</td><td class="bad">22.1%</td><td class="bad">21.4%</td><td class="bad">20.0%</td><td class="warn">8.6%</td><td class="warn">9.4%</td><td class="warn">12.4%</td></tr>
+<tr><td><code>0.4</code></td><td>100</td><td class="muted">59.47</td><td class="bad">87.9%</td><td class="bad">24.7%</td><td class="bad">23.1%</td><td class="bad">22.1%</td><td class="bad">21.4%</td><td class="bad">20.0%</td><td class="warn">8.6%</td><td class="warn">9.4%</td><td class="warn">12.4%</td></tr>
+<tr><td><code>0.5</code></td><td>100</td><td class="muted">59.47</td><td class="bad">87.9%</td><td class="bad">24.7%</td><td class="bad">23.1%</td><td class="bad">22.1%</td><td class="bad">21.4%</td><td class="bad">20.0%</td><td class="warn">8.6%</td><td class="warn">9.4%</td><td class="warn">12.4%</td></tr>
+<tr><td><code>0.6</code></td><td>100</td><td class="muted">59.47</td><td class="bad">87.9%</td><td class="bad">24.7%</td><td class="bad">23.1%</td><td class="bad">22.1%</td><td class="bad">21.4%</td><td class="bad">20.0%</td><td class="warn">8.6%</td><td class="warn">9.4%</td><td class="warn">12.4%</td></tr>
+<tr><td><code>0.7</code></td><td>100</td><td class="muted">59.47</td><td class="bad">87.9%</td><td class="bad">24.7%</td><td class="bad">23.1%</td><td class="bad">22.1%</td><td class="bad">21.4%</td><td class="bad">20.0%</td><td class="warn">8.6%</td><td class="warn">9.4%</td><td class="warn">12.4%</td></tr>
+<tr><td><code>0.8</code></td><td>100</td><td class="muted">59.47</td><td class="bad">87.9%</td><td class="bad">24.7%</td><td class="bad">23.1%</td><td class="bad">22.1%</td><td class="bad">21.4%</td><td class="bad">20.0%</td><td class="warn">8.6%</td><td class="warn">9.4%</td><td class="warn">12.4%</td></tr>
+<tr><td><code>0.9</code></td><td>100</td><td class="muted">59.47</td><td class="bad">87.9%</td><td class="bad">24.7%</td><td class="bad">23.1%</td><td class="bad">22.1%</td><td class="bad">21.4%</td><td class="bad">20.0%</td><td class="warn">8.6%</td><td class="warn">9.4%</td><td class="warn">12.4%</td></tr>
+</table><p class="muted">cells are % gap vs ILP v1; the ILP v1 column is mean utility over the n instances.</p>
+<h2>3 &middot; Tier P &mdash; paper default</h2>
+<p class="sub"><code>n_prc=2, n_tsk=8, k_max=3, max_seg=4</code> &mdash; J from 15 to 138 (median 29). Gaps measured against <b>ILP v2</b>.</p>
+<div class="callout warn"><strong>No ILP v1 reference at this tier.</strong> ILP v1 does not finish reliably here, so gaps are against ILP v2 &mdash; which is exact only <em>given the SPS mapping</em>. A model that improves the mapping can therefore score a NEGATIVE gap: that is a real result, not an error.</div>
+<table><tr><th>Model</th><th>mean gap</th><th>median</th><th>best</th><th>worst</th><th>optimal</th><th>feasible</th><th>runtime</th></tr>
+<tr><td>baseline</td><td class="bad">69.62%</td><td>82.04%</td><td>0.0%</td><td>93.5%</td><td>49/3494</td><td>3494/4800</td><td>15.31 ms</td></tr>
+<tr><td>v3</td><td class="warn">8.91%</td><td>7.62%</td><td>-0.0%</td><td>69.9%</td><td>520/3494</td><td>4410/4800</td><td>12.25 ms</td></tr>
+<tr><td>v4</td><td class="warn">7.47%</td><td>5.75%</td><td>-0.0%</td><td>69.9%</td><td>535/3494</td><td>4410/4800</td><td>20.47 ms</td></tr>
+<tr><td>v5a</td><td class="warn">7.53%</td><td>5.42%</td><td>-59.8%</td><td>69.9%</td><td>793/3494</td><td>4407/4800</td><td>21.49 ms</td></tr>
+<tr><td>v5b</td><td class="warn">7.35%</td><td>5.39%</td><td>-59.8%</td><td>66.0%</td><td>826/3494</td><td>4403/4800</td><td>22.48 ms</td></tr>
+<tr><td>claudeopt</td><td class="warn">5.05%</td><td>3.20%</td><td>-0.0%</td><td>66.0%</td><td>592/3494</td><td>4410/4800</td><td>86.10 ms</td></tr>
+<tr><td>v6</td><td class="ok">-2.75%</td><td>0.00%</td><td>-79.8%</td><td>66.0%</td><td>2516/3494</td><td>4410/4800</td><td>1145.30 ms</td></tr>
+<tr><td>v7</td><td class="ok">-1.62%</td><td>0.00%</td><td>-74.1%</td><td>66.0%</td><td>2277/3494</td><td>4441/4800</td><td>307.79 ms</td></tr>
+<tr><td>ILP v2</td><td class="ok">0.00%</td><td>0.00%</td><td>0.0%</td><td>0.0%</td><td>3494/3494</td><td>4411/4800</td><td>345.96 ms</td></tr>
+</table><p class="muted">n=3494 instances solved by every model listed.</p>
+<h3>Energy budget &rho;</h3><table><tr><th>value</th><th>n</th><th>ILP v2</th><th>baseline</th><th>v3</th><th>v4</th><th>v5a</th><th>v5b</th><th>claudeopt</th><th>v6</th><th>v7</th></tr>
+<tr><td><code>0.7</code></td><td>100</td><td class="muted">113.73</td><td class="bad">85.2%</td><td class="warn">9.6%</td><td class="warn">8.0%</td><td class="warn">8.2%</td><td class="warn">7.7%</td><td class="warn">5.6%</td><td class="ok">-3.2%</td><td class="ok">-1.6%</td></tr>
+<tr><td><code>0.8</code></td><td>100</td><td class="muted">121.53</td><td class="bad">48.1%</td><td class="warn">5.9%</td><td class="ok">4.8%</td><td class="ok">4.9%</td><td class="ok">5.0%</td><td class="ok">3.3%</td><td class="ok">-1.0%</td><td class="ok">-0.8%</td></tr>
+<tr><td><code>0.9</code></td><td>100</td><td class="muted">122.69</td><td class="warn">20.0%</td><td class="ok">1.3%</td><td class="ok">1.1%</td><td class="ok">1.7%</td><td class="ok">2.4%</td><td class="ok">0.6%</td><td class="ok">-0.6%</td><td class="ok">-0.6%</td></tr>
+<tr><td><code>1</code></td><td>100</td><td class="muted">122.69</td><td class="ok">1.0%</td><td class="ok">0.3%</td><td class="ok">0.2%</td><td class="ok">0.4%</td><td class="ok">1.1%</td><td class="ok">0.1%</td><td class="ok">-0.6%</td><td class="ok">-0.6%</td></tr>
+</table><p class="muted">cells are % gap vs ILP v2; the ILP v2 column is mean utility over the n instances.</p>
+<h3>Mandatory utilisation &alpha;</h3><table><tr><th>value</th><th>n</th><th>ILP v2</th><th>baseline</th><th>v3</th><th>v4</th><th>v5a</th><th>v5b</th><th>claudeopt</th><th>v6</th><th>v7</th></tr>
+<tr><td><code>0.1</code></td><td>100</td><td class="muted">221.27</td><td class="bad">24.5%</td><td class="ok">0.5%</td><td class="ok">0.4%</td><td class="ok">0.5%</td><td class="ok">0.3%</td><td class="ok">0.1%</td><td class="ok">-0.1%</td><td class="ok">-0.1%</td></tr>
+<tr><td><code>0.2</code></td><td>100</td><td class="muted">196.65</td><td class="bad">33.5%</td><td class="ok">2.6%</td><td class="ok">2.4%</td><td class="ok">1.9%</td><td class="ok">1.9%</td><td class="ok">1.9%</td><td class="ok">0.5%</td><td class="ok">0.6%</td></tr>
+<tr><td><code>0.3</code></td><td>100</td><td class="muted">169.82</td><td class="bad">43.8%</td><td class="ok">3.8%</td><td class="ok">3.2%</td><td class="ok">3.3%</td><td class="ok">3.0%</td><td class="ok">2.2%</td><td class="ok">0.3%</td><td class="ok">1.0%</td></tr>
+<tr><td><code>0.4</code></td><td>100</td><td class="muted">142.81</td><td class="bad">59.0%</td><td class="warn">6.2%</td><td class="warn">5.2%</td><td class="ok">5.0%</td><td class="warn">5.6%</td><td class="ok">3.3%</td><td class="ok">-0.6%</td><td class="ok">-0.0%</td></tr>
+<tr><td><code>0.5</code></td><td>100</td><td class="muted">113.73</td><td class="bad">85.2%</td><td class="warn">9.6%</td><td class="warn">8.0%</td><td class="warn">8.2%</td><td class="warn">7.7%</td><td class="warn">5.6%</td><td class="ok">-3.2%</td><td class="ok">-1.6%</td></tr>
+</table><p class="muted">cells are % gap vs ILP v2; the ILP v2 column is mean utility over the n instances.</p>
+<h3>Optional utilisation &beta;</h3><table><tr><th>value</th><th>n</th><th>ILP v2</th><th>baseline</th><th>v3</th><th>v4</th><th>v5a</th><th>v5b</th><th>claudeopt</th><th>v6</th><th>v7</th></tr>
+<tr><td><code>0.5</code></td><td>100</td><td class="muted">113.73</td><td class="bad">85.2%</td><td class="warn">9.6%</td><td class="warn">8.0%</td><td class="warn">8.2%</td><td class="warn">7.7%</td><td class="warn">5.6%</td><td class="ok">-3.2%</td><td class="ok">-1.6%</td></tr>
+<tr><td><code>0.6</code></td><td>100</td><td class="muted">129.55</td><td class="bad">69.1%</td><td class="warn">10.2%</td><td class="warn">8.5%</td><td class="warn">8.8%</td><td class="warn">8.6%</td><td class="warn">5.8%</td><td class="ok">-2.5%</td><td class="ok">-0.5%</td></tr>
+<tr><td><code>0.7</code></td><td>100</td><td class="muted">142.88</td><td class="bad">56.9%</td><td class="warn">10.7%</td><td class="warn">8.3%</td><td class="warn">8.7%</td><td class="warn">8.6%</td><td class="warn">5.3%</td><td class="ok">-1.6%</td><td class="ok">0.5%</td></tr>
+<tr><td><code>0.8</code></td><td>100</td><td class="muted">155.64</td><td class="bad">46.4%</td><td class="warn">10.6%</td><td class="warn">8.3%</td><td class="warn">8.8%</td><td class="warn">8.7%</td><td class="ok">4.8%</td><td class="ok">-1.5%</td><td class="ok">1.2%</td></tr>
+<tr><td><code>0.9</code></td><td>100</td><td class="muted">168.24</td><td class="bad">38.4%</td><td class="warn">11.0%</td><td class="warn">8.4%</td><td class="warn">8.4%</td><td class="warn">8.7%</td><td class="ok">4.4%</td><td class="ok">-1.0%</td><td class="ok">1.8%</td></tr>
+</table><p class="muted">cells are % gap vs ILP v2; the ILP v2 column is mean utility over the n instances.</p>
+<h3>Processor count N<sub>prc</sub></h3><table><tr><th>value</th><th>n</th><th>ILP v2</th><th>baseline</th><th>v3</th><th>v4</th><th>v5a</th><th>v5b</th><th>claudeopt</th><th>v6</th><th>v7</th></tr>
+<tr><td><code>2</code></td><td>100</td><td class="muted">113.73</td><td class="bad">85.2%</td><td class="warn">9.6%</td><td class="warn">8.0%</td><td class="warn">8.2%</td><td class="warn">7.7%</td><td class="warn">5.6%</td><td class="ok">-3.2%</td><td class="ok">-1.6%</td></tr>
+<tr><td><code>4</code></td><td>100</td><td class="muted">191.60</td><td class="bad">82.3%</td><td class="warn">12.3%</td><td class="warn">11.0%</td><td class="warn">12.7%</td><td class="warn">13.1%</td><td class="warn">8.0%</td><td class="ok">-6.0%</td><td class="ok">-6.8%</td></tr>
+<tr><td><code>8</code></td><td>99</td><td class="muted">329.23</td><td class="bad">78.3%</td><td class="warn">12.3%</td><td class="warn">11.0%</td><td class="warn">14.8%</td><td class="warn">15.5%</td><td class="warn">7.9%</td><td class="ok">-3.8%</td><td class="ok">-6.0%</td></tr>
+<tr><td><code>16</code></td><td>95</td><td class="muted">615.33</td><td class="bad">76.1%</td><td class="warn">12.6%</td><td class="warn">11.3%</td><td class="warn">14.8%</td><td class="warn">13.1%</td><td class="warn">8.0%</td><td class="ok">0.7%</td><td class="ok">-2.1%</td></tr>
+</table><p class="muted">cells are % gap vs ILP v2; the ILP v2 column is mean utility over the n instances.</p>
+<h3>Task count N<sub>tsk</sub></h3><table><tr><th>value</th><th>n</th><th>ILP v2</th><th>baseline</th><th>v3</th><th>v4</th><th>v5a</th><th>v5b</th><th>claudeopt</th><th>v6</th><th>v7</th></tr>
+<tr><td><code>4</code></td><td>100</td><td class="muted">96.66</td><td class="bad">85.3%</td><td class="warn">14.5%</td><td class="warn">12.8%</td><td class="warn">12.0%</td><td class="warn">11.3%</td><td class="warn">9.3%</td><td class="ok">-7.6%</td><td class="ok">-5.0%</td></tr>
+<tr><td><code>6</code></td><td>100</td><td class="muted">107.29</td><td class="bad">85.3%</td><td class="warn">10.1%</td><td class="warn">9.0%</td><td class="warn">8.8%</td><td class="warn">8.7%</td><td class="warn">6.0%</td><td class="ok">-4.2%</td><td class="ok">-2.6%</td></tr>
+<tr><td><code>8</code></td><td>100</td><td class="muted">113.73</td><td class="bad">85.2%</td><td class="warn">9.6%</td><td class="warn">8.0%</td><td class="warn">8.2%</td><td class="warn">7.7%</td><td class="warn">5.6%</td><td class="ok">-3.2%</td><td class="ok">-1.6%</td></tr>
+<tr><td><code>10</code></td><td>100</td><td class="muted">111.58</td><td class="bad">84.5%</td><td class="warn">7.9%</td><td class="warn">6.4%</td><td class="warn">6.7%</td><td class="warn">7.0%</td><td class="ok">3.8%</td><td class="ok">-0.4%</td><td class="ok">0.5%</td></tr>
+<tr><td><code>12</code></td><td>100</td><td class="muted">113.93</td><td class="bad">84.3%</td><td class="warn">6.9%</td><td class="warn">5.5%</td><td class="warn">5.1%</td><td class="warn">5.2%</td><td class="ok">3.1%</td><td class="ok">-2.4%</td><td class="ok">-1.6%</td></tr>
+</table><p class="muted">cells are % gap vs ILP v2; the ILP v2 column is mean utility over the n instances.</p>
+<h3>Frequency levels N<sub>frq</sub></h3><table><tr><th>value</th><th>n</th><th>ILP v2</th><th>baseline</th><th>v3</th><th>v4</th><th>v5a</th><th>v5b</th><th>claudeopt</th><th>v6</th><th>v7</th></tr>
+<tr><td><code>2</code></td><td>100</td><td class="muted">87.17</td><td class="bad">80.6%</td><td class="warn">13.9%</td><td class="warn">10.6%</td><td class="warn">9.5%</td><td class="warn">9.7%</td><td class="warn">6.7%</td><td class="ok">-1.6%</td><td class="ok">0.1%</td></tr>
+<tr><td><code>3</code></td><td>100</td><td class="muted">100.59</td><td class="bad">83.2%</td><td class="warn">12.0%</td><td class="warn">10.0%</td><td class="warn">10.0%</td><td class="warn">10.1%</td><td class="warn">6.6%</td><td class="ok">-2.3%</td><td class="ok">0.1%</td></tr>
+<tr><td><code>5</code></td><td>100</td><td class="muted">113.73</td><td class="bad">85.2%</td><td class="warn">9.6%</td><td class="warn">8.0%</td><td class="warn">8.2%</td><td class="warn">7.7%</td><td class="warn">5.6%</td><td class="ok">-3.2%</td><td class="ok">-1.6%</td></tr>
+<tr><td><code>8</code></td><td>100</td><td class="muted">115.90</td><td class="bad">85.7%</td><td class="warn">8.3%</td><td class="warn">7.3%</td><td class="warn">7.2%</td><td class="warn">7.5%</td><td class="warn">5.7%</td><td class="ok">-4.3%</td><td class="ok">-2.8%</td></tr>
+<tr><td><code>12</code></td><td>100</td><td class="muted">114.66</td><td class="bad">85.6%</td><td class="warn">10.8%</td><td class="warn">10.1%</td><td class="warn">10.2%</td><td class="warn">9.7%</td><td class="warn">6.3%</td><td class="ok">-0.3%</td><td class="ok">0.7%</td></tr>
+</table><p class="muted">cells are % gap vs ILP v2; the ILP v2 column is mean utility over the n instances.</p>
+<h3>ACET spread &xi;</h3><table><tr><th>value</th><th>n</th><th>ILP v2</th><th>baseline</th><th>v3</th><th>v4</th><th>v5a</th><th>v5b</th><th>claudeopt</th><th>v6</th><th>v7</th></tr>
+<tr><td><code>0.3</code></td><td>100</td><td class="muted">113.73</td><td class="bad">85.2%</td><td class="warn">9.6%</td><td class="warn">8.0%</td><td class="warn">8.2%</td><td class="warn">7.7%</td><td class="warn">5.6%</td><td class="ok">-3.2%</td><td class="ok">-1.6%</td></tr>
+<tr><td><code>0.4</code></td><td>100</td><td class="muted">113.73</td><td class="bad">85.2%</td><td class="warn">9.6%</td><td class="warn">8.0%</td><td class="warn">8.2%</td><td class="warn">7.7%</td><td class="warn">5.6%</td><td class="ok">-3.2%</td><td class="ok">-1.6%</td></tr>
+<tr><td><code>0.5</code></td><td>100</td><td class="muted">113.73</td><td class="bad">85.2%</td><td class="warn">9.6%</td><td class="warn">8.0%</td><td class="warn">8.2%</td><td class="warn">7.7%</td><td class="warn">5.6%</td><td class="ok">-3.2%</td><td class="ok">-1.6%</td></tr>
+<tr><td><code>0.6</code></td><td>100</td><td class="muted">113.73</td><td class="bad">85.2%</td><td class="warn">9.6%</td><td class="warn">8.0%</td><td class="warn">8.2%</td><td class="warn">7.7%</td><td class="warn">5.6%</td><td class="ok">-3.2%</td><td class="ok">-1.6%</td></tr>
+<tr><td><code>0.7</code></td><td>100</td><td class="muted">113.73</td><td class="bad">85.2%</td><td class="warn">9.6%</td><td class="warn">8.0%</td><td class="warn">8.2%</td><td class="warn">7.7%</td><td class="warn">5.6%</td><td class="ok">-3.2%</td><td class="ok">-1.6%</td></tr>
+<tr><td><code>0.8</code></td><td>100</td><td class="muted">113.73</td><td class="bad">85.2%</td><td class="warn">9.6%</td><td class="warn">8.0%</td><td class="warn">8.2%</td><td class="warn">7.7%</td><td class="warn">5.6%</td><td class="ok">-3.2%</td><td class="ok">-1.6%</td></tr>
+<tr><td><code>0.9</code></td><td>100</td><td class="muted">113.73</td><td class="bad">85.2%</td><td class="warn">9.6%</td><td class="warn">8.0%</td><td class="warn">8.2%</td><td class="warn">7.7%</td><td class="warn">5.6%</td><td class="ok">-3.2%</td><td class="ok">-1.6%</td></tr>
+</table><p class="muted">cells are % gap vs ILP v2; the ILP v2 column is mean utility over the n instances.</p>
+<hr><p class="muted">Generated 2026-09-04 on branch <code>mapping-strategies</code>. Reproduce: <code>python gen_testcases.py &lt;factor&gt; --sets 100 --out &lt;dir&gt;</code> then <code>python run_models.py &lt;dir&gt; --models ...</code></p></div>

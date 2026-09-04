@@ -59,6 +59,24 @@
 
 <header>
   <h1>USRT — Utility-Aware Energy-Constrained Real-Time Scheduling</h1>
+
+<style class="usrt-stale-reset">
+/* Scope-reset for the 4 Sep staleness notices.  Each notice paints its own
+   light background and dark ink inline, but descendants re-style themselves
+   from the host document -- notably code{background:var(--code-bg)}, which
+   under prefers-color-scheme:dark resolves to #24242b and rendered dark-on-
+   dark inside the notice.  Force code and inline emphasis to inherit. */
+.usrt-stale-2026-09-04 code{
+  background:rgba(0,0,0,.06)!important; color:inherit!important;
+  border:0!important; padding:.08em .34em!important; border-radius:4px!important;
+  font-size:.88em!important; text-shadow:none!important;
+  font-family:ui-monospace,SFMono-Regular,Consolas,monospace!important;
+}
+.usrt-stale-2026-09-04 b, .usrt-stale-2026-09-04 strong, .usrt-stale-2026-09-04 em,
+.usrt-stale-2026-09-04 i, .usrt-stale-2026-09-04 a{ color:inherit!important; }
+</style>
+<div class="usrt-stale-2026-09-04" style="margin:18px 0;padding:16px 18px;border:2px solid #b35900;border-left-width:7px;border-radius:9px;background:#fff4e5;color:#3d2a10;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;line-height:1.58;font-size:14.5px;"><div style="font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:10.5px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:#8a4500;margin-bottom:8px;">&#9888; BEHIND THE CODEBASE &middot; re-verified against the code 4 Sep 2026</div><p style='margin:0 0 10px'>&sect;4 was rewritten against the code on <b>4 Sep 2026</b> and is now current: all phase write-ups (1, 1M, 1R, 1L, 2 through 6b) match the tree, DPS/SPS are explained rather than assumed, and the <code>proc_util</code> defect is flagged where it bites. <b>&sect;5's version matrix still stops at v6</b> &mdash; see its own banner. <code>dry_run_21_August.html</code> &sect;7 remains a useful second end-to-end description.</p><p style='margin:0 0 10px'><b>v7 is missing.</b> <code>heuristic_v7</code> (Phase&nbsp;1M multi-start + Phase&nbsp;1R guided repair) is in the tree and is the better default: <b>3.97% mean gap in 15.1&nbsp;ms</b> vs v6&rsquo;s 3.52% in 28.8&nbsp;ms, and it never loses to v5b (31 better / 19 equal / 0 worse). See <code>22Aug_better_mapping_SPS.html</code>.</p><p style='margin:0'><b>Still accurate:</b> &sect;1&ndash;&sect;3 (problem, the four approaches, the energy model &mdash; it correctly gives f*&asymp;0.42), &sect;6 and &sect;8.</p></div>
+
   <p>Project summary &amp; implementation status · <strong>1 August</strong></p>
   <p>Based on <em>Segmented_Workload_Scheduling_Shared_v2</em> (paper) + <em>usrt_online_dp_doc</em> (online design)</p>
   <p class="legend" style="margin-top:.5rem">
@@ -167,10 +185,49 @@
     <li>Commit the assignment and update the running <code>proc_util</code>.</li>
   </ol>
   <p>After every quantum is placed: a full <b>mandatory-only DBF check</b> at <code>f_max</code>, followed by
-  <b>greedy repair</b> if any window fails. Load metric is <code>u_i = e_m_i / p_i</code>, which is the
-  correct measure for preemptive EDF; feasibility uses cumulative per-processor utilisation
-  <code>&le; 1.0</code>.
+  <b>greedy repair</b> if any window fails.
   <span class="muted">(<code>mapping/quantum.py</code>, <code>dps_sps.py</code>, <code>repair.py</code>)</span></p>
+
+  <h4 style="margin:16px 0 6px;font-size:.95rem">What DPS and SPS actually are</h4>
+  <p class="note"><b>The paper never defines them.</b> &sect;V says only "Obtain mapping with SPS" and &sect;IV
+  "First compute a mapping with SPS of jobs (mandatory segments only with maximum frequency)" &mdash; it is
+  treated as known prior work, and DPS is not mentioned at all. The only reference is
+  <span class="muted">[1] Kumar, Mayank &amp; Mondal, TPDS 2019</span>. What follows is read off the code.</p>
+  <p>A <b>PS</b> ("partial solution", <code>mapping/ps.py</code>) is a complete <code>m</code>-way split of
+  <em>some subset</em> of the jobs: <code>loads[0..m-1]</code> kept sorted descending, the matching job-sets,
+  and <code>gap = loads[0] &minus; loads[-1]</code>. That gap is the only quality measure in the algorithm.</p>
+  <ul>
+    <li><b>DPS &mdash; "Determining Partial Solutions".</b> Builds the starting set. Jobs arrive sorted
+        <em>descending</em> by load (LPT order). Each job goes into the active PS with the <b>largest gap</b>,
+        but only if <code>job_load &le; gap</code> &mdash; i.e. only where it <em>fits inside the existing
+        hole</em>. A job too big for every hole would overshoot and create imbalance, so it seeds a new PS
+        instead.</li>
+    <li><b>SPS &mdash; "Sum Partial Solutions".</b> Merges them. Repeatedly take the <b>two largest-gap</b>
+        partial solutions and combine. The merge is the <b>criss-cross</b>: it pairs A's heaviest slot with
+        B's lightest, A's second-heaviest with B's second-lightest, and so on
+        (<code>self.loads[j] + other.loads[m-1-j]</code>), so each solution's imbalance cancels the other's.</li>
+  </ul>
+  <p>Traced on quantum <code>[0,10]</code> of <code>testcase.py</code>: DPS produces three partial solutions
+  with gaps <code>[0.0623, 0.0256, 0.0717]</code>; SPS merges the two largest (0.0717 with 0.0623) into a gap
+  of <b>0.0094</b>, then folds in the third for a final gap of <b>0.0162</b>.</p>
+  <p class="note"><b>Structurally this is the multi-way largest-differencing method</b> &mdash;
+  Karmarkar&ndash;Karp generalised from 2-way to <code>m</code>-way partitioning. All three signatures are
+  present: descending-order processing, largest-with-smallest pairing on merge, and always working the
+  most-unbalanced pair first. <em>That identification is from reading the code, not from the paper.</em></p>
+  <p class="note"><b>Note the load metric.</b> DPS and SPS see <em>only scalar loads</em> &mdash; they know
+  nothing about releases or deadlines, which is why the per-quantum capacity gate and the post-loop DBF
+  check + repair both have to exist. The metric is <code>e_m_i / p_i</code>, task utilisation. That is the
+  right measure over a <em>whole hyper-period</em>, but it is being applied <em>inside a single quantum</em>,
+  where the dimensionally correct quantity is work against window length (<code>e_m / quantum</code>).</p>
+
+  <p class="note"><strong>Caveat &mdash; verified 4 Sep 2026.</strong> The per-processor utilisation gate in
+  steps 3 and 5 above is defective: <code>proc_util</code> is initialised once and never released, so it is a
+  running sum of <code>e_m/p_i</code> over the whole hyper-period &mdash; one term per <em>job</em> &mdash;
+  rather than a utilisation. Once it passes capacity, every later quantum bails out at
+  <code>MAND_OVERUTIL</code> and its jobs are placed by a min-util fallback instead of by SPS:
+  <b>73% of jobs on <code>testcase.py</code></b>, and 0&ndash;60% on generated instances depending on
+  utilisation and hyper-period. <b>Adding processors does not help</b> &mdash; the over-count grows with
+  <code>m</code> just as fast as capacity does. See <code>ISSUES.md</code> &rarr; <b>B2</b>.</p>
 
   <h3>Phase 1b &mdash; Refine mapping: minimise max utility density <span class="b ok" style="font-size:.68rem">&#10003;</span></h3>
   <p>SPS balances <em>load</em>, not <em>value</em>. If several high-utility tasks land on one core, timing
@@ -287,10 +344,84 @@
   pipeline once its partial utility cannot beat the incumbent. None is implemented &mdash; none is
   needed at current instance sizes.</p>
 
+  <h3>Phase 1M &mdash; Multi-start mapping <span class="b part" style="font-size:.68rem">v7</span></h3>
+  <p>Both v7 mapping phases fall out of a single measurement of where Phase&nbsp;1c's time went:</p>
+  <p class="formula">Phase 1 = 0.20 ms &nbsp;&middot;&nbsp; one pipeline = 1.11 ms &nbsp;&middot;&nbsp;
+     Phase 1c = 30.91 ms (&asymp;25 pipelines)</p>
+  <p>Phase&nbsp;1c examines only <code>J&times;(P&minus;1)</code> single-job moves &mdash; <em>fewer</em>
+  candidates than Phase&nbsp;1b already considers. So its expense is not the search, it is the
+  <b>scoring</b>: every candidate mapping must be run through the whole downstream pipeline
+  (4&nbsp;&rarr;&nbsp;5&nbsp;&rarr;&nbsp;6&nbsp;&rarr;&nbsp;6b) to read the utility it really achieves.</p>
+  <p>If scoring is the cost, spend it on <b>structurally different</b> mappings rather than on 25 small
+  perturbations of one. Phase&nbsp;1M builds seven candidates, scores each with one pipeline run, and keeps
+  the best feasible one:</p>
+  <table>
+    <tr><th>Candidate</th><th>What it is</th></tr>
+    <tr><td><code>sps</code></td><td>quantum SPS (criss-cross), Phase 1 as-is</td></tr>
+    <tr><td><code>sps+refine2b</code></td><td>SPS then Phase 1b (balance utility density)</td></tr>
+    <tr><td><code>sps+budget</code></td><td>SPS then Phase 1b&prime; (budget-aware refine)</td></tr>
+    <tr><td><code>wfd</code></td><td><b>Worst-Fit Decreasing</b> &mdash; each job to the least-loaded core</td></tr>
+    <tr><td><code>ffd</code></td><td>First-Fit Decreasing &mdash; first core that still fits under 1.0</td></tr>
+    <tr><td><code>bfd</code></td><td>Best-Fit Decreasing &mdash; the core left with the least slack that fits</td></tr>
+    <tr><td><code>donor</code></td><td>donor/harvester &mdash; deliberately <b>concentrates</b> utility density</td></tr>
+  </table>
+  <p>Seven pipelines (&asymp;7.8&nbsp;ms) instead of twenty-five (&asymp;31&nbsp;ms), exploring seven
+  <em>basins</em> rather than 25 steps inside one. Infeasible candidates are discarded; if none is feasible
+  the first is kept, so the phase cannot return worse than SPS alone.</p>
+  <p class="note">Three things worth noticing. <b>(1)</b> <code>wfd</code> is exactly the paper's own
+  &sect;V.B "Heur1.0 / Baseline" prescription &mdash; <em>"tasks in decreasing order of utilization &hellip;
+  map to the first least utilized processor"</em> &mdash; so <code>packers.py</code> implements the paper's
+  baseline as a side effect. <b>(2)</b> <code>donor</code> is the Phase&nbsp;1b&prime; "concentrate" idea
+  built <em>directly into a mapping</em> rather than reached by swapping: low-utility donor jobs are packed
+  onto a dedicated subset of cores that can then run slowly without costing any optional work, while
+  high-utility harvesters keep their timing slack on the rest. <b>(3)</b> <code>wfd</code>, <code>ffd</code>,
+  <code>bfd</code> and <code>donor</code> <b>bypass <code>quantum_sps_mapping</code> entirely</b>, so they are
+  immune to the <code>proc_util</code> defect (<code>ISSUES.md</code> &rarr; B2) &mdash; which is part of why
+  v7 is comparatively insulated from it.
+  <span class="muted">(<code>mapping/multistart.py</code>, <code>mapping/packers.py</code>)</span></p>
+
+  <h3>Phase 1R &mdash; Guided repair <span class="b part" style="font-size:.68rem">v7</span></h3>
+  <p>After the pipeline converges on the chosen mapping, <code>diagnose_blocked()</code> walks every job that
+  still has an unused optional segment and asks <b>why</b> it was not scheduled, attributing the blocked
+  utility to one of two causes:</p>
+  <ul>
+    <li><b>TIME</b> &mdash; <code>min_slack_for_job &lt; add_time</code>: that processor's DBF windows are full.</li>
+    <li><b>ENERGY</b> &mdash; <code>E_slack &lt; add_energy</code>: the global pool cannot pay for it.</li>
+  </ul>
+  <p>The distinction is decisive, and it is the same energy-global / time-local asymmetry that drives
+  Phase&nbsp;1b&prime;:</p>
+  <p class="note">If a processor is <b>TIME-blocked</b>, moving a low-value job off it can genuinely help
+  &mdash; time is a <em>per-core</em> resource, so the pressure can be relocated. If it is
+  <b>ENERGY-blocked</b>, <b>no mapping change whatsoever can help</b>, because energy is a <em>global</em>
+  budget: shuffling jobs between cores does not create energy.</p>
+  <p>So Phase&nbsp;1R <b>skips energy-blocked processors outright</b>. That is the "guided" part &mdash; v6's
+  Phase&nbsp;1c spent most of its 25 expensive evaluations on processors where reassignment was provably
+  useless. Each move targets the processor with the most TIME-blocked utility, sends to the one with the
+  least, and relocates the <b>lowest utility-density</b> job (trying the three least valuable). Strict
+  improvement only, capped at <code>GUIDED_REPAIR_MOVES = 4</code>, so it cannot regress.
+  <span class="muted">(<code>mapping/multistart.py::diagnose_blocked, guided_repair</code>)</span></p>
+
+  <h3>Phase 1L &mdash; Short local search <span class="b part" style="font-size:.68rem">v7 &middot; disabled</span></h3>
+  <p>A brief single-job local search from the repaired mapping, scored on the same real objective with
+  strict-improvement acceptance. <b>Currently switched off</b>: <code>LS_ROUNDS = 0</code>
+  (<code>LS_MAX_MOVES = 10</code>), on the grounds that the evaluation budget has already been spent by
+  1M and 1R. Worth knowing before looking for its effect in the output.
+  <span class="muted">(<code>solvers/heuristic_v7.py</code>, <code>mapping/budget_refine.py::mapping_local_search</code>)</span></p>
+
+  <p class="note"><strong>Net result.</strong> v7 reaches <b>3.97% mean gap in 15.1&nbsp;ms</b> against v6's
+  3.52% in 28.8&nbsp;ms &mdash; roughly half the cost for 0.45 points more gap &mdash; and it never loses to
+  v5b (31 better / 19 equal / 0 worse).</p>
+
   <h3>Phase 2 &mdash; Left shift (diagnostic) <span class="b ok" style="font-size:.68rem">&#10003;</span></h3>
   <p>Simulates <b>non-preemptive</b> EDF-order packing on each processor:</p>
   <p class="formula">start = max(proc_avail, release) &nbsp;&middot;&nbsp;
      finish = start + e_eff(i,k,z) &nbsp;&middot;&nbsp; slack = deadline &minus; finish</p>
+  <p><b>Ordering.</b> Jobs are sorted by <code>(deadline, release, job-id)</code>. The release-time
+  tie-break is load-bearing: when two jobs share a deadline the earlier-released one is packed first,
+  because it becomes available sooner and packing it first wastes less idle time. Previously the deadline
+  tie was settled by <em>list order</em>, which made the reported slack depend on dictionary insertion
+  order &mdash; measured at <b>2.0 vs 12.0 on the same instance</b>. Since Phase 2 is a diagnostic, that
+  bug corrupted a number people read rather than a decision the solver made.</p>
   <p class="note"><strong>Read this as an approximation, not a feasibility test.</strong> The real system is
   <em>preemptive</em> EDF, so left-shift only estimates where idle time sits. Hard feasibility is always
   decided by <b>DBF</b>. In v3&ndash;v5b Phase 2 is run once and its output is printed but never gates a
@@ -298,28 +429,48 @@
   <span class="muted">(<code>phases/left_shift.py</code>)</span></p>
 
   <h3>Phase 3 &mdash; Energy slack <span class="b ok" style="font-size:.68rem">&#10003;</span></h3>
-  <p>Computes <code>&Delta;e = B &minus; E_consumed</code> at the current (all-<code>f_max</code>,
-  mandatory-only) state. If <code>&Delta;e &lt; 0</code>, the mandatory workload alone busts the budget and
-  the solver <b>exits early</b> reporting infeasible &mdash; no optional segment could ever be afforded.
-  <span class="muted">(<code>phases/energy_slack.py</code>)</span></p>
+  <p>Reports <code>&Delta;e = B &minus; E_consumed</code> at the current (all-<code>f_max</code>,
+  mandatory-only) state. This is the number printed as <code>E_slack</code>, and it may legitimately be
+  negative &mdash; on its own it is <em>not</em> a verdict.</p>
+  <p><b>The terminal test is separate, and is deliberately not taken at <code>f_max</code>.</b>
+  Infeasibility is declared only when <code>B &lt; min_possible_energy()</code>, a floor that places
+  <em>every</em> job at its cheapest available frequency and ignores timing entirely:</p>
+  <p class="formula">E_floor = &Sigma;<sub>i,j</sub> min<sub>f &isin; F</sub> E(cum[i][k<sub>ij</sub>], f)</p>
+  <p>Two things follow. <b>First</b>, testing the budget at <code>f_max</code> would be wrong: Phase 4
+  exists precisely to lower frequency, and with <code>&alpha;=0.15, &beta;=1.0</code> the cost per unit of
+  work falls from <b>1.15</b> at <code>f_max</code> to <b>0.533</b> at <code>f*&asymp;0.42</code>. An
+  instance can therefore bust its budget at <code>f_max</code> and still be comfortably schedulable; the old
+  test declared exactly those instances infeasible. <b>Second</b>, ignoring timing only makes the bound
+  <em>looser</em>, so <code>B &lt; E_floor</code> is a genuine <b>necessary</b> condition for infeasibility
+  &mdash; if it holds, no frequency assignment whatsoever fits the budget, and stopping is safe.
+  <span class="muted">(<code>phases/energy_slack.py::min_possible_energy</code>)</span></p>
 
-  <h3>Phase 4 &mdash; Aggressive frequency scaling <span class="b part" style="font-size:.68rem">&#9888;</span></h3>
-  <p>Iteratively steps each job's frequency <b>down one level</b>, subject to:</p>
+  <h3>Phase 4 &mdash; Aggressive frequency scaling <span class="b ok" style="font-size:.68rem">&#10003;</span></h3>
+  <p>Lowers frequencies <b>only as far as needed to reach energy feasibility</b> &mdash; it is not an energy
+  minimiser. If the schedule already fits the budget at its current assignment, Phase 4 returns immediately
+  having changed nothing.</p>
+  <p><b>Candidate order: energy saved per unit of time cost, descending.</b> Each pass ranks every available
+  downshift by</p>
+  <p class="formula">score = &Delta;E<sub>saved</sub> &divide; &Delta;T<sub>cost</sub></p>
+  <p>and applies them best-first. This replaced plain task-index order, and the reason is that DBF slack is
+  the resource Phase 5 needs most: index order can burn timing slack on poor trades and then <em>fail to
+  reach the budget at all</em> on instances that are in fact schedulable. Ranking by the exchange rate
+  spends the least slack per unit of energy recovered. Each step still:</p>
   <ul>
-    <li>skip if the step yields <b>no energy saving</b> (<code>E_new &ge; E_cur</code>) &mdash; important,
-        because below <code>f*</code> lowering frequency <em>costs</em> energy;</li>
-    <li><b>revert</b> the step if the DBF timing check fails;</li>
-    <li><b>stop the instant</b> <code>E_total &le; B</code>.</li>
+    <li>skips any candidate yielding <b>no energy saving</b> (<code>E_new &ge; E_cur</code>) &mdash; below
+        <code>f*</code>, slowing down costs both energy <em>and</em> time;</li>
+    <li><b>reverts</b> the step if the full DBF check fails;</li>
+    <li><b>stops the instant</b> <code>E_total &le; B</code>.</li>
   </ul>
-  <p class="note"><strong>The gate, and its two failure modes.</strong> Phase 4 is gated on budget
-  feasibility: if <code>f_max</code> already fits, it does <b>nothing</b>. That gate was added to fix a real
-  collapse &mdash; ungated, it drove 98 jobs toward <code>f*</code>, saturated the DBF windows with inflated
-  mandatory work, and starved Phase 5 of <em>time</em> (utility fell to ~4). But the gate has the opposite
-  failure mode under a tight budget: it under-scales and starves Phase 5 of <em>energy</em>. Measured at
-  &rho;=0.7 on an 8-task instance, mandatory-at-<code>f_max</code> = 92.00 against B = 96.60, so Phase 4
-  returned immediately and left only 4.60 energy for optional work &mdash; where slowing down would have
-  freed ~48. <b>Neither "always scale" nor "scale only when over budget" is correct;</b> the decision needs to
-  be driven by marginal utility-per-energy.
+  <p class="note"><strong>Why the gate stays, and what now covers its blind spot.</strong> Ungated, Phase 4
+  drove 98 jobs toward <code>f*</code>, saturated the DBF windows with inflated mandatory work and starved
+  Phase 5 of <em>time</em> (utility fell to ~4) &mdash; hence the "do nothing if already feasible" gate. But
+  that gate has the opposite failure mode under a tight budget: it under-scales and starves Phase 5 of
+  <em>energy</em>. Measured at &rho;=0.7 on an 8-task instance, mandatory-at-<code>f_max</code> = 92.00
+  against B = 96.60, so Phase 4 returned immediately and left only 4.60 energy for optional work &mdash;
+  where slowing down would have freed roughly 48. Neither "always scale" nor "scale only when over budget"
+  is correct; the decision needs marginal utility-per-energy. <b>That is now Phase 6b's job</b>, which makes
+  the trade globally with shadow prices rather than patching Phase 4's rule.
   <span class="muted">(<code>phases/aggressive.py</code>)</span></p>
 
   <h3>Phase 5 &mdash; Greedy optional segments <span class="b ok" style="font-size:.68rem">&#10003;</span></h3>
@@ -336,11 +487,34 @@
         <td>timing blocks, but energy is available</td>
         <td>step <code>j*</code> up one frequency level (shrinking its execution time) so the segment fits;
             re-verified with a full <code>check_all_timing</code>.</td></tr>
-    <tr><td><b>(ii.B)</b> lower others' freq</td>
-        <td>energy blocks, but timing is available</td>
-        <td>step <em>another</em> job on the same processor (with <code>u_i &le; u_{j*}</code>) down one level
-            to free energy, then add the segment. Only accepted if the donor keeps its own timing.</td></tr>
+    <tr><td><b>(ii.B)</b> global energy donation</td>
+        <td>timing is fine but energy blocks:
+            <code>min_slack &ge; add_time</code> <b>and</b> <code>E_slack &lt; add_energy</code></td>
+        <td>rank <em>every</em> job in the system by <b>time paid per unit energy freed</b> and step donors
+            down one level, <b>several if needed</b>, until the shortfall is covered. Then add the segment,
+            re-verified with a full <code>check_all_timing</code>.</td></tr>
   </table>
+  <p><b>What changed in ii.B, and why.</b> It previously took a <em>single</em> donor, restricted to
+  <code>j*</code>'s own processor and to jobs with <code>u_i &le; u_{j*}</code>. Both restrictions were
+  removed:</p>
+  <ul>
+    <li><b>Same-processor was an artificial limit.</b> Energy is a <em>global</em> budget, so a donor
+        anywhere can fund the segment. (Donors on <code>j*</code>'s own processor in fact make its timing
+        <em>worse</em> &mdash; the final DBF check catches that.)</li>
+    <li><b>The <code>u_i</code> rule guarded a cost that does not exist.</b> Frequency does not appear in the
+        utility function (paper Eq. 8), so lowering a donor's frequency costs it <b>zero</b> utility. It
+        costs only time, on its own processor &mdash; which is checked directly. Donors are therefore ranked
+        purely by how cheaply they yield energy.</li>
+    <li>ii.B is now attempted <b>only when energy is the blocker</b>. Donating energy cannot fix a timing
+        shortfall, so trying it in that case was wasted work.</li>
+  </ul>
+  <p class="note"><strong>Note on ii.A.</strong> The module docstring still describes raising frequency as
+  saving "exec time <em>and</em> energy in the default model" &mdash; that wording predates the current
+  constants. With <code>&alpha;=0.15, &beta;=1.0</code> the energy-optimal frequency is
+  <code>f*&asymp;0.42</code>, so stepping <em>up</em> from anywhere above <code>f*</code> always
+  <em>costs</em> energy. The guard computes the real <code>&Delta;E</code> and so stays correct, but the case
+  is close to dead in practice: instrumented over 13 runs, <b>ii.A fired once while ii.B fired 25&ndash;47
+  times per run</b>.</p>
   <p>The timing gate is <code>min_slack_for_job</code> &mdash; the minimum DBF window slack over every window
   containing the job &mdash; which is sufficient without a full DBF recomputation in case (i).
   <span class="muted">(<code>phases/greedy.py</code>)</span></p>
@@ -361,6 +535,34 @@
   </ol>
   <p>Swaps may cross processors: energy is a <em>global</em> budget, so dropping a low-value segment on P0 can
   fund a high-value one on P1. <span class="muted">(<code>phases/swap.py</code>)</span></p>
+
+  <h3>Phase 6b &mdash; Frequency &harr; segment trade <span class="b ok" style="font-size:.68rem">&#10003;</span></h3>
+  <p>The structural gap Phases 4&ndash;6 leave open: <em>none of them ever asks whether the energy freed by
+  slowing a job down is worth more than the time it costs.</em> Phase 4 stops at feasibility; Phase 5 spends
+  whatever happens to be left over. Measured, that left the heuristic <b>40&ndash;58% below the exact optimum
+  once energy binds</b>.</p>
+  <p>Phase 6b prices both scarce resources off the current solution. For work <code>w</code> on task
+  <code>i</code> running at frequency <code>f</code>, with <code>g(f) = &alpha;/f + &beta;f&sup2;</code>:</p>
+  <p class="formula">utility per ENERGY = u_i &divide; g(f) &nbsp;&nbsp;&middot;&nbsp;&nbsp;
+     utility per TIME = u_i &middot; f</p>
+  <p>Both are conveniently independent of <code>w</code>. Two shadow prices are then read off the current
+  state &mdash; no tuned constants anywhere:</p>
+  <ul>
+    <li><code>&lambda;</code> = max <code>u_i/g(f)</code> over segments blocked <b>only by energy</b>
+        &mdash; "what one more unit of energy would buy";</li>
+    <li><code>&mu;</code> = max <code>u_i&middot;f</code> over segments blocked <b>only by time</b>
+        &mdash; "what one more unit of time would buy".</li>
+  </ul>
+  <p>Because frequency does not appear in the utility function, lowering a job one level costs <b>zero</b>
+  utility directly &mdash; it only frees <code>&Delta;E</code> and consumes <code>&Delta;T</code>. So the
+  move is worth making exactly when</p>
+  <p class="formula">&lambda; &middot; &Delta;E &nbsp;&gt;&nbsp; &mu; &middot; &Delta;T</p>
+  <p class="note"><strong>Safety.</strong> Candidates require <code>&Delta;E &gt; 0</code>, so
+  <code>f*</code> is never crossed (below it a downshift costs both energy <em>and</em> time). Every move is
+  DBF-verified &mdash; donor window slack first, then a full <code>check_all_timing</code> before it is kept.
+  Acceptance is strict-improvement with best-so-far restore, so the phase can never return a worse schedule
+  than it was handed; the worst case is a no-op. Deterministic, with fixed tie-breaking and no randomness.
+  <span class="muted">(<code>phases/freq_trade.py</code>)</span></p>
 
   <h3>Phase 7 &mdash; Double-giver swap <span class="b part" style="font-size:.68rem">claudeoptimal only</span></h3>
   <p>Some receivers are too expensive for <em>any</em> single-giver swap to unlock. Phase 7 removes the last
@@ -408,6 +610,8 @@
 
 <!-- 5 -->
 <h2 id="versions">5. Heuristic Version Matrix</h2>
+
+<div class="usrt-stale-2026-09-04" style="margin:10px 0;padding:10px 13px;border-left:5px solid #b35900;background:#fff4e5;color:#3d2a10;border-radius:0 7px 7px 0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:13.5px;line-height:1.55;"><span style="font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:10px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#8a4500;display:block;margin-bottom:5px;">BEHIND THE CODEBASE &middot; 4 Sep 2026</span><b>v7 is missing.</b> <code>heuristic_v7</code> (Phase&nbsp;1M multi-start + Phase&nbsp;1R guided repair) is in the tree and is the better default: <b>3.97% mean gap in 15.1&nbsp;ms</b> vs v6&rsquo;s 3.52% in 28.8&nbsp;ms, and it never loses to v5b (31 better / 19 equal / 0 worse). See <code>22Aug_better_mapping_SPS.html</code>. The matrix below stops at v6, and Phase&nbsp;6b is applied to only 3 of the 6 variants listed (v5b, v6, claudeoptimal &mdash; not v3, v4, v5a), so the &ldquo;one capability per step&rdquo; reading of the ladder no longer holds.</div>
 <section class="card">
   <p>The phases are building blocks; the versions are different <em>assemblies</em> (which is why
   <code>run.py</code> lists so many "heuristic" keys). Note that <b>v5a and v5b are siblings built on v4</b>,

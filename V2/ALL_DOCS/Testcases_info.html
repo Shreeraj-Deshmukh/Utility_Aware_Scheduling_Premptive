@@ -38,6 +38,24 @@
 <div class="wrap">
 <div class="kicker">USRT &middot; V2 &middot; Experiment Infrastructure</div>
 <h1>Test-cases: Generation, Storage, Execution</h1>
+
+<style class="usrt-stale-reset">
+/* Scope-reset for the 4 Sep staleness notices.  Each notice paints its own
+   light background and dark ink inline, but descendants re-style themselves
+   from the host document -- notably code{background:var(--code-bg)}, which
+   under prefers-color-scheme:dark resolves to #24242b and rendered dark-on-
+   dark inside the notice.  Force code and inline emphasis to inherit. */
+.usrt-stale-2026-09-04 code{
+  background:rgba(0,0,0,.06)!important; color:inherit!important;
+  border:0!important; padding:.08em .34em!important; border-radius:4px!important;
+  font-size:.88em!important; text-shadow:none!important;
+  font-family:ui-monospace,SFMono-Regular,Consolas,monospace!important;
+}
+.usrt-stale-2026-09-04 b, .usrt-stale-2026-09-04 strong, .usrt-stale-2026-09-04 em,
+.usrt-stale-2026-09-04 i, .usrt-stale-2026-09-04 a{ color:inherit!important; }
+</style>
+<div class="usrt-stale-2026-09-04" style="margin:18px 0;padding:16px 18px;border:2px solid #b35900;border-left-width:7px;border-radius:9px;background:#fff4e5;color:#3d2a10;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;line-height:1.58;font-size:14.5px;"><div style="font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:10.5px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:#8a4500;margin-bottom:8px;">&#9888; BEHIND THE CODEBASE &middot; re-verified against the code 4 Sep 2026</div><p style='margin:0 0 10px'><b><code>testcases/</code> is not on disk.</b> The 18,500-instance tree was deleted after the paper-&sect;VII.A alignment. Live batches are <b><code>dry_run_tc/</code></b> (90 instances; sweeps <code>rho</code>, <code>u_mand_factor</code>, <code>u_opt_factor</code>), <code>tc_smoke/</code> and <code>baseline_22aug/</code>. Commands below that read <code>testcases/&lt;sweep&gt;/</code> need either <code>dry_run_tc/</code> or a <code>gen_testcases.py &hellip; --out testcases</code> run first.</p><p style='margin:0'><b>v7 is missing.</b> <code>heuristic_v7</code> (Phase&nbsp;1M multi-start + Phase&nbsp;1R guided repair) is in <code>run.py</code>&rsquo;s solver table and is the better default: <b>3.97% mean gap in 15.1&nbsp;ms</b> vs v6&rsquo;s 3.52% in 28.8&nbsp;ms. Otherwise this document is accurate: the generator design, the knob table, U_O = &beta;(N_prc &minus; U_M), B = &rho;&middot;E_full_fmax, the sweeps, the manifest and results schemas, and the per-task <code>theta</code> emission all match the code.</p></div>
+
 <p class="sub">How synthetic instances are built, where they live, how they reach the solvers, and
 exactly which knobs are varied and which metrics come back. Companion to
 <code>V2_Commands_Reference.html</code>, which is the quick command lookup &mdash; this document
@@ -92,6 +110,8 @@ solver, now or later.</p>
 so a &rho;-curve is a controlled experiment on one instance.</p>
 
 <h4>What is on disk right now</h4>
+
+<div class="usrt-stale-2026-09-04" style="margin:10px 0;padding:10px 13px;border-left:5px solid #b3261e;background:#fdecea;color:#4a1512;border-radius:0 7px 7px 0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:13.5px;line-height:1.55;"><span style="font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:10px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#8c1d18;display:block;margin-bottom:5px;">NOT IN CODEBASE &middot; 4 Sep 2026</span>&ldquo;Right now&rdquo; means 22 August. The <code>testcases/</code> row below no longer exists &mdash; the tree was deleted. Current: <code>dry_run_tc/</code> (90 / 3 / 3), <code>tc_smoke/</code>, and <code>baseline_22aug/</code>.</div>
 <table>
 <tr><th>Directory</th><th class="n">instances</th><th class="n">manifests</th><th class="n">results</th><th>status</th></tr>
 <tr><td><code>testcases/</code></td><td class="n">18,500</td><td class="n">9</td><td class="n">0</td>

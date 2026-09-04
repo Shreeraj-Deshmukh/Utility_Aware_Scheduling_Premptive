@@ -87,6 +87,24 @@
 <header class="top">
   <div class="kicker">USRT · V2 · Online Phase</div>
   <h1>Online Phase — Code Audit &amp; Paper-Fidelity Review</h1>
+
+<style class="usrt-stale-reset">
+/* Scope-reset for the 4 Sep staleness notices.  Each notice paints its own
+   light background and dark ink inline, but descendants re-style themselves
+   from the host document -- notably code{background:var(--code-bg)}, which
+   under prefers-color-scheme:dark resolves to #24242b and rendered dark-on-
+   dark inside the notice.  Force code and inline emphasis to inherit. */
+.usrt-stale-2026-09-04 code{
+  background:rgba(0,0,0,.06)!important; color:inherit!important;
+  border:0!important; padding:.08em .34em!important; border-radius:4px!important;
+  font-size:.88em!important; text-shadow:none!important;
+  font-family:ui-monospace,SFMono-Regular,Consolas,monospace!important;
+}
+.usrt-stale-2026-09-04 b, .usrt-stale-2026-09-04 strong, .usrt-stale-2026-09-04 em,
+.usrt-stale-2026-09-04 i, .usrt-stale-2026-09-04 a{ color:inherit!important; }
+</style>
+<div class="usrt-stale-2026-09-04" style="margin:18px 0;padding:16px 18px;border:2px solid #b35900;border-left-width:7px;border-radius:9px;background:#fff4e5;color:#3d2a10;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;line-height:1.58;font-size:14.5px;"><div style="font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:10.5px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:#8a4500;margin-bottom:8px;">&#9888; BEHIND THE CODEBASE &middot; re-verified against the code 4 Sep 2026</div><p style='margin:0 0 10px'><b>Two findings here have since been acted on.</b> (1) The <code>models.py</code> stale docstring was corrected on 22 Aug &mdash; it now states f*&asymp;0.42 properly. (2) &ldquo;Offline scaling targets feasibility, never the energy-optimal frequency&rdquo; is now <i>partly</i> addressed: <b>Phase&nbsp;6b</b> (<code>phases/freq_trade.py</code>) trades frequency for segments on shadow prices &lambda;&middot;dE &gt; &mu;&middot;dT in v5b/v6/v7/claudeoptimal. The <i>initial</i> assignment is still f_max everywhere, so the core diagnosis stands &mdash; but the fix is no longer absent.</p><p style='margin:0 0 10px'>Also not covered: per-task <code>theta</code> in generated test-cases (<code>OnlineSimulator._ratio</code> now prefers it), and Phase&nbsp;3&rsquo;s replacement by <code>min_possible_energy()</code>.</p><p style='margin:0'><b>Still accurate and still open:</b> the scalar-&Delta;t over-planning gap, aggregate-state quantisation, proportional-arbitration weakness, and the absence of any online adapter in <code>run_models.py</code>.</p></div>
+
   <p class="sub">Where the “one DP per processor + single global energy pool” online implementation
   matches the paper (§VI), where it deviates, and — the focus of this pass —
   <strong>what is really happening with frequency / DVFS</strong>.</p>
@@ -380,6 +398,8 @@ FREQ T3,j2  z_off=0.70 → z=0.80   k 0→2   gain=17.79   a_e=+6.92    a_t=+7.0
     minimum energy is achieved at f_max” — true for the old constants, misleading now that α=0.15,
     β=1.0 put the optimum at f≈0.42. Update it so the next reader isn’t misdirected on the very point
     this audit is about.</li>
+
+
     <li><strong>Batch spend nets mixed signs.</strong> <code>try_spend_batch</code> spends
     <code>sum(amounts)</code> atomically; a batch mixing Option-2 (+a_e) and Option-3 (−a_e) is judged on
     its net. Order-independent for a single scalar budget, so correct — noted only so it isn’t mistaken
@@ -391,6 +411,8 @@ FREQ T3,j2  z_off=0.70 → z=0.80   k 0→2   gain=17.79   a_e=+6.92    a_t=+7.0
     over-plan and rely on the commit DBF — but it is the mechanism behind Finding&nbsp;D, so keep the two
     linked in your mind when tuning either.</li>
   </ul>
+<div class="usrt-stale-2026-09-04" style="margin:10px 0;padding:10px 13px;border-left:5px solid #b3261e;background:#fdecea;color:#4a1512;border-radius:0 7px 7px 0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:13.5px;line-height:1.55;"><span style="font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:10px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#8c1d18;display:block;margin-bottom:5px;">NOT IN CODEBASE &middot; 4 Sep 2026</span><b>Fixed 22 Aug.</b> <code>models.py</code>&rsquo;s docstring now derives f* = (&alpha;/2&beta;)^(1/3) &asymp; 0.42 and states that running below f_max is 2.15&times; cheaper. It is also now the single source of truth &mdash; <code>ILP.py</code> imports from it.</div>
+
 </div>
 
 <h2 id="s6">6 · What is provably correct (so nothing is over-alarmed)</h2>

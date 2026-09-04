@@ -159,14 +159,15 @@ def run(processors, tasks, B_BUDGET):
     print(f"  -> utility after repair: {u_rep:.6f}  ({u_rep - u_ms:+.6f})")
 
     # ── Phase 1L : short local search from the repaired mapping ──────────────
-    print(f"\n{_S}")
-    print(f"  PHASE 1L : SHORT LOCAL SEARCH  ({LS_MAX_MOVES} moves x {LS_ROUNDS} round)")
-    print(_S2)
-    mapping, ls = mapping_local_search(mapping, _eval, N_prc,
-                                       max_rounds=LS_ROUNDS,
-                                       max_moves=LS_MAX_MOVES, verbose=False)
-    print(f"  {ls['moves']} improving move(s)  -> utility {ls['utility']:.6f}"
-          f"  ({ls['utility'] - u_rep:+.6f})")
+    if LS_ROUNDS > 0:
+        print(f"\n{_S}")
+        print(f"  PHASE 1L : SHORT LOCAL SEARCH  ({LS_MAX_MOVES} moves x {LS_ROUNDS} round)")
+        print(_S2)
+        mapping, ls = mapping_local_search(mapping, _eval, N_prc,
+                                           max_rounds=LS_ROUNDS,
+                                           max_moves=LS_MAX_MOVES, verbose=False)
+        print(f"  {ls['moves']} improving move(s)  -> utility {ls['utility']:.6f}"
+              f"  ({ls['utility'] - u_rep:+.6f})")
 
     # ── Phases 2-6b on the chosen mapping ────────────────────────────────────
     seg_k, freq_idx, u, e, feas = _pipeline(

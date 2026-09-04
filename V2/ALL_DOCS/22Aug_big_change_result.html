@@ -34,6 +34,24 @@
 <div class="wrap">
 <div class="kicker">USRT &middot; V2 &middot; 22 August</div>
 <h1>Big Change &mdash; Results</h1>
+
+<style class="usrt-stale-reset">
+/* Scope-reset for the 4 Sep staleness notices.  Each notice paints its own
+   light background and dark ink inline, but descendants re-style themselves
+   from the host document -- notably code{background:var(--code-bg)}, which
+   under prefers-color-scheme:dark resolves to #24242b and rendered dark-on-
+   dark inside the notice.  Force code and inline emphasis to inherit. */
+.usrt-stale-2026-09-04 code{
+  background:rgba(0,0,0,.06)!important; color:inherit!important;
+  border:0!important; padding:.08em .34em!important; border-radius:4px!important;
+  font-size:.88em!important; text-shadow:none!important;
+  font-family:ui-monospace,SFMono-Regular,Consolas,monospace!important;
+}
+.usrt-stale-2026-09-04 b, .usrt-stale-2026-09-04 strong, .usrt-stale-2026-09-04 em,
+.usrt-stale-2026-09-04 i, .usrt-stale-2026-09-04 a{ color:inherit!important; }
+</style>
+<div class="usrt-stale-2026-09-04" style="margin:18px 0;padding:16px 18px;border:2px solid #b35900;border-left-width:7px;border-radius:9px;background:#fff4e5;color:#3d2a10;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;line-height:1.58;font-size:14.5px;"><div style="font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:10.5px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:#8a4500;margin-bottom:8px;">&#9888; BEHIND THE CODEBASE &middot; re-verified against the code 4 Sep 2026</div><p style='margin:0 0 10px'><b>v7 is missing.</b> <code>heuristic_v7</code> (Phase&nbsp;1M multi-start + Phase&nbsp;1R guided repair) is in the tree and is the better default: <b>3.97% mean gap in 15.1&nbsp;ms</b> vs v6&rsquo;s 3.52% in 28.8&nbsp;ms, and it never loses to v5b (31 better / 19 equal / 0 worse). See <code>22Aug_better_mapping_SPS.html</code>. &sect;9 stops at v6.</p><p style='margin:0 0 10px'><b>Caveat on every SPS-mapping number.</b> <code>mapping/quantum.py</code> accumulates <code>proc_util</code> across the whole hyper-period instead of releasing it, so once it passes 1.0 every later quantum reports <code>MAND_OVERUTIL</code> and its jobs fall through to a min-util round-robin &mdash; <b>22 of 30 jobs on <code>testcase.py</code></b>, 3%&ndash;42% on generated instances. This is finding <b>B2</b> in <code>usrt_code_review_report.html</code> (12 Jun), still unfixed. Any SPS-vs-alternative comparison is therefore measuring a partly-broken SPS.</p><p style='margin:0'><b>Still accurate:</b> &sect;2&rsquo;s three changes (global ii.B donation, Phase&nbsp;4 efficiency ordering, Phase&nbsp;6b) and the Phase&nbsp;8 <code>freq_idx</code> restore bug all match the code as it stands.</p></div>
+
 <p class="sub">Three algorithmic changes letting the heuristics <strong>trade frequency for optional
 segments</strong>, plus one latent bug they exposed. Re-measured on the same 90 test cases as the
 21 August dry run, so every number below is directly comparable.</p>
@@ -240,6 +258,8 @@ and Option 3 gains a live customer. Worth re-running the online phase to see whe
 at loose budgets too.</li>
 </ol>
 <h2 id="v6">9 &middot; Heuristic v6 &mdash; budget-aware mapping</h2>
+
+<div class="usrt-stale-2026-09-04" style="margin:10px 0;padding:10px 13px;border-left:5px solid #b35900;background:#fff4e5;color:#3d2a10;border-radius:0 7px 7px 0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:13.5px;line-height:1.55;"><span style="font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:10px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#8a4500;display:block;margin-bottom:5px;">BEHIND THE CODEBASE &middot; 4 Sep 2026</span><b>v7 is missing.</b> <code>heuristic_v7</code> (Phase&nbsp;1M multi-start + Phase&nbsp;1R guided repair) is in the tree and is the better default: <b>3.97% mean gap in 15.1&nbsp;ms</b> vs v6&rsquo;s 3.52% in 28.8&nbsp;ms, and it never loses to v5b (31 better / 19 equal / 0 worse). See <code>22Aug_better_mapping_SPS.html</code>. v6 remains the best on quality; v7 is the better engineering trade at roughly half the cost.</div>
 <p class="sub">The 22 August work above improved how the pipeline <em>uses</em> a mapping. v6 attacks
 the mapping itself, which the ILP-v2 decomposition showed was the dominant error source at tight
 budgets (44 points at &rho;=0.4, versus 14 from the frequency/segment search).</p>

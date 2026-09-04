@@ -34,6 +34,24 @@
 <div class="wrap">
 <div class="kicker">USRT &middot; V2 &middot; branch: mapping-strategies</div>
 <h1>Better SPS Mapping &mdash; 22 August</h1>
+
+<style class="usrt-stale-reset">
+/* Scope-reset for the 4 Sep staleness notices.  Each notice paints its own
+   light background and dark ink inline, but descendants re-style themselves
+   from the host document -- notably code{background:var(--code-bg)}, which
+   under prefers-color-scheme:dark resolves to #24242b and rendered dark-on-
+   dark inside the notice.  Force code and inline emphasis to inherit. */
+.usrt-stale-2026-09-04 code{
+  background:rgba(0,0,0,.06)!important; color:inherit!important;
+  border:0!important; padding:.08em .34em!important; border-radius:4px!important;
+  font-size:.88em!important; text-shadow:none!important;
+  font-family:ui-monospace,SFMono-Regular,Consolas,monospace!important;
+}
+.usrt-stale-2026-09-04 b, .usrt-stale-2026-09-04 strong, .usrt-stale-2026-09-04 em,
+.usrt-stale-2026-09-04 i, .usrt-stale-2026-09-04 a{ color:inherit!important; }
+</style>
+<div class="usrt-stale-2026-09-04" style="margin:18px 0;padding:16px 18px;border:2px solid #b35900;border-left-width:7px;border-radius:9px;background:#fff4e5;color:#3d2a10;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;line-height:1.58;font-size:14.5px;"><div style="font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:10.5px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:#8a4500;margin-bottom:8px;">&#9888; BEHIND THE CODEBASE &middot; re-verified against the code 4 Sep 2026</div><p style='margin:0 0 10px'><b>The code described here is current</b> &mdash; v7, Phase&nbsp;1M, Phase&nbsp;1R, the packer candidates and <code>LS_ROUNDS = 0</code> all match the tree. The problem is with one <i>conclusion</i>.</p><p style='margin:0 0 10px'><b>Caveat on every SPS-mapping number.</b> <code>mapping/quantum.py</code> accumulates <code>proc_util</code> across the whole hyper-period instead of releasing it, so once it passes 1.0 every later quantum reports <code>MAND_OVERUTIL</code> and its jobs fall through to a min-util round-robin &mdash; <b>22 of 30 jobs on <code>testcase.py</code></b>, 3%&ndash;42% on generated instances. This is finding <b>B2</b> in <code>usrt_code_review_report.html</code> (12 Jun), still unfixed. Any SPS-vs-alternative comparison is therefore measuring a partly-broken SPS.</p><p style='margin:0'>Re-running the multi-start with that accumulation neutralised <b>flips the winner</b>: sps 222.24&rarr;<b>239.80</b>, sps+refine2b 227.33&rarr;<b>242.88</b>, wfd unchanged at 234.54 (it never touches SPS). v7&rsquo;s final goes 236.04&rarr;242.88. So &sect;2&rsquo;s &ldquo;plain WFD beat every SPS variant&rdquo; does not survive the fix on this instance. That is <i>not</i> a claim the fix is an improvement &mdash; across 12 generated instances the same probe swung &minus;14% to +11%, mean &minus;2%. The honest statement is that SPS-vs-alternative comparisons are <b>unsafe until re-measured</b> on <code>dry_run_tc</code>.</p></div>
+
 <p class="sub">The gap decomposition showed the <strong>mapping</strong>, not the frequency/segment
 search, is the dominant error at tight budgets. Phase&nbsp;1c (v6) attacks it but costs ~25 full
 pipelines. This is an attempt to buy the same quality far more cheaply, measured on the identical
@@ -63,6 +81,8 @@ the SPS mapping, because both improve the mapping ILP v2 is stuck with.</div>
 <div class="callout ok"><strong>v7 never loses to v5b</strong> &mdash; 31 better, 19 equal,
 <b>0 worse</b> &mdash; while costing under 10&times; less than v6.</div>
 <h2>2 &middot; What v7 does</h2>
+
+<div class="usrt-stale-2026-09-04" style="margin:10px 0;padding:10px 13px;border-left:5px solid #b35900;background:#fff4e5;color:#3d2a10;border-radius:0 7px 7px 0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:13.5px;line-height:1.55;"><span style="font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:10px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#8a4500;display:block;margin-bottom:5px;">BEHIND THE CODEBASE &middot; 4 Sep 2026</span>The multi-start mechanism below is accurate. The <b>scores</b> it reports for the <code>sps</code>, <code>sps+refine2b</code> and <code>sps+budget</code> candidates are not &mdash; all three run through the partly-broken <code>quantum_sps_mapping</code>. <code>wfd</code>, <code>ffd</code>, <code>bfd</code> and <code>donor</code> bypass SPS and are unaffected.</div>
 <p>The reframe that drove the design: <b>Phase 1c's expense is the SCORING, not the search.</b>
 It examines only <code>J&times;(P&minus;1)</code> single-job moves &mdash; fewer candidates than
 Phase&nbsp;1b considers &mdash; but scores each by running the entire downstream pipeline

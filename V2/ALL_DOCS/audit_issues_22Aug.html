@@ -39,6 +39,24 @@
 <div class="wrap">
 <div class="kicker">USRT &middot; V2 &middot; Issue Audit</div>
 <h1>Consolidated Issue Audit &mdash; 22 August</h1>
+
+<style class="usrt-stale-reset">
+/* Scope-reset for the 4 Sep staleness notices.  Each notice paints its own
+   light background and dark ink inline, but descendants re-style themselves
+   from the host document -- notably code{background:var(--code-bg)}, which
+   under prefers-color-scheme:dark resolves to #24242b and rendered dark-on-
+   dark inside the notice.  Force code and inline emphasis to inherit. */
+.usrt-stale-2026-09-04 code{
+  background:rgba(0,0,0,.06)!important; color:inherit!important;
+  border:0!important; padding:.08em .34em!important; border-radius:4px!important;
+  font-size:.88em!important; text-shadow:none!important;
+  font-family:ui-monospace,SFMono-Regular,Consolas,monospace!important;
+}
+.usrt-stale-2026-09-04 b, .usrt-stale-2026-09-04 strong, .usrt-stale-2026-09-04 em,
+.usrt-stale-2026-09-04 i, .usrt-stale-2026-09-04 a{ color:inherit!important; }
+</style>
+<div class="usrt-stale-2026-09-04" style="margin:18px 0;padding:16px 18px;border:2px solid #b35900;border-left-width:7px;border-radius:9px;background:#fff4e5;color:#3d2a10;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;line-height:1.58;font-size:14.5px;"><div style="font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:10.5px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:#8a4500;margin-bottom:8px;">&#9888; BEHIND THE CODEBASE &middot; re-verified against the code 4 Sep 2026</div><p style='margin:0 0 10px'><b>Three of the top items are closed.</b> <b>A1</b> &mdash; <code>ILP.py</code> now imports the constants from <code>usrt.models</code>. <b>A2</b> &mdash; the 18,500-file <code>testcases/</code> tree was deleted. <b>A3</b> &mdash; the licence was renewed to <b>2027-08-16</b> (LICENSEID 2853854). Each is flagged in place below.</p><p style='margin:0 0 10px'><b>One item is missing and should be re-instated.</b> This audit says it drops items that are now fixed &mdash; but <code>usrt_code_review_report.html</code> <b>B2</b> (quantum SPS capacity never released; 22 of 30 jobs bypass SPS) was <i>never</i> fixed, and its omission here is why <b>G1</b>&rsquo;s &ldquo;the mapping is the dominant error&rdquo; decomposition may be measuring a min-util round-robin rather than SPS.</p><p style='margin:0'>Also predates <code>heuristic_v7</code>, so <b>B1</b>/<b>B2</b>&rsquo;s variant lineup and <b>C3</b>&rsquo;s Phase&nbsp;1c cost argument are both one generation behind. <b>B4, C1, C2, D1&ndash;D4, E1&ndash;E3, F1, F2</b> were re-checked on 4 Sep and are all still open.</p></div>
+
 <p class="sub">Every open issue gathered from the documents in <code>ALL_DOCS/</code>, plus new ones
 found by scanning the codebase. <strong>Every claim below was re-verified against the live code on
 22 August</strong> &mdash; stale doc claims were dropped, and several items are new.</p>
@@ -99,6 +117,8 @@ found by scanning the codebase. <strong>Every claim below was re-verified agains
 
 <div class="issue"><h3><span class="id">A1</span><span class="tag t-crit">critical</span>
 &nbsp;<code>ILP.py</code> hard-codes the wrong energy constants</h3>
+<div class="usrt-stale-2026-09-04" style="margin:10px 0;padding:10px 13px;border-left:5px solid #b3261e;background:#fdecea;color:#4a1512;border-radius:0 7px 7px 0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:13.5px;line-height:1.55;"><span style="font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:10px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#8c1d18;display:block;margin-bottom:5px;">NOT IN CODEBASE &middot; 4 Sep 2026</span><b>Fixed 22 Aug.</b> <code>ILP.py</code> imports <code>ALPHA</code>/<code>BETA</code> from <code>usrt.models</code> and carries a comment recording the old stale pair. Standalone runs are now correct.</div>
+
 <p><code>ILP.py</code> lines 51&ndash;52 set <code>ALPHA = 1.0, BETA = 0.5</code>. The project uses
 <code>ALPHA = 0.15, BETA = 1.0</code> from <code>usrt/models.py</code>. Under the stale pair the
 energy-optimal frequency is f<sub>max</sub>; under the real pair it is f* &asymp; 0.42 &mdash; so the
@@ -113,6 +133,8 @@ problem</em>, with nothing to indicate it. Two docs (<code>V2_Commands_Reference
 
 <div class="issue"><h3><span class="id">A2</span><span class="tag t-high">high</span>
 &nbsp;<code>testcases/</code> was built by the superseded generator</h3>
+<div class="usrt-stale-2026-09-04" style="margin:10px 0;padding:10px 13px;border-left:5px solid #b3261e;background:#fdecea;color:#4a1512;border-radius:0 7px 7px 0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:13.5px;line-height:1.55;"><span style="font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:10px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#8c1d18;display:block;margin-bottom:5px;">NOT IN CODEBASE &middot; 4 Sep 2026</span><b>Resolved.</b> The tree was deleted. Live batches: <code>dry_run_tc/</code> (90 instances, 3 manifests, 3 results), <code>tc_smoke/</code>, <code>baseline_22aug/</code>.</div>
+
 <p>18,500 instances across 9 sweep directories, all pre-dating the paper-&sect;VII.A alignment. Their
 manifests still carry <code>regime</code>, <code>util_per_core</code>, <code>opt_ratio</code>, and the
 old sweep names (<code>energy_rho</code>, <code>util_split</code>, <code>util_success</code>).</p>
@@ -126,6 +148,8 @@ delete. It is also the largest artefact in the repo.</p></div>
 
 <div class="issue"><h3><span class="id">A3</span><span class="tag t-high">high</span>
 &nbsp;Gurobi licence expires 2026-08-19</h3>
+<div class="usrt-stale-2026-09-04" style="margin:10px 0;padding:10px 13px;border-left:5px solid #b3261e;background:#fdecea;color:#4a1512;border-radius:0 7px 7px 0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:13.5px;line-height:1.55;"><span style="font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:10px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#8c1d18;display:block;margin-bottom:5px;">NOT IN CODEBASE &middot; 4 Sep 2026</span><b>Renewed 17 Aug 2026.</b> LICENSEID 2853854, TYPE=ACADEMIC, VERSION=13, <b>EXPIRATION=2027-08-16</b>. A v13 licence drives the installed v12.0.3 solver fine. Next renewal ~Aug 2027.</div>
+
 <p>Both ILP baselines stop working after that date. The heuristics, the generator and the online phase
 are unaffected, but <b>every optimality-gap number in the project depends on ILP v1</b>. Renew with
 <code>grbgetkey</code>, or fall back to the LP relaxation as the bound (measured integrality gap 8.8%

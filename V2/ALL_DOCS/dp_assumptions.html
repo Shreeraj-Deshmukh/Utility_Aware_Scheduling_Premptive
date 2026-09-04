@@ -62,8 +62,28 @@
 
 <header>
   <h1>USRT Online DP — Assumptions, Limitations &amp; Compromises</h1>
+
+<style class="usrt-stale-reset">
+/* Scope-reset for the 4 Sep staleness notices.  Each notice paints its own
+   light background and dark ink inline, but descendants re-style themselves
+   from the host document -- notably code{background:var(--code-bg)}, which
+   under prefers-color-scheme:dark resolves to #24242b and rendered dark-on-
+   dark inside the notice.  Force code and inline emphasis to inherit. */
+.usrt-stale-2026-09-04 code{
+  background:rgba(0,0,0,.06)!important; color:inherit!important;
+  border:0!important; padding:.08em .34em!important; border-radius:4px!important;
+  font-size:.88em!important; text-shadow:none!important;
+  font-family:ui-monospace,SFMono-Regular,Consolas,monospace!important;
+}
+.usrt-stale-2026-09-04 b, .usrt-stale-2026-09-04 strong, .usrt-stale-2026-09-04 em,
+.usrt-stale-2026-09-04 i, .usrt-stale-2026-09-04 a{ color:inherit!important; }
+</style>
+<div class="usrt-stale-2026-09-04" style="margin:18px 0;padding:16px 18px;border:2px solid #b35900;border-left-width:7px;border-radius:9px;background:#fff4e5;color:#3d2a10;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;line-height:1.58;font-size:14.5px;"><div style="font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:10.5px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:#8a4500;margin-bottom:8px;">&#9888; BEHIND THE CODEBASE &middot; re-verified against the code 4 Sep 2026</div><p style='margin:0 0 10px'>The energy constants changed on 22 Aug. This document was written under <b>&alpha;=1.0, &beta;=0.5</b>, where <code>f_max</code> is energy-optimal and DVFS is degenerate. The project now uses <b>&alpha;=0.15, &beta;=1.0</b> (<code>usrt/models.py</code>, the single source of truth), giving <b>f* &asymp; 0.42</b> &mdash; so running <i>below</i> f_max is 2.15&times; cheaper per unit of work. Every claim below that Options&nbsp;3/4 are &ldquo;inert&rdquo;, or that lowering frequency costs energy, is <b>wrong-premised</b>. Measured on the same code: B=400 &rarr; 0 frequency changes, B=200 &rarr; 3, B=165 &rarr; 5. The options were never inert &mdash; the test budget simply was not energy-binding.</p><p style='margin:0 0 10px'><b>L1 is void</b> as a limitation. <b>L7</b> is half-resolved: aggregate states <i>are</i> implemented (<code>value_function._aggregate</code>, <code>max_frontier</code>); Lazy DP is not.</p><p style='margin:0 0 10px'><b>Per-task <code>theta</code> is not covered.</b> Generated test-cases now emit a per-task &theta; (paper &sect;VII.A.2(f)) and <code>OnlineSimulator._ratio(i)</code> prefers it over <code>SimConfig.acet_ratio</code> (<code>use_task_theta=False</code> forces the fallback). ACETs are reproducible data now, not a simulator knob.</p><p style='margin:0'>L2&ndash;L6 and L8&ndash;L10 still hold, and &sect;4/&sect;5 (module map and document&rarr;code map) are still accurate.</p></div>
+
   <p>Subject: <code style="background:rgba(255,255,255,.15);color:#fff">usrt/online/</code> — joint (time, energy) slack-distribution DP (paper Section VI)</p>
   <p>Reference design: <em>usrt_online_dp_doc.pdf</em> &nbsp;•&nbsp; Energy model: α=1.0, β=0.5</p>
+
+<div class="usrt-stale-2026-09-04" style="margin:10px 0;padding:10px 13px;border-left:5px solid #b3261e;background:#fdecea;color:#4a1512;border-radius:0 7px 7px 0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:13.5px;line-height:1.55;"><span style="font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:10px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#8c1d18;display:block;margin-bottom:5px;">NOT IN CODEBASE &middot; 4 Sep 2026</span>Energy model is now <b>&alpha;=0.15, &beta;=1.0</b> (f*&asymp;0.42). Also note the reference PDF predates the runtime layer &mdash; it has no shared pool, semaphore, commit-guarantee or <code>max_frontier</code>.</div>
   <p>Status: DP core verified against every table/trace in the design document; demo on <code style="background:rgba(255,255,255,.15);color:#fff">testcase.py</code> feasible (+55.3 utility).</p>
 </header>
 
@@ -174,6 +194,8 @@
 <section class="card">
   <span class="badge crit">Material</span>
   <h3>L1. Frequency-conversion options are inert under α=1, β=0.5</h3>
+<div class="usrt-stale-2026-09-04" style="margin:10px 0;padding:10px 13px;border-left:5px solid #b3261e;background:#fdecea;color:#4a1512;border-radius:0 7px 7px 0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:13.5px;line-height:1.55;"><span style="font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:10px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#8c1d18;display:block;margin-bottom:5px;">NOT IN CODEBASE &middot; 4 Sep 2026</span><b>L1 no longer applies.</b> It was true only for &alpha;=1, &beta;=0.5. The real limitation now is the one in [[15Aug_Online_Audit]]: the <i>offline</i> schedule starts at f_max, so online has no upward headroom &mdash; not that the options are inert.</div>
+
   <p>Energy per unit work α/f + βf² is minimised at f* = (α/2β)<sup>⅓</sup> = 1.0 =
   f<sub>max</sub>. So Option 3 (lower freq to save energy) never saves energy and
   Option 4 cannot exceed f<sub>max</sub>. The 4-option action set is fully coded and

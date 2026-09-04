@@ -1,0 +1,1231 @@
+<title>USRT Pipeline Atlas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=JetBrains+Mono:wght@400;500;700&display=swap">
+
+<style>
+/* ============================================================
+   TOKENS — light is the base; dark redefines tokens only.
+   Semantic hues encode the problem's own structure:
+     indigo = mapping   teal = time / DBF   amber = energy   rose = exact / ILP
+   ============================================================ */
+:root{
+  --ground:#F5F6F8;
+  --surface:#FFFFFF;
+  --surface-2:#EEF0F4;
+  --ink:#161A22;
+  --ink-2:#3A4152;
+  --rule-strong:#BFC5D1;
+
+  --map:#4B3FB8;        /* mapping stage */
+  --map-bg:#ECEAFA;
+  --time:#0B6E77;       /* time slack, DBF, per-processor */
+  --time-bg:#E2F1F2;
+  --energy:#A15810;     /* energy budget, global pool */
+  --energy-bg:#FAEEE0;
+  --exact:#8E2F4C;      /* ILP / exact solvers */
+  --exact-bg:#F9E8ED;
+
+  --warn:#A15810;
+  --warn-bg:#FAEEE0;
+
+  --shadow:0 1px 2px rgba(22,26,34,.06), 0 6px 18px -10px rgba(22,26,34,.18);
+
+  --col:74ch;
+  --wide:1120px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#0F1218;
+    --surface:#171B23;
+    --surface-2:#1E232D;
+    --ink:#E5E9F1;
+    --ink-2:#B9C1D0;
+    --muted:#8B93A5;
+    --rule:#282E3A;
+    --rule-strong:#3A4252;
+
+    --map:#A79CFF;  --map-bg:#232043;
+    --time:#4CBCC8; --time-bg:#0E2E33;
+    --energy:#E5A254;--energy-bg:#33230F;
+    --exact:#F08AA8; --exact-bg:#361824;
+
+    --warn:#E5A254; --warn-bg:#33230F;
+
+    --shadow:0 1px 2px rgba(0,0,0,.5), 0 8px 24px -12px rgba(0,0,0,.7);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0F1218;
+  --surface:#171B23;
+  --surface-2:#1E232D;
+  --ink:#E5E9F1;
+  --ink-2:#B9C1D0;
+  --muted:#8B93A5;
+  --rule:#282E3A;
+  --rule-strong:#3A4252;
+
+  --map:#A79CFF;  --map-bg:#232043;
+  --time:#4CBCC8; --time-bg:#0E2E33;
+  --energy:#E5A254;--energy-bg:#33230F;
+  --exact:#F08AA8; --exact-bg:#361824;
+
+  --warn:#E5A254; --warn-bg:#33230F;
+
+  --shadow:0 1px 2px rgba(0,0,0,.5), 0 8px 24px -12px rgba(0,0,0,.7);
+}
+
+*{box-sizing:border-box}
+body{
+  background:var(--ground);
+  color:var(--ink);
+  font-family:"Source Serif 4",Georgia,"Times New Roman",serif;
+  font-size:16.5px;
+  line-height:1.62;
+  margin:0;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:var(--wide);margin:0 auto;padding:0 28px 120px}
+
+/* ---------- type ---------- */
+h1,h2,h3,h4,.disp{font-family:Archivo,"Helvetica Neue",Arial,sans-serif;text-wrap:balance}
+h1{font-size:clamp(2.1rem,4.4vw,3.15rem);font-weight:700;letter-spacing:-.021em;line-height:1.06;margin:0}
+h2{font-size:clamp(1.45rem,2.5vw,1.85rem);font-weight:650;letter-spacing:-.014em;line-height:1.16;margin:0}
+h3{font-size:1.06rem;font-weight:650;letter-spacing:-.006em;margin:0}
+h4{font-size:.83rem;font-weight:650;margin:0;letter-spacing:.04em;text-transform:uppercase}
+p{margin:0}
+code,kbd,.mono{font-family:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+code{font-size:.855em;background:var(--surface-2);border:1px solid var(--rule);border-radius:4px;padding:.08em .34em;white-space:nowrap}
+a{color:var(--map);text-underline-offset:2px}
+a:focus-visible,summary:focus-visible{outline:2px solid var(--map);outline-offset:3px;border-radius:3px}
+
+.eyebrow{
+  font-family:"JetBrains Mono",monospace;font-size:.7rem;font-weight:700;
+  letter-spacing:.15em;text-transform:uppercase;color:var(--muted);
+}
+.lede{font-size:1.14rem;line-height:1.55;color:var(--ink-2)}
+.col{max-width:var(--col)}
+.stack{display:flex;flex-direction:column}
+.g8{gap:8px}.g12{gap:12px}.g16{gap:16px}.g20{gap:20px}.g28{gap:28px}.g40{gap:40px}
+
+/* ---------- masthead ---------- */
+header.mast{
+  border-bottom:1px solid var(--rule);
+  background:var(--surface);
+  padding:56px 0 40px;
+  margin-bottom:0;
+}
+.mast .wrap{padding-bottom:0}
+.mast-grid{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:40px;align-items:end}
+@media(max-width:820px){.mast-grid{grid-template-columns:1fr}}
+.mast-meta{
+  font-family:"JetBrains Mono",monospace;font-size:.73rem;line-height:1.85;
+  color:var(--muted);text-align:right;white-space:nowrap;
+}
+@media(max-width:820px){.mast-meta{text-align:left}}
+.mast-meta b{color:var(--ink-2);font-weight:500}
+
+/* ---------- nav ---------- */
+nav.toc{
+  position:sticky;top:0;z-index:20;
+  background:color-mix(in srgb,var(--ground) 88%,transparent);
+  backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--rule);
+  margin-bottom:56px;
+}
+nav.toc .wrap{padding-top:0;padding-bottom:0;display:flex;gap:0;overflow-x:auto}
+nav.toc a{
+  font-family:"JetBrains Mono",monospace;font-size:.735rem;font-weight:500;
+  color:var(--muted);text-decoration:none;white-space:nowrap;
+  padding:13px 15px;border-bottom:2px solid transparent;
+}
+nav.toc a:hover{color:var(--ink);border-bottom-color:var(--rule-strong)}
+nav.toc a .n{color:var(--map);font-weight:700;margin-right:7px}
+
+/* ---------- sections ---------- */
+section{scroll-margin-top:60px;padding-top:8px}
+.sec-head{display:flex;flex-direction:column;gap:10px;margin-bottom:26px;max-width:var(--col)}
+.rule{height:1px;background:var(--rule);border:0;margin:0}
+.sec-sep{height:1px;background:var(--rule);border:0;margin:64px 0 56px}
+
+/* ---------- figures ---------- */
+figure{margin:0;background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:26px 22px 18px;box-shadow:var(--shadow)}
+.figscroll{overflow-x:auto}
+figure svg{display:block;width:100%;min-width:660px;height:auto;color:var(--ink)}
+figcaption{
+  margin-top:16px;padding-top:14px;border-top:1px solid var(--rule);
+  font-size:.895rem;line-height:1.5;color:var(--muted);max-width:88ch;
+}
+figcaption b{color:var(--ink-2);font-weight:600}
+
+/* ---------- legend ---------- */
+.legend{display:flex;flex-wrap:wrap;gap:8px 22px;align-items:center}
+.lg{display:inline-flex;align-items:center;gap:8px;font-family:"JetBrains Mono",monospace;font-size:.735rem;color:var(--ink-2)}
+.sw{width:13px;height:13px;border-radius:3px;border:1.5px solid;flex:none}
+.sw.map{background:var(--map-bg);border-color:var(--map)}
+.sw.time{background:var(--time-bg);border-color:var(--time)}
+.sw.energy{background:var(--energy-bg);border-color:var(--energy)}
+.sw.exact{background:var(--exact-bg);border-color:var(--exact)}
+.sw.plain{background:var(--surface-2);border-color:var(--rule-strong)}
+.sw.dash{background:transparent;border-color:var(--muted);border-style:dashed}
+
+/* ---------- tables ---------- */
+.tbl-wrap{overflow-x:auto;border:1px solid var(--rule);border-radius:10px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:.87rem;min-width:600px}
+th,td{text-align:left;padding:10px 15px;border-bottom:1px solid var(--rule);vertical-align:top}
+thead th{
+  font-family:Archivo,sans-serif;font-size:.7rem;font-weight:650;
+  letter-spacing:.07em;text-transform:uppercase;color:var(--muted);
+  background:var(--surface-2);border-bottom:1px solid var(--rule-strong);white-space:nowrap;
+}
+tbody tr:last-child td{border-bottom:0}
+td.f{font-family:"JetBrains Mono",monospace;font-size:.79rem;white-space:nowrap;color:var(--ink)}
+td.f .dim{color:var(--muted)}
+.num{font-variant-numeric:tabular-nums;text-align:right;font-family:"JetBrains Mono",monospace;font-size:.79rem}
+tr.hl td{background:var(--map-bg)}
+
+/* ---------- pills ---------- */
+.pill{
+  display:inline-block;font-family:"JetBrains Mono",monospace;font-size:.68rem;font-weight:700;
+  letter-spacing:.05em;padding:2px 7px;border-radius:4px;border:1px solid;white-space:nowrap;
+}
+.pill.map{color:var(--map);border-color:var(--map);background:var(--map-bg)}
+.pill.time{color:var(--time);border-color:var(--time);background:var(--time-bg)}
+.pill.energy{color:var(--energy);border-color:var(--energy);background:var(--energy-bg)}
+.pill.exact{color:var(--exact);border-color:var(--exact);background:var(--exact-bg)}
+.pill.plain{color:var(--muted);border-color:var(--rule-strong);background:var(--surface-2)}
+
+/* ---------- callout ---------- */
+.note{
+  border-left:3px solid var(--rule-strong);
+  padding:2px 0 2px 18px;color:var(--ink-2);font-size:.95rem;max-width:var(--col);
+}
+.note.warn{border-left-color:var(--warn)}
+.note .tag{
+  font-family:"JetBrains Mono",monospace;font-size:.68rem;font-weight:700;
+  letter-spacing:.08em;text-transform:uppercase;color:var(--warn);display:block;margin-bottom:4px;
+}
+.note.plainhead .tag{color:var(--muted)}
+
+/* ---------- io strip ---------- */
+.io{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:1px;background:var(--rule);border:1px solid var(--rule);border-radius:10px;overflow:hidden}
+.io > div{background:var(--surface);padding:14px 16px;display:flex;flex-direction:column;gap:5px}
+.io .k{font-family:"JetBrains Mono",monospace;font-size:.67rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.io .v{font-family:"JetBrains Mono",monospace;font-size:.78rem;line-height:1.5;color:var(--ink)}
+
+/* ---------- cmd ---------- */
+.cmd{
+  font-family:"JetBrains Mono",monospace;font-size:.79rem;line-height:1.75;
+  background:var(--surface-2);border:1px solid var(--rule);border-left:3px solid var(--map);
+  border-radius:0 8px 8px 0;padding:12px 16px;overflow-x:auto;white-space:pre;color:var(--ink-2);
+}
+.cmd b{color:var(--ink);font-weight:700}
+
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<header class="mast">
+  <div class="wrap">
+    <div class="mast-grid">
+      <div class="stack g16">
+        <span class="eyebrow">USRT · V2 · branch mapping-strategies</span>
+        <h1>USRT Pipeline Atlas</h1>
+        <p class="lede col">Which file, and which function, does each thing — for all four scheduling
+        paths and the experiment harness that feeds them. Every box below names real code in
+        <code>V2/</code>, in the order it actually executes.</p>
+      </div>
+      <div class="mast-meta">
+        <b>4</b> solver paths<br>
+        <b>7</b> heuristic variants<br>
+        <b>~2,460</b> lines under usrt/<br>
+        drawn 4 Sep 2026
+      </div>
+    </div>
+  </div>
+</header>
+
+<nav class="toc">
+  <div class="wrap">
+    <a href="#legend"><span class="n">00</span>Legend</a>
+    <a href="#params"><span class="n">01</span>Parameters</a>
+    <a href="#map"><span class="n">02</span>System map</a>
+    <a href="#ilp"><span class="n">03</span>ILP v1 &amp; v2</a>
+    <a href="#heur"><span class="n">04</span>Heuristic</a>
+    <a href="#online"><span class="n">05</span>Online</a>
+    <a href="#gen"><span class="n">06</span>Test-cases &amp; reports</a>
+    <a href="#flags"><span class="n">07</span>Live flags</a>
+  </div>
+</nav>
+
+<div class="wrap stack g40">
+
+<!-- ══════════════════════════ 00 LEGEND ══════════════════════════ -->
+<section id="legend" class="stack g20">
+  <div class="sec-head">
+    <span class="eyebrow">00 — How to read this</span>
+    <h2>Colour carries meaning, not decoration</h2>
+    <p class="col">The four hues map onto the four things this project keeps separate. Two of them are
+    the problem's own scarce resources: <b>time slack is per-processor</b> (a DBF window property) and
+    <b>energy is one global budget</b>. Any block that touches one of those is coloured for it.</p>
+  </div>
+
+  <div class="legend">
+    <span class="lg"><span class="sw map"></span>mapping — job → processor</span>
+    <span class="lg"><span class="sw time"></span>time / DBF slack — per processor</span>
+    <span class="lg"><span class="sw energy"></span>energy — one global budget B</span>
+    <span class="lg"><span class="sw exact"></span>exact solver — Gurobi ILP</span>
+    <span class="lg"><span class="sw plain"></span>plumbing / shared</span>
+    <span class="lg"><span class="sw dash"></span>diagnostic or optional — does not gate</span>
+  </div>
+
+  <div class="io">
+    <div><span class="k">Instance</span><span class="v">processors[] · tasks[] · B</span></div>
+    <div><span class="k">Decision</span><span class="v">T(i,j) → ⟨Px, fz, k⟩</span></div>
+    <div><span class="k">Timing law</span><span class="v">DBF(t1,t2,x) ≤ t2 − t1</span></div>
+    <div><span class="k">Objective</span><span class="v">max Σ u_i · (cum[i][k] − cum[i][0])</span></div>
+  </div>
+
+  <p class="note plainhead"><span class="tag">Shared substrate</span>
+  Four modules sit under every path and are drawn only once, in the system map:
+  <code>usrt/models.py</code> (α=0.15, β=1.0, <code>energy_val</code>, <code>e_eff_val</code>),
+  <code>usrt/utils.py</code> (<code>lcm_list</code>, <code>build_cum</code>, <code>build_job_times</code>),
+  <code>usrt/dbf/</code> (<code>window_slack</code>, <code>min_slack_for_job</code>, <code>check_all_timing</code>)
+  and <code>usrt/output.py</code> (<code>print_schedule</code>).</p>
+</section>
+
+<hr class="sec-sep">
+
+<!-- ============== 01 PARAMETERS ============== -->
+<section id="params" class="stack g20">
+  <div class="sec-head">
+    <span class="eyebrow">01 — Where every number comes from</span>
+    <h2>Three origins, and only one of them is the test case</h2>
+    <p class="col">Before any pipeline runs, an instance is assembled from three separate places.
+    Mixing them up is the easiest way to misread a result &mdash; <code>e_m</code> varies per test
+    case, <code>ALPHA</code> never does, and <code>h</code> is not stored anywhere at all.</p>
+  </div>
+
+  <figure class="figscroll">
+    <svg viewBox="0 0 960 452" role="img" aria-label="Three sources feed the resolved instance: the test-case file supplies per-processor and per-task data plus the energy budget, usrt/models.py supplies the two energy constants, and usrt/utils.py derives the hyperperiod, quantum, cumulative work table and job release and deadline times. A fourth box holds algorithm tuning constants, which are code rather than data.">
+      <defs>
+        <marker id="a6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+        </marker>
+      </defs>
+
+      <rect x="16" y="40" width="300" height="182" rx="8" fill="var(--surface)" stroke="currentColor" stroke-width="2.2"/>
+      <text x="32" y="32" font-family="Archivo, sans-serif" font-size="11.5" font-weight="700" letter-spacing=".6" fill="currentColor">A &#183; THE TEST-CASE FILE &#8212; varies per instance</text>
+      <text x="32" y="61" font-family="JetBrains Mono, monospace" font-size="10" font-weight="700" fill="currentColor">testcase() &#8594; processors, tasks, B_BUDGET</text>
+      <line x1="32" y1="68" x2="300" y2="68" stroke="var(--rule)" stroke-width="1"/>
+      <text x="32" y="85" font-family="JetBrains Mono, monospace" font-size="9.2" fill="var(--muted)">processors[x]</text>
+      <text x="44" y="99" font-family="JetBrains Mono, monospace" font-size="9.2" fill="currentColor">id &#183; frequencies  <tspan fill="var(--muted)">F={f_z}, f_max=1.0</tspan></text>
+      <text x="32" y="118" font-family="JetBrains Mono, monospace" font-size="9.2" fill="var(--muted)">tasks[i]</text>
+      <text x="44" y="132" font-family="JetBrains Mono, monospace" font-size="9.2" fill="currentColor">p_i     <tspan fill="var(--muted)">period &#8594; release + deadline</tspan></text>
+      <text x="44" y="146" font-family="JetBrains Mono, monospace" font-size="9.2" fill="currentColor">e_m     <tspan fill="var(--muted)">mandatory work at f_max = e_i,0</tspan></text>
+      <text x="44" y="160" font-family="JetBrains Mono, monospace" font-size="9.2" fill="currentColor">e_o_k[] <tspan fill="var(--muted)">optional segs e_i,1..Nseg</tspan></text>
+      <text x="44" y="174" font-family="JetBrains Mono, monospace" font-size="9.2" fill="currentColor">u_i     <tspan fill="var(--muted)">utility per unit optional work</tspan></text>
+      <text x="44" y="188" font-family="JetBrains Mono, monospace" font-size="9.2" fill="currentColor">theta   <tspan fill="var(--muted)">ACET multiplier (generated only)</tspan></text>
+      <text x="32" y="207" font-family="JetBrains Mono, monospace" font-size="9.2" fill="var(--energy)">B_BUDGET <tspan fill="var(--muted)">the global energy budget B</tspan></text>
+
+      <rect x="336" y="40" width="250" height="182" rx="8" fill="var(--energy-bg)" stroke="var(--energy)" stroke-width="2.2"/>
+      <text x="352" y="32" font-family="Archivo, sans-serif" font-size="11.5" font-weight="700" letter-spacing=".6" fill="var(--energy)">B &#183; usrt/models.py &#8212; fixed</text>
+      <text x="352" y="61" font-family="JetBrains Mono, monospace" font-size="10" font-weight="700" fill="var(--energy)">the ONLY two physical constants</text>
+      <line x1="352" y1="68" x2="570" y2="68" stroke="var(--energy)" stroke-width="1" opacity=".4"/>
+      <text x="352" y="86" font-family="JetBrains Mono, monospace" font-size="10.5" font-weight="700" fill="currentColor">ALPHA = 0.15</text>
+      <text x="364" y="99" font-family="JetBrains Mono, monospace" font-size="9" fill="var(--muted)">static / leakage coefficient</text>
+      <text x="352" y="117" font-family="JetBrains Mono, monospace" font-size="10.5" font-weight="700" fill="currentColor">BETA  = 1.0</text>
+      <text x="364" y="130" font-family="JetBrains Mono, monospace" font-size="9" fill="var(--muted)">dynamic power coefficient</text>
+      <line x1="352" y1="142" x2="570" y2="142" stroke="var(--energy)" stroke-width="1" opacity=".4"/>
+      <text x="352" y="159" font-family="JetBrains Mono, monospace" font-size="9" fill="var(--muted)">E = &#945;&#183;cum/f + &#946;&#183;f&#178;&#183;cum</text>
+      <text x="352" y="173" font-family="JetBrains Mono, monospace" font-size="9" fill="var(--muted)">g(f) = &#945;/f + &#946;f&#178;</text>
+      <text x="352" y="190" font-family="JetBrains Mono, monospace" font-size="9.6" font-weight="700" fill="var(--energy)">f* = (&#945;/2&#946;)^(1/3) &#8776; 0.4217</text>
+      <text x="352" y="207" font-family="JetBrains Mono, monospace" font-size="8.6" fill="var(--muted)">NEVER in a test case. Never swept.</text>
+
+      <rect x="606" y="40" width="338" height="182" rx="8" fill="var(--surface)" stroke="var(--rule-strong)" stroke-width="1.8" stroke-dasharray="7 4"/>
+      <text x="622" y="32" font-family="Archivo, sans-serif" font-size="11.5" font-weight="700" letter-spacing=".6" fill="var(--muted)">C &#183; DERIVED AT LOAD &#8212; stored nowhere</text>
+      <text x="622" y="61" font-family="JetBrains Mono, monospace" font-size="10" font-weight="700" fill="currentColor">usrt/utils.py, recomputed by every solver</text>
+      <line x1="622" y1="68" x2="928" y2="68" stroke="var(--rule)" stroke-width="1"/>
+      <text x="622" y="86" font-family="JetBrains Mono, monospace" font-size="9.2" fill="var(--time)">h = lcm_list(p_i)  <tspan fill="var(--muted)">hyper-period</tspan></text>
+      <text x="622" y="103" font-family="JetBrains Mono, monospace" font-size="9.2" fill="var(--time)">&#948; = gcd_list(p_i)  <tspan fill="var(--muted)">the SPS quantum</tspan></text>
+      <text x="622" y="120" font-family="JetBrains Mono, monospace" font-size="9.2" fill="currentColor">cum[i][k] = &#931;(q&#8804;k) e_i,q  <tspan fill="var(--muted)">build_cum</tspan></text>
+      <text x="622" y="137" font-family="JetBrains Mono, monospace" font-size="9.2" fill="currentColor">N_seg[i]  = len(e_o_k)</text>
+      <text x="622" y="154" font-family="JetBrains Mono, monospace" font-size="9.2" fill="currentColor">N_job[i]  = h / p_i</text>
+      <text x="622" y="171" font-family="JetBrains Mono, monospace" font-size="9.2" fill="var(--time)">job_r = j&#183;p_i   job_d = (j+1)&#183;p_i</text>
+      <text x="622" y="188" font-family="JetBrains Mono, monospace" font-size="8.6" fill="var(--muted)">every DBF window is built from job_r &#215; job_d</text>
+      <text x="622" y="205" font-family="JetBrains Mono, monospace" font-size="8.6" fill="var(--muted)">harmonic periods &#8658; h = max(p_i)</text>
+
+      <line x1="166" y1="222" x2="166" y2="252" stroke="currentColor" stroke-width="1.6" marker-end="url(#a6)"/>
+      <line x1="461" y1="222" x2="461" y2="252" stroke="var(--energy)" stroke-width="1.6" marker-end="url(#a6)"/>
+      <line x1="775" y1="222" x2="775" y2="252" stroke="currentColor" stroke-width="1.6" marker-end="url(#a6)"/>
+
+      <rect x="16" y="254" width="928" height="46" rx="7" fill="var(--surface-2)" stroke="currentColor" stroke-width="2"/>
+      <text x="480" y="273" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11.5" font-weight="700" fill="currentColor">the resolved instance &#8212; what solver.run(processors, tasks, B) actually works on</text>
+      <text x="480" y="289" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9" fill="var(--muted)">A is read from disk &#183; B is imported &#183; C is recomputed from A in the first ~10 lines of every solver</text>
+
+      <rect x="16" y="326" width="928" height="106" rx="8" fill="var(--surface)" stroke="var(--map)" stroke-width="1.6" stroke-dasharray="6 4"/>
+      <text x="32" y="348" font-family="Archivo, sans-serif" font-size="11" font-weight="700" letter-spacing=".6" fill="var(--map)">D &#183; NOT DATA &#8212; algorithm tuning constants compiled into the modules</text>
+      <text x="32" y="367" font-family="JetBrains Mono, monospace" font-size="9" fill="var(--muted)">These change what the SEARCH does, not what the PROBLEM is. None appear in a test case; none are swept.</text>
+      <text x="32" y="386" font-family="JetBrains Mono, monospace" font-size="9.2" fill="currentColor">heuristic_v6.py   MAP_LS_ROUNDS=2  MAP_LS_MAX_MOVES=24   <tspan fill="var(--muted)">Phase 1c budget</tspan></text>
+      <text x="32" y="400" font-family="JetBrains Mono, monospace" font-size="9.2" fill="currentColor">heuristic_v7.py   GUIDED_REPAIR_MOVES=4  LS_ROUNDS=0     <tspan fill="var(--muted)">Phase 1R / 1L</tspan></text>
+      <text x="32" y="414" font-family="JetBrains Mono, monospace" font-size="9.2" fill="currentColor">claudeoptimal.py  _IG_ITERATIONS=8  _IG_DESTROY_FRAC=.33 <tspan fill="var(--muted)">Phases 7 / 8</tspan></text>
+      <text x="560" y="386" font-family="JetBrains Mono, monospace" font-size="9.2" fill="currentColor">freq_trade.py  max_rounds=40    <tspan fill="var(--muted)">6b cap</tspan></text>
+      <text x="560" y="400" font-family="JetBrains Mono, monospace" font-size="9.2" fill="currentColor">controller.py  max_frontier=256 <tspan fill="var(--muted)">Pareto cap</tspan></text>
+      <text x="560" y="414" font-family="JetBrains Mono, monospace" font-size="9.2" fill="currentColor">repair.py      range(100)       <tspan fill="var(--muted)">repair cap</tspan></text>
+    </svg>
+    <figcaption><b>The distinction that matters for a results table:</b> anything in <b>A</b> is an
+    experimental variable, anything in <b>B</b> is a physical assumption held constant across the whole
+    study, and anything in <b>D</b> is a property of the heuristic rather than of the problem. A gap
+    that moves when you change <b>D</b> is a tuning artefact, not a finding.</figcaption>
+  </figure>
+
+  <div class="stack g16">
+    <h3>A &mdash; read from the test-case file</h3>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Paper</th><th>Key</th><th>Meaning</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td class="f">F = {f_z}</td><td class="f">processors[x]['frequencies']</td><td>Discrete normalised frequency set, ascending</td><td>Read as <code>processors[0][&hellip;]</code> in 17 places &mdash; every solver assumes all processors share one set</td></tr>
+          <tr><td class="f">p_i</td><td class="f">tasks[i]['p_i']</td><td>Period of task T_i</td><td>Also generates r = j&#183;p_i and d = (j+1)&#183;p_i. Paper &sect;II requires harmonic periods</td></tr>
+          <tr class="hl"><td class="f">e_i,0</td><td class="f">tasks[i]['e_m']</td><td>Mandatory execution time at f_max</td><td>Always executed &mdash; the hard part of the schedule</td></tr>
+          <tr class="hl"><td class="f">e_i,1..k</td><td class="f">tasks[i]['e_o_k']</td><td>Optional segment execution times at f_max</td><td>A list; cumulative &mdash; running segment k implies 0&hellip;k&minus;1</td></tr>
+          <tr><td class="f">u_i</td><td class="f">tasks[i]['u_i']</td><td>Utility per unit of optional execution</td><td>Linear (paper Eq. 8). <b>Independent of frequency</b> &mdash; which is exactly why Phase 6b can slow a job down at zero utility cost</td></tr>
+          <tr><td class="f">&theta;</td><td class="f">tasks[i]['theta']</td><td>Per-task ACET multiplier for the online phase</td><td>Paper &sect;VII.A.2(f). <b>Generated test-cases only</b> &mdash; legacy <code>testcase.py</code> has none, so it falls back to <code>SimConfig.acet_ratio</code></td></tr>
+          <tr><td class="f">B</td><td class="f">B_BUDGET</td><td>Global energy budget</td><td>Constraint C3. Generated as B = &rho;&#183;E_full_fmax</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>B &mdash; fixed in <code>usrt/models.py</code>, never in a test case</h3>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Symbol</th><th>Name</th><th>Value</th><th>Role</th></tr></thead>
+        <tbody>
+          <tr class="hl"><td class="f">&alpha;</td><td class="f">ALPHA</td><td class="num">0.15</td><td>Static / leakage coefficient &mdash; the <code>&alpha;&#183;cum/f</code> term. Dominates at <i>low</i> frequency</td></tr>
+          <tr class="hl"><td class="f">&beta;</td><td class="f">BETA</td><td class="num">1.0</td><td>Dynamic power coefficient &mdash; the <code>&beta;&#183;f&#178;&#183;cum</code> term. Dominates at <i>high</i> frequency</td></tr>
+          <tr><td class="f">f*</td><td class="f">derived, not stored</td><td class="num">0.4217</td><td>(&alpha;/2&beta;)<sup>1/3</sup> &mdash; the energy-optimal frequency. Below it, slowing down costs <i>both</i> energy and time, so Phase 6b never crosses it</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note plainhead"><span class="tag">Why these two are special</span>
+    They are the only <em>physical</em> parameters in the project, and they are deliberately excluded
+    from every sweep &mdash; changing them changes the machine, not the workload. <code>models.py</code>
+    is the single source of truth; <code>ILP.py</code> imports from it rather than declaring its own
+    (it hard-coded a stale <code>1.0 / 0.5</code> until 22&nbsp;Aug, silently solving a different
+    problem). Under <b>&alpha;=1.0, &beta;=0.5</b> the optimum sits exactly at f_max and DVFS is
+    degenerate &mdash; which is why so many older documents describe frequency scaling as a no-op.</p>
+
+    <h3>C &mdash; derived at load, stored nowhere</h3>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Symbol</th><th>Built by</th><th>From</th><th>Used for</th></tr></thead>
+        <tbody>
+          <tr><td class="f">h</td><td class="f">utils.lcm_list()</td><td>all p_i</td><td>Hyper-period &mdash; the scheduling window. Harmonic periods &rArr; h = max(p_i)</td></tr>
+          <tr><td class="f">&delta;</td><td class="f">utils.gcd_list()</td><td>all p_i</td><td>The quantum the SPS mapper steps over</td></tr>
+          <tr><td class="f">cum[i][k]</td><td class="f">utils.build_cum()</td><td>e_m + e_o_k</td><td>Cumulative work to segment k. Feeds <i>every</i> energy and e_eff call in the project</td></tr>
+          <tr><td class="f">N_seg[i]</td><td class="f">utils.build_cum()</td><td>len(e_o_k)</td><td>Upper bound on the segment decision</td></tr>
+          <tr><td class="f">N_job[i]</td><td class="f">h // p_i</td><td>h, p_i</td><td>Jobs of T_i per hyper-period</td></tr>
+          <tr><td class="f">job_r, job_d</td><td class="f">utils.build_job_times()</td><td>p_i, h</td><td>Release and deadline per job &mdash; DBF windows are A<sub>x</sub> &#215; D<sub>x</sub> over these</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>D &mdash; tuning constants: code, not data</h3>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Constant</th><th>Value</th><th>Location</th><th>Governs</th></tr></thead>
+        <tbody>
+          <tr><td class="f">MAP_LOCAL_SEARCH<br>MAP_LS_ROUNDS<br>MAP_LS_MAX_MOVES</td><td class="num">True<br>2<br>24</td><td class="f">heuristic_v6.py<br>:39-41</td><td>Phase 1c. The move cap bounds runtime by <i>shrinking neighbourhood coverage</i> as J grows, so v6's advantage should be expected to decay with instance size rather than extrapolated</td></tr>
+          <tr><td class="f">GUIDED_REPAIR_MOVES<br>LS_ROUNDS<br>LS_MAX_MOVES</td><td class="num">4<br>0<br>10</td><td class="f">heuristic_v7.py<br>:50, 60-61</td><td>Phases 1R / 1L. <code>LS_ROUNDS = 0</code> disables the local search &mdash; a recorded negative result, not an oversight</td></tr>
+          <tr><td class="f">_MAX_DG_CANDIDATES<br>_IG_ITERATIONS<br>_IG_DESTROY_FRAC</td><td class="num">20<br>8<br>0.33</td><td class="f">heuristic_<br>claudeoptimal.py<br>:36-38</td><td>Phase 7 giver-pool size; Phase 8 destroy/reconstruct rounds and destruction fraction</td></tr>
+          <tr><td class="f">max_rounds</td><td class="num">40</td><td class="f">phases/freq_trade.py:95</td><td>Phase 6b iteration cap</td></tr>
+          <tr><td class="f">range(100)</td><td class="num">100</td><td class="f">mapping/repair.py:60</td><td>DBF repair attempts before giving up and returning PARTIAL</td></tr>
+          <tr><td class="f">max_frontier</td><td class="num">256</td><td class="f">online/controller.py:52</td><td>Per-level Pareto-frontier cap (aggregate states). The exact frontier reaches ~16,400 points per level; this keeps ~229</td></tr>
+          <tr><td class="f">arbitration</td><td class="f">"proportional"</td><td class="f">online/density.py:45</td><td>Global energy split rule. <code>"strict"</code> hands the whole pool to the highest-density processor</td></tr>
+          <tr><td class="f">SimConfig defaults</td><td class="f">0.7 / 0.5 / 0.9<br>12345 / 256 / True</td><td class="f">online/simulator.py<br>:26-37</td><td><code>acet_ratio</code>, <code>ratio_min</code>, <code>ratio_max</code>, <code>seed</code>, <code>max_frontier</code>, <code>use_task_theta</code> &mdash; the online run's ACET realisation model</td></tr>
+          <tr><td class="f">_TOL</td><td class="num">1e-9</td><td class="f">9 modules</td><td>Floating-point slack on every comparison. <code>online/energy_pool.py</code> uses <b>1e-6</b> instead &mdash; deliberately looser, because it guards a hard budget</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="note plainhead"><span class="tag">One level further upstream</span>
+    The generator's own knobs &mdash; <code>TestSpec</code>'s <code>n_prc</code>, <code>n_tsk</code>,
+    <code>n_frq</code>, <code>u_mand_factor</code> (paper &alpha;), <code>u_opt_factor</code> (paper
+    &beta;), <code>rho</code>, <code>xi</code> &mdash; are <b>not</b> in this picture. They decide what
+    gets written into column&nbsp;A, then disappear; no solver ever reads them. Note the paper reuses
+    &alpha;/&beta; for <em>both</em> the energy model and the utilisation parameters, which is precisely
+    why the code renames the latter pair. See &sect;06.</p>
+  </div>
+</section>
+
+<hr class="sec-sep">
+
+<!-- ══════════════════════════ 01 SYSTEM MAP ══════════════════════════ -->
+<section id="map" class="stack g20">
+  <div class="sec-head">
+    <span class="eyebrow">02 — System map</span>
+    <h2>Two entry points, four solver paths, one substrate</h2>
+    <p class="col"><code>run.py</code> runs one instance interactively and prints a full schedule.
+    <code>run_models.py</code> runs a whole sweep silently and writes CSV. Both funnel into the same
+    <code>run(processors, tasks, B)</code> contract that every solver implements.</p>
+  </div>
+
+  <figure class="figscroll">
+    <svg viewBox="0 0 960 468" role="img" aria-label="Two entry points, run.py and run_models.py, both reaching a common solver.run contract that dispatches to four solver paths, all resting on a shared substrate of four modules.">
+      <defs>
+        <marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+        </marker>
+      </defs>
+
+      <!-- entries -->
+      <rect x="120" y="18" width="220" height="40" rx="6" fill="var(--surface-2)" stroke="currentColor" stroke-width="1.5"/>
+      <text x="230" y="37" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="12.5" font-weight="700" fill="currentColor">run.py</text>
+      <text x="230" y="51" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10" fill="var(--muted)">one testcase · verbose</text>
+
+      <rect x="540" y="18" width="280" height="40" rx="6" fill="var(--surface-2)" stroke="currentColor" stroke-width="1.5"/>
+      <text x="680" y="37" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="12.5" font-weight="700" fill="currentColor">run_models.py</text>
+      <text x="680" y="51" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10" fill="var(--muted)">whole sweep · silent · CSV</text>
+
+      <!-- loaders -->
+      <rect x="120" y="88" width="220" height="40" rx="6" fill="var(--surface)" stroke="var(--rule-strong)" stroke-width="1.5"/>
+      <text x="230" y="105" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11" fill="currentColor">utils.load_testcase()</text>
+      <text x="230" y="119" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10" fill="var(--muted)">exec the .py, call testcase()</text>
+
+      <rect x="540" y="88" width="280" height="40" rx="6" fill="var(--surface)" stroke="var(--rule-strong)" stroke-width="1.5"/>
+      <text x="680" y="105" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11" fill="currentColor">runner.run_manifest → adapters.run_model</text>
+      <text x="680" y="119" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10" fill="var(--muted)">suppresses stdout · normalises metrics</text>
+
+      <line x1="230" y1="58" x2="230" y2="86" stroke="currentColor" stroke-width="1.5" marker-end="url(#a1)"/>
+      <line x1="680" y1="58" x2="680" y2="86" stroke="currentColor" stroke-width="1.5" marker-end="url(#a1)"/>
+
+      <!-- contract bar -->
+      <rect x="100" y="158" width="760" height="42" rx="6" fill="var(--surface-2)" stroke="currentColor" stroke-width="2"/>
+      <text x="480" y="176" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="12.5" font-weight="700" fill="currentColor">solver.run(processors, tasks, B) → (seg_k, freq_idx, utility, energy)</text>
+      <text x="480" y="191" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10" fill="var(--muted)">the one contract every path implements — ILP paths return a Gurobi model instead</text>
+
+      <line x1="230" y1="128" x2="230" y2="156" stroke="currentColor" stroke-width="1.5" marker-end="url(#a1)"/>
+      <line x1="680" y1="128" x2="680" y2="156" stroke="currentColor" stroke-width="1.5" marker-end="url(#a1)"/>
+
+      <!-- lanes -->
+      <line x1="150" y1="200" x2="150" y2="226" stroke="currentColor" stroke-width="1.5" marker-end="url(#a1)"/>
+      <line x1="368" y1="200" x2="368" y2="226" stroke="currentColor" stroke-width="1.5" marker-end="url(#a1)"/>
+      <line x1="586" y1="200" x2="586" y2="226" stroke="currentColor" stroke-width="1.5" marker-end="url(#a1)"/>
+      <line x1="804" y1="200" x2="804" y2="226" stroke="currentColor" stroke-width="1.5" marker-end="url(#a1)"/>
+
+      <rect x="50" y="228" width="200" height="72" rx="6" fill="var(--exact-bg)" stroke="var(--exact)" stroke-width="1.8"/>
+      <text x="150" y="248" text-anchor="middle" font-family="Archivo, sans-serif" font-size="13" font-weight="650" fill="var(--exact)">ILP v1</text>
+      <text x="150" y="265" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10" fill="currentColor">ILP.py :: solve()</text>
+      <text x="150" y="279" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.5" fill="var(--muted)">joint map + freq + seg</text>
+      <text x="150" y="292" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.5" fill="var(--muted)">the optimality yardstick</text>
+
+      <rect x="268" y="228" width="200" height="72" rx="6" fill="var(--exact-bg)" stroke="var(--exact)" stroke-width="1.8"/>
+      <text x="368" y="248" text-anchor="middle" font-family="Archivo, sans-serif" font-size="13" font-weight="650" fill="var(--exact)">ILP v2</text>
+      <text x="368" y="265" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10" fill="currentColor">solvers/ilp_v2.py</text>
+      <text x="368" y="279" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.5" fill="var(--muted)">SPS fixes x, then exact</text>
+      <text x="368" y="292" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.5" fill="var(--muted)">freq + seg only</text>
+
+      <rect x="486" y="228" width="200" height="72" rx="6" fill="var(--map-bg)" stroke="var(--map)" stroke-width="1.8"/>
+      <text x="586" y="248" text-anchor="middle" font-family="Archivo, sans-serif" font-size="13" font-weight="650" fill="var(--map)">Heuristic v1–v7</text>
+      <text x="586" y="265" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10" fill="currentColor">solvers/heuristic_*.py</text>
+      <text x="586" y="279" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.5" fill="var(--muted)">mapping stage + phases 2–6b</text>
+      <text x="586" y="292" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.5" fill="var(--muted)">v7 default · v6 best quality</text>
+
+      <rect x="704" y="228" width="200" height="72" rx="6" fill="var(--time-bg)" stroke="var(--time)" stroke-width="1.8"/>
+      <text x="804" y="248" text-anchor="middle" font-family="Archivo, sans-serif" font-size="13" font-weight="650" fill="var(--time)">Online</text>
+      <text x="804" y="265" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10" fill="currentColor">solvers/online_demo.py</text>
+      <text x="804" y="279" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.5" fill="var(--muted)">takes an offline schedule</text>
+      <text x="804" y="292" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.5" fill="var(--muted)">as its INPUT</text>
+
+      <!-- heuristic feeds online -->
+      <path d="M686 292 L 696 292" stroke="var(--time)" stroke-width="0" fill="none"/>
+      <path d="M586 300 L 586 318 L 804 318 L 804 306" stroke="var(--time)" stroke-width="1.5" stroke-dasharray="4 3" fill="none" marker-end="url(#a1)"/>
+      <text x="695" y="332" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.5" fill="var(--time)">v5b schedule = online's starting point</text>
+
+      <!-- substrate -->
+      <rect x="50" y="352" width="854" height="98" rx="8" fill="var(--surface-2)" stroke="var(--rule-strong)" stroke-width="1.5" stroke-dasharray="6 4"/>
+      <text x="68" y="375" font-family="Archivo, sans-serif" font-size="10.5" font-weight="650" letter-spacing="1.4" fill="var(--muted)">SHARED SUBSTRATE — used by every lane above</text>
+
+      <rect x="68" y="386" width="196" height="50" rx="5" fill="var(--surface)" stroke="var(--rule-strong)"/>
+      <text x="166" y="404" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10.5" font-weight="700" fill="currentColor">models.py</text>
+      <text x="166" y="418" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9" fill="var(--muted)">ALPHA=0.15  BETA=1.0</text>
+      <text x="166" y="429" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9" fill="var(--muted)">energy_val · e_eff_val</text>
+
+      <rect x="278" y="386" width="196" height="50" rx="5" fill="var(--surface)" stroke="var(--rule-strong)"/>
+      <text x="376" y="404" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10.5" font-weight="700" fill="currentColor">utils.py</text>
+      <text x="376" y="418" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9" fill="var(--muted)">lcm_list · gcd_list</text>
+      <text x="376" y="429" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9" fill="var(--muted)">build_cum · build_job_times</text>
+
+      <rect x="488" y="386" width="196" height="50" rx="5" fill="var(--time-bg)" stroke="var(--time)" stroke-width="1.5"/>
+      <text x="586" y="404" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10.5" font-weight="700" fill="var(--time)">dbf/</text>
+      <text x="586" y="418" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9" fill="var(--muted)">slack.py: min_slack_for_job</text>
+      <text x="586" y="429" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9" fill="var(--muted)">check.py: check_all_timing</text>
+
+      <rect x="698" y="386" width="196" height="50" rx="5" fill="var(--surface)" stroke="var(--rule-strong)"/>
+      <text x="796" y="404" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10.5" font-weight="700" fill="currentColor">output.py</text>
+      <text x="796" y="418" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9" fill="var(--muted)">print_instance_summary</text>
+      <text x="796" y="429" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9" fill="var(--muted)">print_schedule</text>
+    </svg>
+    <figcaption><b>The only thing all four paths agree on</b> is the substrate and the DBF law.
+    Everything above it differs in <i>which decisions are made by search and which by an optimiser</i>.
+    Note the dashed edge: the online path does not solve an instance — it consumes a finished offline
+    schedule and improves it at runtime.</figcaption>
+  </figure>
+
+  <div class="cmd"><b>python run.py</b> testcase.py heuristic_v7      <span style="color:var(--muted)"># one instance, full printout</span>
+<b>python run_models.py</b> dry_run_tc --models heuristic --heur v7</div>
+</section>
+
+<hr class="sec-sep">
+
+<!-- ══════════════════════════ 02 ILP ══════════════════════════ -->
+<section id="ilp" class="stack g20">
+  <div class="sec-head">
+    <span class="eyebrow">03 — Exact solvers</span>
+    <h2>ILP v1 and v2 differ by exactly one decision</h2>
+    <p class="col">v1 lets Gurobi choose the processor too, so its variable carries an <code>x</code>
+    index and its DBF constraints range over <em>every</em> job's arrival/deadline set. v2 fixes the
+    mapping with SPS first, which drops <code>x</code> from the variable and shrinks each DBF
+    constraint to one processor's own windows. That is the whole difference — and it is also v2's
+    ceiling: it can never repair a bad mapping.</p>
+  </div>
+
+  <figure class="figscroll">
+    <svg viewBox="0 0 960 384" role="img" aria-label="ILP v1 and ILP v2 drawn as two parallel tracks from a shared testcase loader; v1 builds a five-index variable over global DBF windows, v2 first runs SPS mapping which removes the processor index and restricts DBF to per-processor windows.">
+      <defs>
+        <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+        </marker>
+        <marker id="a2m" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--map)"/>
+        </marker>
+      </defs>
+
+      <!-- shared input -->
+      <rect x="16" y="150" width="132" height="76" rx="6" fill="var(--surface-2)" stroke="currentColor" stroke-width="1.5"/>
+      <text x="82" y="180" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10.5" font-weight="700" fill="currentColor">load_testcase()</text>
+      <text x="82" y="196" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.5" fill="var(--muted)">processors, tasks</text>
+      <text x="82" y="208" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.5" fill="var(--muted)">B_BUDGET</text>
+
+      <path d="M148 176 L 170 176 L 170 84 L 190 84" stroke="currentColor" stroke-width="1.5" fill="none" marker-end="url(#a2)"/>
+      <path d="M148 200 L 170 200 L 170 292 L 190 292" stroke="currentColor" stroke-width="1.5" fill="none" marker-end="url(#a2)"/>
+
+      <!-- ============ v1 lane ============ -->
+      <text x="192" y="34" font-family="Archivo, sans-serif" font-size="12.5" font-weight="700" letter-spacing=".6" fill="var(--exact)">ILP v1 — joint mapping · paper §III</text>
+      <line x1="192" y1="42" x2="944" y2="42" stroke="var(--exact)" stroke-width="1" opacity=".35"/>
+
+      <rect x="192" y="56" width="164" height="56" rx="6" fill="var(--exact-bg)" stroke="var(--exact)" stroke-width="1.6"/>
+      <text x="274" y="79" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10.5" font-weight="700" fill="currentColor">ILP.py :: solve()</text>
+      <text x="274" y="95" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.5" fill="var(--muted)">no mapping stage</text>
+
+      <line x1="356" y1="84" x2="386" y2="84" stroke="currentColor" stroke-width="1.5" marker-end="url(#a2)"/>
+
+      <rect x="388" y="56" width="184" height="56" rx="6" fill="var(--surface)" stroke="var(--exact)" stroke-width="1.6"/>
+      <text x="480" y="79" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11.5" font-weight="700" fill="var(--exact)">V[i,j,k,x,z]</text>
+      <text x="480" y="95" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.5" fill="var(--muted)">Y[i,j,k,z] = Σx V</text>
+
+      <line x1="572" y1="84" x2="602" y2="84" stroke="currentColor" stroke-width="1.5" marker-end="url(#a2)"/>
+
+      <rect x="604" y="50" width="196" height="68" rx="6" fill="var(--surface)" stroke="var(--rule-strong)" stroke-width="1.4"/>
+      <text x="702" y="68" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.5" fill="currentColor">C1  Σ_{k,x,z} V = 1</text>
+      <text x="702" y="83" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.5" fill="var(--time)">C2  over GLOBAL A × D</text>
+      <text x="702" y="96" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.5" fill="var(--muted)">one constraint per (t1,t2,x)</text>
+      <text x="702" y="110" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.5" fill="var(--energy)">C3  Σ Y·E ≤ B</text>
+
+      <line x1="800" y1="84" x2="830" y2="84" stroke="currentColor" stroke-width="1.5" marker-end="url(#a2)"/>
+
+      <rect x="832" y="56" width="112" height="56" rx="6" fill="var(--exact-bg)" stroke="var(--exact)" stroke-width="1.6"/>
+      <text x="888" y="79" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10.5" font-weight="700" fill="var(--exact)">Gurobi</text>
+      <text x="888" y="94" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9" fill="var(--muted)">optimize()</text>
+
+      <!-- divergence brace -->
+      <path d="M274 118 L 274 138 L 274 138" stroke="var(--map)" stroke-width="1.6" stroke-dasharray="4 3" fill="none"/>
+      <path d="M274 250 L 274 232" stroke="var(--map)" stroke-width="1.6" stroke-dasharray="4 3" fill="none" marker-end="url(#a2m)"/>
+      <rect x="150" y="140" width="250" height="42" rx="5" fill="var(--map-bg)" stroke="var(--map)" stroke-width="1.4"/>
+      <text x="275" y="157" text-anchor="middle" font-family="Archivo, sans-serif" font-size="10.5" font-weight="650" fill="var(--map)">THE ONLY STRUCTURAL DIFFERENCE</text>
+      <text x="275" y="172" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.5" fill="currentColor">v2 fixes x before the solve</text>
+
+      <rect x="430" y="140" width="514" height="42" rx="5" fill="var(--surface-2)" stroke="var(--rule)" stroke-width="1"/>
+      <text x="446" y="157" font-family="JetBrains Mono, monospace" font-size="9.5" fill="var(--muted)">consequence  ·  v1 variables = N_job × (N_seg+1) × N_prc × N_frq   →  exact but explodes with N_prc</text>
+      <text x="446" y="172" font-family="JetBrains Mono, monospace" font-size="9.5" fill="var(--muted)">consequence  ·  v2 variables = N_job × (N_seg+1) × N_frq            →  fast, but inherits SPS's mapping error</text>
+
+      <!-- ============ v2 lane ============ -->
+      <text x="192" y="240" font-family="Archivo, sans-serif" font-size="12.5" font-weight="700" letter-spacing=".6" fill="var(--exact)">ILP v2 — SPS then exact · paper §IV</text>
+      <line x1="192" y1="248" x2="944" y2="248" stroke="var(--exact)" stroke-width="1" opacity=".35"/>
+
+      <rect x="192" y="264" width="164" height="56" rx="6" fill="var(--map-bg)" stroke="var(--map)" stroke-width="2"/>
+      <text x="274" y="284" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.5" font-weight="700" fill="var(--map)">quantum_sps_mapping()</text>
+      <text x="274" y="298" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9" fill="var(--muted)">mapping/quantum.py</text>
+      <text x="274" y="311" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9" fill="var(--muted)">mandatory only, at f_max</text>
+
+      <line x1="356" y1="292" x2="386" y2="292" stroke="currentColor" stroke-width="1.5" marker-end="url(#a2)"/>
+
+      <rect x="388" y="264" width="184" height="56" rx="6" fill="var(--surface)" stroke="var(--exact)" stroke-width="1.6"/>
+      <text x="480" y="287" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11.5" font-weight="700" fill="var(--exact)">Y[i,j,k,z]</text>
+      <text x="480" y="303" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.5" fill="var(--muted)">x removed — fixed above</text>
+
+      <line x1="572" y1="292" x2="602" y2="292" stroke="currentColor" stroke-width="1.5" marker-end="url(#a2)"/>
+
+      <rect x="604" y="258" width="196" height="68" rx="6" fill="var(--surface)" stroke="var(--rule-strong)" stroke-width="1.4"/>
+      <text x="702" y="276" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.5" fill="currentColor">C1  Σ_{k,z} Y = 1</text>
+      <text x="702" y="291" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.5" fill="var(--time)">C2  over Ax × Dx</text>
+      <text x="702" y="304" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.5" fill="var(--muted)">jobs on Px only</text>
+      <text x="702" y="318" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.5" fill="var(--energy)">C3  Σ Y·E ≤ B</text>
+
+      <line x1="800" y1="292" x2="830" y2="292" stroke="currentColor" stroke-width="1.5" marker-end="url(#a2)"/>
+
+      <rect x="832" y="264" width="112" height="56" rx="6" fill="var(--exact-bg)" stroke="var(--exact)" stroke-width="1.6"/>
+      <text x="888" y="287" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10.5" font-weight="700" fill="var(--exact)">Gurobi</text>
+      <text x="888" y="302" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9" fill="var(--muted)">optimize()</text>
+
+      <text x="480" y="352" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.5" fill="var(--muted)">both end at  _print_ilp_solution()  ·  adapters._ilp_metrics() re-scores energy through usrt.models so all models share one energy model</text>
+    </svg>
+    <figcaption>Measured at ρ=0.4 the two disagree by <b>44%</b> (ILP v1 23.19 vs ILP v2 12.98) — that
+    gap is entirely the SPS mapping, since v2 is exact given it. At ρ=1.0 they converge to 0.6%. This
+    is why the heuristic work moved to attacking the mapping.</figcaption>
+  </figure>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Block</th><th>File</th><th>Function</th><th>What it decides</th></tr></thead>
+      <tbody>
+        <tr><td>Joint ILP</td><td class="f">ILP.py <span class="dim">(repo root)</span></td><td class="f">solve()</td><td>Processor, frequency and segment count, all at once</td></tr>
+        <tr class="hl"><td>SPS mapping</td><td class="f">usrt/mapping/quantum.py</td><td class="f">quantum_sps_mapping()</td><td>Job → processor, mandatory work only, at f_max</td></tr>
+        <tr><td>↳ balancer</td><td class="f">usrt/mapping/dps_sps.py</td><td class="f">run_dps() · run_sps()</td><td>Partial-solution combining; <code>ps.py</code> holds the <code>PS</code> structure</td></tr>
+        <tr><td>↳ safety net</td><td class="f">usrt/mapping/repair.py</td><td class="f">check_dbf_mandatory() · repair_mapping()</td><td>Moves jobs off DBF-violating processors, up to 100 rounds</td></tr>
+        <tr><td>Segment/freq ILP</td><td class="f">usrt/solvers/ilp_v2.py</td><td class="f">solve_ilp_v2()</td><td>Frequency and segment count, mapping held fixed</td></tr>
+        <tr><td>Metric extraction</td><td class="f">usrt/runner/adapters.py</td><td class="f">_ilp_metrics()</td><td>Parses <code>Y[i,j,k,z]</code> names back into an energy total</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<hr class="sec-sep">
+
+<!-- ══════════════════════════ 03 HEURISTIC ══════════════════════════ -->
+<section id="heur" class="stack g20">
+  <div class="sec-head">
+    <span class="eyebrow">04 — Heuristic</span>
+    <h2>One mapping stage that varies, one phase spine that doesn't</h2>
+    <p class="col">Every heuristic variant is the same downstream pipeline bolted onto a different
+    mapping strategy. That is the single most useful thing to hold in your head: <b>v3 through v7
+    differ almost entirely in Phase 1</b>. Phases 2–6b are shared modules called with the same
+    arguments in the same order.</p>
+  </div>
+
+  <figure class="figscroll">
+    <svg viewBox="0 0 1000 636" role="img" aria-label="The heuristic drawn as a varying mapping stage on the left feeding a fixed phase spine on the right; five variant rows show what each of v3 through v7 adds to the base SPS mapping, and the spine runs Phase 2 left shift through Phase 6b frequency trade to the final schedule.">
+      <defs>
+        <marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+        </marker>
+        <marker id="a3m" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--map)"/>
+        </marker>
+      </defs>
+
+      <!-- ---------- LEFT: mapping stage ---------- -->
+      <rect x="16" y="46" width="452" height="516" rx="10" fill="var(--map-bg)" stroke="var(--map)" stroke-width="1.4" stroke-dasharray="7 4" opacity=".55"/>
+      <text x="32" y="34" font-family="Archivo, sans-serif" font-size="12.5" font-weight="700" letter-spacing=".6" fill="var(--map)">PHASE 1 — MAPPING  (this is what varies)</text>
+
+      <rect x="36" y="64" width="412" height="52" rx="6" fill="var(--surface)" stroke="var(--map)" stroke-width="2.2"/>
+      <text x="242" y="85" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11.5" font-weight="700" fill="var(--map)">quantum_sps_mapping()</text>
+      <text x="242" y="101" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.5" fill="var(--muted)">mapping/quantum.py · per-quantum DPS+SPS · then DBF check + repair</text>
+
+      <line x1="242" y1="116" x2="242" y2="136" stroke="var(--map)" stroke-width="1.6" marker-end="url(#a3m)"/>
+
+      <!-- variant rows -->
+      <rect x="36" y="138" width="412" height="42" rx="5" fill="var(--surface)" stroke="var(--rule-strong)"/>
+      <rect x="36" y="138" width="72" height="42" rx="5" fill="var(--surface-2)" stroke="var(--rule-strong)"/>
+      <text x="72" y="164" text-anchor="middle" font-family="Archivo, sans-serif" font-size="11.5" font-weight="700" fill="currentColor">v3 · v4</text>
+      <text x="122" y="158" font-family="JetBrains Mono, monospace" font-size="9.8" fill="currentColor">use the SPS mapping as-is</text>
+      <text x="122" y="171" font-family="JetBrains Mono, monospace" font-size="9" fill="var(--muted)">paper §V "Ch1"  ·  v3 stops at Phase 5, v4 adds Phase 6</text>
+
+      <rect x="36" y="188" width="412" height="42" rx="5" fill="var(--surface)" stroke="var(--rule-strong)"/>
+      <rect x="36" y="188" width="72" height="42" rx="5" fill="var(--surface-2)" stroke="var(--rule-strong)"/>
+      <text x="72" y="214" text-anchor="middle" font-family="Archivo, sans-serif" font-size="11.5" font-weight="700" fill="currentColor">v5a</text>
+      <text x="122" y="208" font-family="JetBrains Mono, monospace" font-size="9.8" fill="currentColor">+ refine_mapping_2a()   <tspan fill="var(--muted)">linear doublet scan</tspan></text>
+      <text x="122" y="221" font-family="JetBrains Mono, monospace" font-size="9" fill="var(--muted)">mapping/refine_mapping.py  ·  balances pairwise UD difference</text>
+
+      <rect x="36" y="238" width="412" height="42" rx="5" fill="var(--surface)" stroke="var(--map)" stroke-width="1.5"/>
+      <rect x="36" y="238" width="72" height="42" rx="5" fill="var(--map-bg)" stroke="var(--map)" stroke-width="1.5"/>
+      <text x="72" y="264" text-anchor="middle" font-family="Archivo, sans-serif" font-size="11.5" font-weight="700" fill="var(--map)">v5b</text>
+      <text x="122" y="258" font-family="JetBrains Mono, monospace" font-size="9.8" fill="currentColor">+ refine_mapping_2b()   <tspan fill="var(--muted)">one-swap-one-scan</tspan></text>
+      <text x="122" y="271" font-family="JetBrains Mono, monospace" font-size="9" fill="var(--muted)">minimises MAX utility density — the paper's stated goal</text>
+
+      <rect x="36" y="288" width="412" height="54" rx="5" fill="var(--surface)" stroke="var(--rule-strong)"/>
+      <rect x="36" y="288" width="72" height="54" rx="5" fill="var(--surface-2)" stroke="var(--rule-strong)"/>
+      <text x="72" y="320" text-anchor="middle" font-family="Archivo, sans-serif" font-size="11.5" font-weight="700" fill="currentColor">v6</text>
+      <text x="122" y="306" font-family="JetBrains Mono, monospace" font-size="9.8" fill="currentColor">1b′ refine_mapping_budget()  →  1c mapping_local_search()</text>
+      <text x="122" y="319" font-family="JetBrains Mono, monospace" font-size="9" fill="var(--muted)">mapping/budget_refine.py  ·  flips balance↔concentrate on a regime test</text>
+      <text x="122" y="332" font-family="JetBrains Mono, monospace" font-size="9" fill="var(--muted)">1c scores each move by running the WHOLE pipeline — ~25× cost</text>
+
+      <rect x="36" y="350" width="412" height="54" rx="5" fill="var(--surface)" stroke="var(--map)" stroke-width="2"/>
+      <rect x="36" y="350" width="72" height="54" rx="5" fill="var(--map-bg)" stroke="var(--map)" stroke-width="2"/>
+      <text x="72" y="376" text-anchor="middle" font-family="Archivo, sans-serif" font-size="11.5" font-weight="700" fill="var(--map)">v7</text>
+      <text x="72" y="390" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="7.5" letter-spacing=".5" fill="var(--map)">DEFAULT</text>
+      <text x="122" y="368" font-family="JetBrains Mono, monospace" font-size="9.8" fill="currentColor">1M multi_start()  →  1R guided_repair()</text>
+      <text x="122" y="381" font-family="JetBrains Mono, monospace" font-size="9" fill="var(--muted)">mapping/multistart.py  ·  score 7 whole mappings with 1 pipeline each</text>
+      <text x="122" y="394" font-family="JetBrains Mono, monospace" font-size="9" fill="var(--muted)">1R moves the least-valuable job off the most TIME-blocked processor</text>
+
+      <!-- packers bypass -->
+      <path d="M242 404 L 242 418" stroke="var(--map)" stroke-width="1.4" stroke-dasharray="3 3" fill="none"/>
+      <rect x="36" y="420" width="412" height="66" rx="5" fill="var(--surface-2)" stroke="var(--map)" stroke-width="1.3" stroke-dasharray="5 3"/>
+      <text x="52" y="437" font-family="Archivo, sans-serif" font-size="10" font-weight="650" letter-spacing=".7" fill="var(--map)">v7's CANDIDATE POOL — mapping/packers.py</text>
+      <text x="52" y="452" font-family="JetBrains Mono, monospace" font-size="9.2" fill="currentColor">sps · sps+refine2b · sps+budget          <tspan fill="var(--muted)">← go through SPS</tspan></text>
+      <text x="52" y="465" font-family="JetBrains Mono, monospace" font-size="9.2" fill="currentColor">wfd_mapping · ffd_mapping · bfd_mapping  <tspan fill="var(--muted)">← BYPASS SPS entirely</tspan></text>
+      <text x="52" y="478" font-family="JetBrains Mono, monospace" font-size="9.2" fill="currentColor">donor_harvester_mapping                  <tspan fill="var(--muted)">← concentrates UD on purpose</tspan></text>
+
+      <rect x="36" y="496" width="412" height="52" rx="5" fill="var(--surface)" stroke="var(--rule-strong)"/>
+      <text x="52" y="514" font-family="Archivo, sans-serif" font-size="10" font-weight="650" letter-spacing=".7" fill="var(--muted)">EVERY CANDIDATE IS DBF-VERIFIED BEFORE IT CAN WIN</text>
+      <text x="52" y="529" font-family="JetBrains Mono, monospace" font-size="9.2" fill="currentColor">dbf/check.py :: check_all_timing()  ·  refine swaps also guard via _swap_feasible()</text>
+      <text x="52" y="542" font-family="JetBrains Mono, monospace" font-size="9.2" fill="var(--muted)">so no mapping stage can ever return something infeasible</text>
+
+      <!-- merge to spine -->
+      <path d="M448 292 L 490 292 L 490 300 L 520 300" stroke="var(--map)" stroke-width="2" fill="none" marker-end="url(#a3m)"/>
+      <text x="484" y="284" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9" fill="var(--map)">mapping</text>
+
+      <!-- ---------- RIGHT: phase spine ---------- -->
+      <text x="536" y="34" font-family="Archivo, sans-serif" font-size="12.5" font-weight="700" letter-spacing=".6" fill="currentColor">PHASES 2 – 6b — FREQUENCY &amp; SEGMENTS  (identical for all)</text>
+
+      <rect x="524" y="46" width="460" height="42" rx="5" fill="var(--surface)" stroke="var(--muted)" stroke-width="1.3" stroke-dasharray="5 3"/>
+      <text x="540" y="63" font-family="JetBrains Mono, monospace" font-size="10" font-weight="700" fill="var(--muted)">2 · left_shift()</text>
+      <text x="540" y="77" font-family="JetBrains Mono, monospace" font-size="9" fill="var(--muted)">phases/left_shift.py · DIAGNOSTIC ONLY — prints slack, gates nothing</text>
+
+      <line x1="754" y1="88" x2="754" y2="102" stroke="currentColor" stroke-width="1.4" marker-end="url(#a3)"/>
+
+      <rect x="524" y="104" width="460" height="42" rx="5" fill="var(--energy-bg)" stroke="var(--energy)" stroke-width="1.6"/>
+      <text x="540" y="121" font-family="JetBrains Mono, monospace" font-size="10" font-weight="700" fill="var(--energy)">3 · min_possible_energy()   →  terminal infeasibility gate</text>
+      <text x="540" y="135" font-family="JetBrains Mono, monospace" font-size="9" fill="var(--muted)">phases/energy_slack.py · every job at its CHEAPEST freq — not f_max</text>
+
+      <line x1="754" y1="146" x2="754" y2="160" stroke="currentColor" stroke-width="1.4" marker-end="url(#a3)"/>
+
+      <rect x="524" y="162" width="460" height="42" rx="5" fill="var(--energy-bg)" stroke="var(--energy)" stroke-width="1.6"/>
+      <text x="540" y="179" font-family="JetBrains Mono, monospace" font-size="10" font-weight="700" fill="var(--energy)">4 · phase_aggressive_scaling()</text>
+      <text x="540" y="193" font-family="JetBrains Mono, monospace" font-size="9" fill="var(--muted)">phases/aggressive.py · lowers freq ONLY until the budget fits, then stops</text>
+
+      <line x1="754" y1="204" x2="754" y2="218" stroke="currentColor" stroke-width="1.4" marker-end="url(#a3)"/>
+
+      <rect x="524" y="220" width="460" height="80" rx="5" fill="var(--surface)" stroke="currentColor" stroke-width="2"/>
+      <text x="540" y="238" font-family="JetBrains Mono, monospace" font-size="10" font-weight="700" fill="currentColor">5 · phase_optional_segments()      the utility engine</text>
+      <text x="540" y="252" font-family="JetBrains Mono, monospace" font-size="9" fill="var(--muted)">phases/greedy.py · loops jobs by −u_i until no pass improves</text>
+      <text x="552" y="267" font-family="JetBrains Mono, monospace" font-size="9.2" fill="var(--time)">case i    fits in min_slack_for_job + E_slack        → commit</text>
+      <text x="552" y="280" font-family="JetBrains Mono, monospace" font-size="9.2" fill="var(--time)">case ii.A raise j*'s freq to buy time                → full DBF recheck</text>
+      <text x="552" y="293" font-family="JetBrains Mono, monospace" font-size="9.2" fill="var(--energy)">case ii.B slow OTHER jobs to donate energy           → full DBF recheck</text>
+
+      <line x1="754" y1="300" x2="754" y2="314" stroke="currentColor" stroke-width="1.4" marker-end="url(#a3)"/>
+
+      <rect x="524" y="316" width="460" height="56" rx="5" fill="var(--surface)" stroke="currentColor" stroke-width="1.6"/>
+      <text x="540" y="334" font-family="JetBrains Mono, monospace" font-size="10" font-weight="700" fill="currentColor">6 · phase_swap_local_search()</text>
+      <text x="540" y="348" font-family="JetBrains Mono, monospace" font-size="9" fill="var(--muted)">phases/swap.py · best-first giver→receiver, CROSS-PROCESSOR (energy is global)</text>
+      <text x="540" y="362" font-family="JetBrains Mono, monospace" font-size="9" fill="var(--muted)">every accepted swap re-runs Phase 5 as a fill pass</text>
+
+      <line x1="754" y1="372" x2="754" y2="386" stroke="currentColor" stroke-width="1.4" marker-end="url(#a3)"/>
+
+      <rect x="524" y="388" width="460" height="70" rx="5" fill="var(--surface)" stroke="var(--energy)" stroke-width="2"/>
+      <text x="540" y="406" font-family="JetBrains Mono, monospace" font-size="10" font-weight="700" fill="var(--energy)">6b · phase_freq_utility_trade()      shadow prices</text>
+      <text x="540" y="420" font-family="JetBrains Mono, monospace" font-size="9" fill="var(--muted)">phases/freq_trade.py · v5b, v6, v7, claudeoptimal ONLY</text>
+      <text x="552" y="435" font-family="JetBrains Mono, monospace" font-size="9.4" fill="currentColor">λ = max u_i/g(f) over ENERGY-blocked    μ = max u_i·f over TIME-blocked</text>
+      <text x="552" y="449" font-family="JetBrains Mono, monospace" font-size="9.4" fill="currentColor">slow a job down when   λ·dE &gt; μ·dT       (never crosses f* ≈ 0.42)</text>
+
+      <line x1="754" y1="458" x2="754" y2="472" stroke="currentColor" stroke-width="1.4" marker-end="url(#a3)"/>
+
+      <rect x="524" y="474" width="460" height="46" rx="5" fill="var(--surface)" stroke="var(--muted)" stroke-width="1.3" stroke-dasharray="5 3"/>
+      <text x="540" y="491" font-family="JetBrains Mono, monospace" font-size="10" font-weight="700" fill="var(--muted)">7 · double-giver swap    8 · iterated greedy (destroy/reconstruct)</text>
+      <text x="540" y="505" font-family="JetBrains Mono, monospace" font-size="9" fill="var(--muted)">solvers/heuristic_claudeoptimal.py ONLY · best-so-far restored, can never worsen</text>
+      <text x="540" y="516" font-family="JetBrains Mono, monospace" font-size="9" fill="var(--muted)">— these are the two "extra steps" beyond the paper's §V</text>
+
+      <line x1="754" y1="520" x2="754" y2="534" stroke="currentColor" stroke-width="1.4" marker-end="url(#a3)"/>
+
+      <rect x="524" y="536" width="460" height="46" rx="5" fill="var(--surface-2)" stroke="currentColor" stroke-width="1.8"/>
+      <text x="754" y="555" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10.5" font-weight="700" fill="currentColor">seg_k · freq_idx · total_utility · total_energy</text>
+      <text x="754" y="570" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9" fill="var(--muted)">output.py :: print_schedule()  →  adapters.run_heuristic() re-checks E ≤ B</text>
+
+      <text x="500" y="612" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.5" fill="var(--muted)">every phase mutates seg_k and freq_idx IN PLACE — there is no schedule object, the two dicts ARE the solution</text>
+    </svg>
+    <figcaption><b>The spine is stateless code over two mutable dicts.</b> <code>seg_k[(i,j)]</code> is the
+    segment level and <code>freq_idx[(i,j)]</code> the frequency index; every phase takes both, edits
+    them in place, and returns only a log. That is why phases compose freely into different variants —
+    and why Phase 6 can call Phase 5 recursively as a fill pass.</figcaption>
+  </figure>
+
+  <div class="stack g16">
+    <h3>Variant matrix — measured on the same 90 instances (22 Aug)</h3>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Variant</th><th>Mapping stage</th><th>Phases</th><th class="num">Mean gap</th><th class="num">Runtime</th></tr></thead>
+        <tbody>
+          <tr><td class="f">greedy_sps_baseline</td><td>SPS only, f_max pinned</td><td>naive floor</td><td class="num">51.44%</td><td class="num">0.66 ms</td></tr>
+          <tr><td class="f">heuristic_v5b</td><td>SPS + refine 2b</td><td>2–6b</td><td class="num">10.77%</td><td class="num">1.69 ms</td></tr>
+          <tr><td class="f">claudeoptimal</td><td>SPS + refine 2b</td><td>2–6b + 7 + 8</td><td class="num">9.58%</td><td class="num">3.92 ms</td></tr>
+          <tr><td class="f">ilp_v2</td><td>SPS</td><td>exact given mapping</td><td class="num">4.99%</td><td class="num">23.62 ms</td></tr>
+          <tr><td class="f">heuristic_v6</td><td>SPS + 1b′ + 1c</td><td>2–6b</td><td class="num">3.52%</td><td class="num">28.85 ms</td></tr>
+          <tr class="hl"><td class="f">heuristic_v7</td><td>multi-start + guided repair</td><td>2–6b</td><td class="num">3.97%</td><td class="num">15.08 ms</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note plainhead"><span class="tag">Reading the table</span>
+    Gaps are per-instance against ILP v1 over the 50 instances every model solved. v6 and v7 both beat
+    ILP v2 — not because they out-optimise it, but because they <em>change the mapping ILP v2 is stuck
+    with</em>. v7 never loses to v5b: 31 better, 19 equal, 0 worse.</p>
+  </div>
+</section>
+
+<hr class="sec-sep">
+
+<!-- ══════════════════════════ 04 ONLINE ══════════════════════════ -->
+<section id="online" class="stack g20">
+  <div class="sec-head">
+    <span class="eyebrow">05 — Online</span>
+    <h2>Precompute per processor, then spend windfalls at runtime</h2>
+    <p class="col">The online phase does not schedule anything. It takes a finished offline schedule
+    and, whenever a job finishes early, decides how to spend the freed time and energy on
+    <em>downstream</em> jobs. Time slack stays on its own processor; energy goes into one shared pool
+    every processor draws from.</p>
+  </div>
+
+  <figure class="figscroll">
+    <svg viewBox="0 0 1000 566" role="img" aria-label="The online phase: a per-processor DP is precomputed right to left over each processor's EDF job chain, then a simulator event loop calls on_completion, which refunds energy to a shared global pool, arbitrates a budget by utility density, looks up the DP, and commits under a dynamic DBF and atomic pool spend.">
+      <defs>
+        <marker id="a4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+        </marker>
+        <marker id="a4e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--energy)"/>
+        </marker>
+      </defs>
+
+      <!-- input -->
+      <rect x="16" y="20" width="800" height="44" rx="6" fill="var(--map-bg)" stroke="var(--map)" stroke-width="1.6"/>
+      <text x="34" y="39" font-family="JetBrains Mono, monospace" font-size="10.5" font-weight="700" fill="var(--map)">INPUT · online_demo.offline_schedule()  →  seg_k, freq_idx, mapping</text>
+      <text x="34" y="55" font-family="JetBrains Mono, monospace" font-size="9" fill="var(--muted)">quantum SPS → refine 2b → aggressive → greedy → swap    (calls the phase modules directly, not heuristic_v5b.run)</text>
+
+      <line x1="200" y1="64" x2="200" y2="82" stroke="currentColor" stroke-width="1.4" marker-end="url(#a4)"/>
+      <line x1="600" y1="64" x2="600" y2="82" stroke="currentColor" stroke-width="1.4" marker-end="url(#a4)"/>
+
+      <!-- LEFT: precompute -->
+      <rect x="16" y="84" width="380" height="242" rx="9" fill="var(--time-bg)" stroke="var(--time)" stroke-width="1.4" opacity=".5"/>
+      <text x="32" y="104" font-family="Archivo, sans-serif" font-size="11.5" font-weight="700" letter-spacing=".5" fill="var(--time)">PRECOMPUTE — once per processor</text>
+
+      <rect x="32" y="114" width="348" height="40" rx="5" fill="var(--surface)" stroke="var(--time)" stroke-width="1.5"/>
+      <text x="46" y="131" font-family="JetBrains Mono, monospace" font-size="9.8" font-weight="700" fill="currentColor">dp.build_processor_dp(x, …)</text>
+      <text x="46" y="145" font-family="JetBrains Mono, monospace" font-size="9" fill="var(--muted)">_edf_order() → JobSlot(pos, i, j, k_off, z_off, time_cap)</text>
+
+      <line x1="206" y1="154" x2="206" y2="166" stroke="var(--time)" stroke-width="1.4" marker-end="url(#a4)"/>
+
+      <rect x="32" y="168" width="348" height="40" rx="5" fill="var(--surface)" stroke="var(--rule-strong)"/>
+      <text x="46" y="185" font-family="JetBrains Mono, monospace" font-size="9.8" font-weight="700" fill="currentColor">actions.build_job_actions()</text>
+      <text x="46" y="199" font-family="JetBrains Mono, monospace" font-size="9" fill="var(--muted)">every (k′,z′) → (a_t, a_e, gain)  ·  time_cap = min_slack_for_job</text>
+
+      <line x1="206" y1="208" x2="206" y2="220" stroke="var(--time)" stroke-width="1.4" marker-end="url(#a4)"/>
+
+      <rect x="32" y="222" width="348" height="54" rx="5" fill="var(--surface)" stroke="var(--time)" stroke-width="2"/>
+      <text x="46" y="239" font-family="JetBrains Mono, monospace" font-size="9.8" font-weight="700" fill="var(--time)">value_function.compose()   right → left</text>
+      <text x="46" y="253" font-family="JetBrains Mono, monospace" font-size="9" fill="var(--muted)">V_levels[N] = base_level();  V_levels[s] = compose(acts[s], V_levels[s+1])</text>
+      <text x="46" y="266" font-family="JetBrains Mono, monospace" font-size="9" fill="var(--muted)">prune() keeps the Pareto frontier · _aggregate() caps it at max_frontier</text>
+
+      <rect x="32" y="286" width="348" height="30" rx="5" fill="var(--surface-2)" stroke="var(--rule)"/>
+      <text x="206" y="305" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.2" fill="var(--muted)">one precompute answers EVERY future completion point</text>
+
+      <!-- RIGHT: runtime -->
+      <rect x="412" y="84" width="404" height="404" rx="9" fill="var(--surface-2)" stroke="var(--rule-strong)" stroke-width="1.4"/>
+      <text x="428" y="104" font-family="Archivo, sans-serif" font-size="11.5" font-weight="700" letter-spacing=".5" fill="currentColor">RUNTIME — simulator.OnlineSimulator.run()</text>
+
+      <rect x="428" y="114" width="372" height="38" rx="5" fill="var(--surface)" stroke="var(--rule-strong)"/>
+      <text x="442" y="130" font-family="JetBrains Mono, monospace" font-size="9.8" font-weight="700" fill="currentColor">for (i,j) in _event_order():   _windfall() → dt, de</text>
+      <text x="442" y="144" font-family="JetBrains Mono, monospace" font-size="9" fill="var(--muted)">ACET = θ × WCET, θ per task (SimConfig.acet_ratio)</text>
+
+      <line x1="614" y1="152" x2="614" y2="164" stroke="currentColor" stroke-width="1.4" marker-end="url(#a4)"/>
+
+      <text x="428" y="178" font-family="Archivo, sans-serif" font-size="10" font-weight="650" letter-spacing=".6" fill="var(--muted)">controller.on_completion(i, j, dt, de) — five steps</text>
+
+      <rect x="428" y="186" width="372" height="34" rx="5" fill="var(--energy-bg)" stroke="var(--energy)" stroke-width="1.5"/>
+      <text x="442" y="201" font-family="JetBrains Mono, monospace" font-size="9.6" fill="currentColor"><tspan font-weight="700">1</tspan>  eff_override[(i,j)] ← actual;  pool.refund(de)</text>
+      <text x="442" y="214" font-family="JetBrains Mono, monospace" font-size="8.8" fill="var(--muted)">atomic — freed energy visible to every other processor at once</text>
+
+      <line x1="614" y1="220" x2="614" y2="230" stroke="currentColor" stroke-width="1.3" marker-end="url(#a4)"/>
+
+      <rect x="428" y="232" width="372" height="34" rx="5" fill="var(--energy-bg)" stroke="var(--energy)" stroke-width="1.5"/>
+      <text x="442" y="247" font-family="JetBrains Mono, monospace" font-size="9.6" fill="currentColor"><tspan font-weight="700">2</tspan>  density.arbitrate_energy(pool, densities) → de_budget</text>
+      <text x="442" y="260" font-family="JetBrains Mono, monospace" font-size="8.8" fill="var(--muted)">share by FUTURE utility density — advisory, not a guarantee</text>
+
+      <line x1="614" y1="266" x2="614" y2="276" stroke="currentColor" stroke-width="1.3" marker-end="url(#a4)"/>
+
+      <rect x="428" y="278" width="372" height="34" rx="5" fill="var(--time-bg)" stroke="var(--time)" stroke-width="1.5"/>
+      <text x="442" y="293" font-family="JetBrains Mono, monospace" font-size="9.6" fill="currentColor"><tspan font-weight="700">3</tspan>  dps[x].distribute(c+1, dt, de_budget) → planned</text>
+      <text x="442" y="306" font-family="JetBrains Mono, monospace" font-size="8.8" fill="var(--muted)">pure lookup + reconstruction over jobs[c+1:] — no re-solve</text>
+
+      <line x1="614" y1="312" x2="614" y2="322" stroke="currentColor" stroke-width="1.3" marker-end="url(#a4)"/>
+
+      <rect x="428" y="324" width="372" height="46" rx="5" fill="var(--surface)" stroke="currentColor" stroke-width="2"/>
+      <text x="442" y="339" font-family="JetBrains Mono, monospace" font-size="9.6" fill="currentColor"><tspan font-weight="700">4</tspan>  _commit_with_guarantee(x, planned)   ← the hard gate</text>
+      <text x="442" y="352" font-family="JetBrains Mono, monospace" font-size="8.8" fill="var(--time)">timing first: _timing_ok_dynamic() — cheap, lock-free</text>
+      <text x="442" y="364" font-family="JetBrains Mono, monospace" font-size="8.8" fill="var(--energy)">then energy: pool.try_spend() — semaphore-guarded, atomic</text>
+
+      <line x1="614" y1="370" x2="614" y2="380" stroke="currentColor" stroke-width="1.3" marker-end="url(#a4)"/>
+
+      <rect x="428" y="382" width="372" height="34" rx="5" fill="var(--time-bg)" stroke="var(--time)" stroke-width="1.5"/>
+      <text x="442" y="397" font-family="JetBrains Mono, monospace" font-size="9.6" fill="currentColor"><tspan font-weight="700">5</tspan>  dps[x] = _build_dp(x)      rebuild, stay exact</text>
+      <text x="442" y="410" font-family="JetBrains Mono, monospace" font-size="8.8" fill="var(--muted)">dominates online runtime — the paper's "Lazy DP" targets this</text>
+
+      <path d="M428 428 L 414 428 L 414 130 L 428 130" stroke="currentColor" stroke-width="1.3" stroke-dasharray="4 3" fill="none" marker-end="url(#a4)"/>
+      <text x="614" y="440" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9" fill="var(--muted)">next event</text>
+
+      <rect x="428" y="450" width="372" height="28" rx="5" fill="var(--surface)" stroke="var(--rule-strong)"/>
+      <text x="614" y="468" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.2" fill="var(--muted)">trim_events / trim_loss record what the scalar-Δt DP over-promised</text>
+
+      <!-- shared pool column -->
+      <rect x="836" y="84" width="148" height="404" rx="9" fill="var(--energy-bg)" stroke="var(--energy)" stroke-width="2"/>
+      <text x="910" y="112" text-anchor="middle" font-family="Archivo, sans-serif" font-size="11" font-weight="700" fill="var(--energy)">SharedEnergyPool</text>
+      <text x="910" y="128" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.8" fill="var(--muted)">online/energy_pool.py</text>
+      <line x1="856" y1="140" x2="964" y2="140" stroke="var(--energy)" stroke-width="1" opacity=".4"/>
+      <text x="910" y="162" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.2" fill="currentColor">refund()</text>
+      <text x="910" y="180" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.2" fill="currentColor">level()</text>
+      <text x="910" y="198" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.2" fill="currentColor">try_spend()</text>
+      <text x="910" y="216" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.2" fill="currentColor">try_spend_batch()</text>
+      <line x1="856" y1="232" x2="964" y2="232" stroke="var(--energy)" stroke-width="1" opacity=".4"/>
+      <text x="910" y="256" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.6" fill="var(--muted)">ONE pool for</text>
+      <text x="910" y="270" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.6" fill="var(--muted)">ALL processors</text>
+      <text x="910" y="292" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.6" fill="var(--muted)">energy is global;</text>
+      <text x="910" y="306" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.6" fill="var(--muted)">time is not</text>
+      <line x1="856" y1="326" x2="964" y2="326" stroke="var(--energy)" stroke-width="1" opacity=".4"/>
+      <text x="910" y="348" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.6" fill="var(--muted)">C3 binds on</text>
+      <text x="910" y="362" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.6" fill="var(--muted)">REALISED energy,</text>
+      <text x="910" y="376" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.6" fill="var(--muted)">not WCET commit</text>
+
+      <line x1="800" y1="203" x2="832" y2="203" stroke="var(--energy)" stroke-width="1.6" marker-end="url(#a4e)"/>
+      <line x1="832" y1="249" x2="802" y2="249" stroke="var(--energy)" stroke-width="1.6" marker-end="url(#a4e)"/>
+      <line x1="800" y1="347" x2="832" y2="347" stroke="var(--energy)" stroke-width="1.6" marker-end="url(#a4e)"/>
+
+      <!-- DP feeds runtime -->
+      <path d="M396 249 L 406 249 L 406 295 L 424 295" stroke="var(--time)" stroke-width="1.8" fill="none" marker-end="url(#a4)"/>
+      <text x="404" y="330" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.6" fill="var(--time)">V_levels</text>
+
+      <!-- verification -->
+      <rect x="16" y="342" width="380" height="146" rx="9" fill="var(--surface)" stroke="var(--rule-strong)" stroke-width="1.3"/>
+      <text x="32" y="362" font-family="Archivo, sans-serif" font-size="10.5" font-weight="650" letter-spacing=".6" fill="var(--muted)">SELF-CHECK — runs before the simulation</text>
+      <text x="32" y="382" font-family="JetBrains Mono, monospace" font-size="9.6" font-weight="700" fill="currentColor">online/worked_examples.py :: verify()</text>
+      <text x="32" y="397" font-family="JetBrains Mono, monospace" font-size="9" fill="var(--muted)">example1() and example2() reproduce the design doc's</text>
+      <text x="32" y="410" font-family="JetBrains Mono, monospace" font-size="9" fill="var(--muted)">hand-computed DP tables, so `run.py testcase.py online`</text>
+      <text x="32" y="423" font-family="JetBrains Mono, monospace" font-size="9" fill="var(--muted)">proves the DP core AND improves a real schedule in one go.</text>
+      <line x1="32" y1="436" x2="380" y2="436" stroke="var(--rule)" stroke-width="1"/>
+      <text x="32" y="454" font-family="JetBrains Mono, monospace" font-size="9" fill="var(--muted)">Measured at B=400:  offline 227.33  →  online +68.36</text>
+      <text x="32" y="468" font-family="JetBrains Mono, monospace" font-size="9" fill="var(--muted)">final 295.68 · feasible · 0 pool denials</text>
+      <text x="32" y="481" font-family="JetBrains Mono, monospace" font-size="9" fill="var(--muted)">promised 72.90 vs committed 68.36 → 4.55 lost to the DBF trim</text>
+
+      <text x="500" y="524" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.5" fill="var(--muted)">paper §VI's four options are the SIGNS of (a_t, a_e) in actions.py — option 2 spends, option 3 trades time→energy, option 4 energy→time, option 1 saves</text>
+      <text x="500" y="546" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.5" fill="var(--muted)">the online phase has NO runner adapter yet — it is the one path with no sweep-scale evidence</text>
+    </svg>
+    <figcaption><b>Why the DP is built right-to-left:</b> <code>V_levels[s]</code> is the value function
+    over <code>jobs[s:]</code>, so when the job at position <code>c</code> finishes early, its windfall
+    is distributed using <code>V_levels[c+1]</code> — one precompute serves every completion point on
+    that processor. The teal/amber split is the design's core asymmetry: each processor owns its time
+    axis outright, but they all contend for one energy counter.</figcaption>
+  </figure>
+</section>
+
+<hr class="sec-sep">
+
+<!-- ══════════════════════════ 05 GEN ══════════════════════════ -->
+<section id="gen" class="stack g20">
+  <div class="sec-head">
+    <span class="eyebrow">06 — Experiment harness</span>
+    <h2>The generator only writes; the runner only reads</h2>
+    <p class="col">The two halves never import each other. Nothing about a model leaks into
+    generation, so the same instances can be replayed against any solver, now or later. The handshake
+    between them is two files on disk: a directory of runnable <code>.py</code> test-cases, and a
+    <code>manifest.csv</code> that describes them.</p>
+  </div>
+
+  <figure class="figscroll">
+    <svg viewBox="0 0 1000 512" role="img" aria-label="The experiment harness: gen_testcases.py drives sweeps which draw task sets and emit runnable testcase .py files plus a manifest.csv; run_models.py reads that manifest, runs each model through adapters, and appends to results.csv, which is then read to build the HTML reports.">
+      <defs>
+        <marker id="a5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+        </marker>
+      </defs>
+
+      <!-- GENERATE -->
+      <rect x="16" y="44" width="300" height="380" rx="9" fill="var(--surface-2)" stroke="var(--rule-strong)" stroke-width="1.4"/>
+      <text x="32" y="34" font-family="Archivo, sans-serif" font-size="12" font-weight="700" letter-spacing=".6" fill="currentColor">GENERATE — usrt/gen/</text>
+
+      <rect x="32" y="58" width="268" height="38" rx="5" fill="var(--surface)" stroke="currentColor" stroke-width="1.6"/>
+      <text x="166" y="75" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10.5" font-weight="700" fill="currentColor">gen_testcases.py</text>
+      <text x="166" y="89" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.8" fill="var(--muted)">CLI · picks a sweep, --sets, --seed</text>
+
+      <line x1="166" y1="96" x2="166" y2="108" stroke="currentColor" stroke-width="1.3" marker-end="url(#a5)"/>
+
+      <rect x="32" y="110" width="268" height="46" rx="5" fill="var(--surface)" stroke="var(--rule-strong)"/>
+      <text x="46" y="127" font-family="JetBrains Mono, monospace" font-size="9.8" font-weight="700" fill="currentColor">gen/sweeps.py</text>
+      <text x="46" y="140" font-family="JetBrains Mono, monospace" font-size="8.8" fill="var(--muted)">sweep_factor · sweep_util_grid</text>
+      <text x="46" y="151" font-family="JetBrains Mono, monospace" font-size="8.8" fill="var(--muted)">sweep_schedulability · generate_all</text>
+
+      <line x1="166" y1="156" x2="166" y2="168" stroke="currentColor" stroke-width="1.3" marker-end="url(#a5)"/>
+
+      <rect x="32" y="170" width="268" height="46" rx="5" fill="var(--surface)" stroke="var(--map)" stroke-width="1.7"/>
+      <text x="46" y="187" font-family="JetBrains Mono, monospace" font-size="9.8" font-weight="700" fill="var(--map)">gen/spec.py :: TestSpec</text>
+      <text x="46" y="200" font-family="JetBrains Mono, monospace" font-size="8.8" fill="var(--muted)">n_prc n_tsk n_frq=5 u_mand_factor</text>
+      <text x="46" y="211" font-family="JetBrains Mono, monospace" font-size="8.8" fill="var(--muted)">u_opt_factor rho xi  ·  .validate()</text>
+
+      <line x1="166" y1="216" x2="166" y2="228" stroke="currentColor" stroke-width="1.3" marker-end="url(#a5)"/>
+
+      <rect x="32" y="230" width="268" height="46" rx="5" fill="var(--surface)" stroke="currentColor" stroke-width="1.6"/>
+      <text x="46" y="247" font-family="JetBrains Mono, monospace" font-size="9.8" font-weight="700" fill="currentColor">gen/generate.py :: draw_taskset()</text>
+      <text x="46" y="260" font-family="JetBrains Mono, monospace" font-size="8.8" fill="var(--muted)">_one_draw() with redraw loop until</text>
+      <text x="46" y="271" font-family="JetBrains Mono, monospace" font-size="8.8" fill="var(--muted)">worst_fit_feasible() accepts</text>
+
+      <line x1="166" y1="276" x2="166" y2="288" stroke="currentColor" stroke-width="1.3" marker-end="url(#a5)"/>
+
+      <rect x="32" y="290" width="268" height="66" rx="5" fill="var(--surface)" stroke="var(--rule-strong)"/>
+      <text x="46" y="307" font-family="JetBrains Mono, monospace" font-size="9.8" font-weight="700" fill="currentColor">gen/primitives.py</text>
+      <text x="46" y="320" font-family="JetBrains Mono, monospace" font-size="8.8" fill="var(--muted)">uunifast · donate_excess · assign_periods</text>
+      <text x="46" y="331" font-family="JetBrains Mono, monospace" font-size="8.8" fill="var(--muted)">random_freq_set · split_segments_normal</text>
+      <text x="46" y="342" font-family="JetBrains Mono, monospace" font-size="8.8" fill="var(--energy)">budget_for_rho:  B = rho × E_full_fmax</text>
+      <text x="46" y="352" font-family="JetBrains Mono, monospace" font-size="8.8" fill="var(--muted)">energies_fmax · min_mandatory_energy</text>
+
+      <line x1="166" y1="356" x2="166" y2="368" stroke="currentColor" stroke-width="1.3" marker-end="url(#a5)"/>
+
+      <rect x="32" y="370" width="268" height="42" rx="5" fill="var(--surface)" stroke="currentColor" stroke-width="1.6"/>
+      <text x="46" y="387" font-family="JetBrains Mono, monospace" font-size="9.8" font-weight="700" fill="currentColor">gen/emit.py</text>
+      <text x="46" y="400" font-family="JetBrains Mono, monospace" font-size="8.8" fill="var(--muted)">emit_testcase() + ManifestWriter</text>
+
+      <!-- DISK -->
+      <path d="M316 240 L 344 240" stroke="currentColor" stroke-width="1.6" marker-end="url(#a5)"/>
+      <text x="330" y="232" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.5" fill="var(--muted)">writes</text>
+
+      <rect x="348" y="128" width="248" height="224" rx="9" fill="var(--map-bg)" stroke="var(--map)" stroke-width="1.8"/>
+      <text x="472" y="152" text-anchor="middle" font-family="Archivo, sans-serif" font-size="11.5" font-weight="700" letter-spacing=".5" fill="var(--map)">ON DISK — the handshake</text>
+
+      <rect x="364" y="164" width="216" height="72" rx="5" fill="var(--surface)" stroke="var(--map)" stroke-width="1.4"/>
+      <text x="378" y="181" font-family="JetBrains Mono, monospace" font-size="9.5" font-weight="700" fill="currentColor">&lt;sweep&gt;/set00/&lt;factor&gt;_&lt;val&gt;.py</text>
+      <text x="378" y="195" font-family="JetBrains Mono, monospace" font-size="8.6" fill="var(--muted)">a runnable module defining</text>
+      <text x="378" y="207" font-family="JetBrains Mono, monospace" font-size="8.6" fill="var(--muted)">testcase() → processors, tasks, B</text>
+      <text x="378" y="221" font-family="JetBrains Mono, monospace" font-size="8.6" fill="var(--muted)">+ per-task theta, so early completion</text>
+      <text x="378" y="232" font-family="JetBrains Mono, monospace" font-size="8.6" fill="var(--muted)">is reproducible DATA, not a knob</text>
+
+      <rect x="364" y="246" width="216" height="90" rx="5" fill="var(--surface)" stroke="var(--map)" stroke-width="1.4"/>
+      <text x="378" y="263" font-family="JetBrains Mono, monospace" font-size="9.5" font-weight="700" fill="currentColor">&lt;sweep&gt;/manifest.csv</text>
+      <text x="378" y="277" font-family="JetBrains Mono, monospace" font-size="8.4" fill="var(--muted)">file · sweep · set · factor · value</text>
+      <text x="378" y="288" font-family="JetBrains Mono, monospace" font-size="8.4" fill="var(--muted)">n_prc n_tsk n_frq u_mand_factor</text>
+      <text x="378" y="299" font-family="JetBrains Mono, monospace" font-size="8.4" fill="var(--muted)">u_opt_factor rho xi · U_M U_O B H J</text>
+      <text x="378" y="310" font-family="JetBrains Mono, monospace" font-size="8.4" fill="var(--muted)">e_mand_fmax e_full_fmax e_mand_min</text>
+      <text x="378" y="321" font-family="JetBrains Mono, monospace" font-size="8.4" fill="var(--energy)">feasible · donate_ok · seed · redraws</text>
+      <text x="378" y="332" font-family="JetBrains Mono, monospace" font-size="8.2" fill="var(--muted)">← instance-level, NOT model-level</text>
+
+      <!-- RUN -->
+      <path d="M596 240 L 624 240" stroke="currentColor" stroke-width="1.6" marker-end="url(#a5)"/>
+      <text x="610" y="232" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.5" fill="var(--muted)">reads</text>
+
+      <rect x="628" y="44" width="356" height="380" rx="9" fill="var(--surface-2)" stroke="var(--rule-strong)" stroke-width="1.4"/>
+      <text x="644" y="34" font-family="Archivo, sans-serif" font-size="12" font-weight="700" letter-spacing=".6" fill="currentColor">RUN — usrt/runner/</text>
+
+      <rect x="644" y="58" width="324" height="38" rx="5" fill="var(--surface)" stroke="currentColor" stroke-width="1.6"/>
+      <text x="806" y="75" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10.5" font-weight="700" fill="currentColor">run_models.py</text>
+      <text x="806" y="89" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.8" fill="var(--muted)">--models --heur --time-limit --no-resume</text>
+
+      <line x1="806" y1="96" x2="806" y2="108" stroke="currentColor" stroke-width="1.3" marker-end="url(#a5)"/>
+
+      <rect x="644" y="110" width="324" height="60" rx="5" fill="var(--surface)" stroke="var(--rule-strong)"/>
+      <text x="658" y="127" font-family="JetBrains Mono, monospace" font-size="9.8" font-weight="700" fill="currentColor">runner.py :: find_manifests() → run_manifest()</text>
+      <text x="658" y="141" font-family="JetBrains Mono, monospace" font-size="8.8" fill="var(--muted)">_load_done() skips finished (file, model) pairs → resumable</text>
+      <text x="658" y="153" font-family="JetBrains Mono, monospace" font-size="8.8" fill="var(--muted)">refuses to append under a mismatched header (schema guard)</text>
+      <text x="658" y="165" font-family="JetBrains Mono, monospace" font-size="8.8" fill="var(--muted)">cols = manifest cols + _METRIC_COLS</text>
+
+      <line x1="806" y1="170" x2="806" y2="182" stroke="currentColor" stroke-width="1.3" marker-end="url(#a5)"/>
+
+      <rect x="644" y="184" width="324" height="72" rx="5" fill="var(--surface)" stroke="currentColor" stroke-width="2"/>
+      <text x="658" y="201" font-family="JetBrains Mono, monospace" font-size="9.8" font-weight="700" fill="currentColor">adapters.py :: run_model()</text>
+      <text x="658" y="215" font-family="JetBrains Mono, monospace" font-size="8.8" fill="var(--muted)">_suppress() — fd-level dup2 kills Gurobi's C log AND</text>
+      <text x="658" y="226" font-family="JetBrains Mono, monospace" font-size="8.8" fill="var(--muted)">the solvers' prints (cp1252 would else mislabel a run "error")</text>
+      <text x="658" y="240" font-family="JetBrains Mono, monospace" font-size="8.8" fill="var(--muted)">_prep_gurobi() no-ops computeIIS/write, sets TimeLimit</text>
+      <text x="658" y="251" font-family="JetBrains Mono, monospace" font-size="8.8" fill="var(--muted)">run_heuristic() re-validates E ≤ B before scoring a success</text>
+
+      <line x1="806" y1="256" x2="806" y2="268" stroke="currentColor" stroke-width="1.3" marker-end="url(#a5)"/>
+
+      <rect x="644" y="270" width="152" height="52" rx="5" fill="var(--exact-bg)" stroke="var(--exact)" stroke-width="1.5"/>
+      <text x="720" y="290" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.5" font-weight="700" fill="var(--exact)">ilp_v1 · ilp_v2</text>
+      <text x="720" y="304" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.6" fill="var(--muted)">_ilp_metrics()</text>
+      <text x="720" y="315" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.6" fill="var(--muted)">status · gap · SolCount</text>
+
+      <rect x="812" y="270" width="156" height="52" rx="5" fill="var(--map-bg)" stroke="var(--map)" stroke-width="1.5"/>
+      <text x="890" y="290" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.5" font-weight="700" fill="var(--map)">heuristic_v3 … v7</text>
+      <text x="890" y="304" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.6" fill="var(--muted)">_mandatory_feasible()</text>
+      <text x="890" y="315" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.6" fill="var(--muted)">gate before the run</text>
+
+      <line x1="720" y1="322" x2="720" y2="336" stroke="currentColor" stroke-width="1.3" marker-end="url(#a5)"/>
+      <line x1="890" y1="322" x2="890" y2="336" stroke="currentColor" stroke-width="1.3" marker-end="url(#a5)"/>
+
+      <rect x="644" y="338" width="324" height="70" rx="5" fill="var(--surface)" stroke="var(--map)" stroke-width="1.8"/>
+      <text x="658" y="355" font-family="JetBrains Mono, monospace" font-size="9.8" font-weight="700" fill="var(--map)">&lt;sweep&gt;/results.csv  — appended, one row per (instance × model)</text>
+      <text x="658" y="370" font-family="JetBrains Mono, monospace" font-size="8.6" fill="var(--muted)">manifest columns  +  model · status · model_feasible · utility</text>
+      <text x="658" y="381" font-family="JetBrains Mono, monospace" font-size="8.6" fill="var(--muted)">energy · util_per_energy · runtime · gap · error</text>
+      <text x="658" y="396" font-family="JetBrains Mono, monospace" font-size="8.6" fill="var(--energy)">model_feasible is deliberately NOT called `feasible` — the manifest</text>
+      <text x="658" y="404" font-family="JetBrains Mono, monospace" font-size="8.6" fill="var(--energy)">already owns that name, and merging the dicts would clobber it</text>
+
+      <!-- REPORT -->
+      <path d="M806 424 L 806 444" stroke="currentColor" stroke-width="1.6" marker-end="url(#a5)"/>
+      <rect x="348" y="446" width="620" height="52" rx="7" fill="var(--surface)" stroke="var(--rule-strong)" stroke-width="1.5" stroke-dasharray="6 4"/>
+      <text x="366" y="466" font-family="Archivo, sans-serif" font-size="10.5" font-weight="650" letter-spacing=".6" fill="var(--muted)">REPORT — no script; results.csv is read and written up by hand into ALL_DOCS/</text>
+      <text x="366" y="482" font-family="JetBrains Mono, monospace" font-size="8.8" fill="var(--muted)">join on `file` to plot any metric against any knob  ·  dry_run_21_August.html · 22Aug_big_change_result.html · 22Aug_better_mapping_SPS.html</text>
+      <text x="366" y="493" font-family="JetBrains Mono, monospace" font-size="8.8" fill="var(--muted)">this is the one stage with no code behind it — the obvious place for a small analysis module</text>
+
+      <line x1="166" y1="424" x2="166" y2="462" stroke="currentColor" stroke-width="1.3" stroke-dasharray="4 3" marker-end="url(#a5)"/>
+      <text x="176" y="446" font-family="JetBrains Mono, monospace" font-size="8.5" fill="var(--muted)">generator never</text>
+      <text x="176" y="457" font-family="JetBrains Mono, monospace" font-size="8.5" fill="var(--muted)">reads results</text>
+    </svg>
+    <figcaption><b>The decoupling is the design.</b> Because generation depends on nothing downstream,
+    a sweep can be regenerated, replayed, or extended without touching a solver — and a stale
+    <code>testcases/</code> tree is detectable purely from its manifest columns. The report stage is
+    the only link in the chain with no module of its own.</figcaption>
+  </figure>
+
+  <div class="cmd"><b>python gen_testcases.py</b> all --sets 100 --out testcases
+<b>python run_models.py</b> testcases/ --models ilp_v1,ilp_v2,heuristic --heur v7
+<span style="color:var(--muted)"># resume is on by default — safe to interrupt and restart</span></div>
+</section>
+
+<hr class="sec-sep">
+
+<!-- ══════════════════════════ 06 FLAGS ══════════════════════════ -->
+<section id="flags" class="stack g20">
+  <div class="sec-head">
+    <span class="eyebrow">07 — Where the live flags sit on this map</span>
+    <h2>Two blocks above do not do what their label says</h2>
+    <p class="col">Both were found on 4 Sep and are live in the current tree. They are placed here
+    rather than in the diagrams so the diagrams stay a description of the intended architecture.</p>
+  </div>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Block on the map</th><th>Location</th><th>What actually happens</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><span class="pill map">§04 · Phase 1</span><br><span style="font-size:.82rem">quantum_sps_mapping</span></td>
+          <td class="f">mapping/quantum.py:39<br><span class="dim">:79 · :84 · :117 · :124</span></td>
+          <td><code>proc_util</code> is initialised once and only ever accumulates, so it is a running
+          sum over the whole hyperperiod rather than a utilisation. Once it passes 1.0 every later
+          quantum takes the <code>MAND_OVERUTIL</code> break and commits nothing; those jobs fall
+          through to the min-util round-robin at <code>:156</code>. On <code>testcase.py</code>,
+          <b>22 of 30 jobs are placed by the fallback, not by SPS</b> — so any SPS-vs-alternative
+          comparison is currently measuring something else.</td>
+        </tr>
+        <tr>
+          <td><span class="pill plain">§06 · runner</span><br><span style="font-size:.82rem">run_manifest error path</span></td>
+          <td class="f">runner/runner.py:95</td>
+          <td>The outer <code>except</code> writes <code>feasible=0</code> instead of
+          <code>model_feasible=0</code>, clobbering the manifest's instance-level flag — the exact
+          collision the module docstring warns about. The fix landed in <code>adapters.py</code>;
+          this path was missed.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p class="note plainhead"><span class="tag">Also worth knowing while reading the map</span>
+  <code>online_demo.offline_schedule()</code> calls the phase modules directly rather than
+  <code>heuristic_v5b.run()</code>, so it has neither the Phase 3 fix nor Phase 6b — harmless at
+  B=400 where both are no-ops, divergent at a tight budget. And <code>freq_set</code> is read from
+  <code>processors[0]</code> in 17 places, which is safe today only because the generator gives every
+  processor the same set.</p>
+</section>
+
+</div>

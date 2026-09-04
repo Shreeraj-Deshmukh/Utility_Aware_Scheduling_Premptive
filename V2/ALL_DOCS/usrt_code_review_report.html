@@ -116,6 +116,24 @@
 
 <header>
   <h1>USRT Implementation Review — Anomalies, Bugs, Edge Cases &amp; Improvements</h1>
+
+<style class="usrt-stale-reset">
+/* Scope-reset for the 4 Sep staleness notices.  Each notice paints its own
+   light background and dark ink inline, but descendants re-style themselves
+   from the host document -- notably code{background:var(--code-bg)}, which
+   under prefers-color-scheme:dark resolves to #24242b and rendered dark-on-
+   dark inside the notice.  Force code and inline emphasis to inherit. */
+.usrt-stale-2026-09-04 code{
+  background:rgba(0,0,0,.06)!important; color:inherit!important;
+  border:0!important; padding:.08em .34em!important; border-radius:4px!important;
+  font-size:.88em!important; text-shadow:none!important;
+  font-family:ui-monospace,SFMono-Regular,Consolas,monospace!important;
+}
+.usrt-stale-2026-09-04 b, .usrt-stale-2026-09-04 strong, .usrt-stale-2026-09-04 em,
+.usrt-stale-2026-09-04 i, .usrt-stale-2026-09-04 a{ color:inherit!important; }
+</style>
+<div class="usrt-stale-2026-09-04" style="margin:18px 0;padding:16px 18px;border:2px solid #b35900;border-left-width:7px;border-radius:9px;background:#fff4e5;color:#3d2a10;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;line-height:1.58;font-size:14.5px;"><div style="font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:10.5px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:#8a4500;margin-bottom:8px;">&#9888; BEHIND THE CODEBASE &middot; re-verified against the code 4 Sep 2026</div><p style='margin:0 0 10px'>Oldest document in <code>ALL_DOCS/</code> (12 Jun). Its framing is stale in two places &mdash; <b>&sect;A</b> (the energy constants were changed on 22 Aug, inverting its premise) and <b>C9</b> (the online phase is now fully implemented in <code>usrt/online/</code>).</p><p style='margin:0 0 10px'><b>But do not discard it.</b> Re-checked line by line on 4 Sep, these findings are <b>still live and unfixed</b>: <b>B2</b> (SPS capacity never released &mdash; the most consequential, and it was dropped from <code>audit_issues_22Aug.html</code>), <b>B5</b> (Phase&nbsp;6 aborts the whole search on one failed swap), <b>C7</b> (preemption model &mdash; the paper &sect;II says &ldquo;Preemptive&rdquo;, so DBF is correct and it is <code>Key_Notes&amp;Deductions.txt</code> that is stale), <b>C8</b> (<code>testcase.py</code> is not harmonic: 40 &#8740; 60), <b>D13</b> (repair can return PARTIAL and the v5 solvers never check).</p><p style='margin:0'>Fixed since: B6 (cp1252 crash &mdash; the CLIs force UTF-8), C10 (Phase&nbsp;3 now uses <code>min_possible_energy()</code>), and the Phase&nbsp;4 ordering.</p></div>
+
   <p>Codebase: <code style="background:rgba(255,255,255,.15);color:#fff">C:\homogenous\V2</code> (root legacy solvers + modular <code style="background:rgba(255,255,255,.15);color:#fff">usrt/</code> package)</p>
   <p>Reference: <em>"Utility aware Energy Constrained Real-Time Scheduling"</em> (Segmented_Workload_Scheduling_Shared_v2.pdf)</p>
   <p>Review date: 2026-06-12 &nbsp;•&nbsp; Verified by source inspection + live run of <code style="background:rgba(255,255,255,.15);color:#fff">heuristic_v5b</code> on <code style="background:rgba(255,255,255,.15);color:#fff">testcase.py</code></p>
@@ -138,6 +156,8 @@
 
 <!-- ════════════════════════════ SECTION A ════════════════════════════ -->
 <h2 id="secA">A. Fundamental Anomaly — Energy Constants Invert the DVFS Premise</h2>
+<div class="usrt-stale-2026-09-04" style="margin:10px 0;padding:10px 13px;border-left:5px solid #b3261e;background:#fdecea;color:#4a1512;border-radius:0 7px 7px 0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:13.5px;line-height:1.55;"><span style="font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:10px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#8c1d18;display:block;margin-bottom:5px;">NOT IN CODEBASE &middot; 4 Sep 2026</span><b>Premise inverted since 22 Aug.</b> The constants are now <b>&alpha;=0.15, &beta;=1.0</b>, so f* &asymp; 0.42 and frequency scaling <i>does</i> save energy. The anomaly this section describes was resolved by changing the constants, not the code.</div>
+
 
 <section class="card">
   <span class="badge crit">Critical</span>
@@ -227,6 +247,8 @@ self.slack_energy -= delta_e        <span class="bad"># can go negative → budg
   <span class="badge crit">Critical</span>
   <span class="loc">usrt/mapping/quantum.py:71-99, 127-131</span>
   <h3>B2. Quantum SPS capacity accounting never releases completed jobs — Phase 1 degenerates for most of the hyper-period</h3>
+<div class="usrt-stale-2026-09-04" style="margin:10px 0;padding:10px 13px;border-left:5px solid #1b5e20;background:#e9f5ea;color:#14351a;border-radius:0 7px 7px 0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:13.5px;line-height:1.55;"><span style="font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:10px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#1b5e20;display:block;margin-bottom:5px;">STILL LIVE &middot; 4 Sep 2026</span><b>Still unfixed as of 4 Sep 2026</b>, and re-confirmed with the same numbers (22/30 jobs bypass SPS on <code>testcase.py</code>). This item was <i>omitted</i> from the 22 Aug consolidated audit, so it has been invisible since. The fix proposed here &mdash; time-windowed capacity, releasing <code>e_m/p_i</code> when a job&rsquo;s deadline passes &mdash; is still the right one.</div>
+
   <p><code>proc_util[px] += e_m / p_i</code> is accumulated for <em>every job ever assigned</em> and is
   <strong>never decremented when a job's deadline passes</strong>. A task therefore contributes
   <code>N_job × (e_m/p_i)</code> to the running total instead of its true utilization <code>e_m/p_i</code>.
@@ -372,6 +394,8 @@ if not state.try_inc_seg(i, j):
   <span class="badge high">High</span>
   <span class="loc">usrt/ (entire package)</span> vs paper §VI
   <h3>C9. Section VI (Online phase) is entirely unimplemented</h3>
+<div class="usrt-stale-2026-09-04" style="margin:10px 0;padding:10px 13px;border-left:5px solid #b3261e;background:#fdecea;color:#4a1512;border-radius:0 7px 7px 0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:13.5px;line-height:1.55;"><span style="font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:10px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#8c1d18;display:block;margin-bottom:5px;">NOT IN CODEBASE &middot; 4 Sep 2026</span><b>No longer true.</b> <code>usrt/online/</code> implements the whole of paper &sect;VI: per-processor DP, the 4-option action set, a semaphore-guarded shared energy pool, density arbitration and a commit-time dynamic-DBF guarantee.</div>
+
   <p>A grep across <code>usrt/</code> finds no code for early completion, time/energy slack
   harvesting, the DP-based (Δt, Δe) distribution, or the two-early-completions approximation. If
   the online algorithm is part of the paper's contribution list, this is the largest open gap:

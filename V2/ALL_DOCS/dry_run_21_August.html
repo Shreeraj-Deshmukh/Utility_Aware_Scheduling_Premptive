@@ -35,6 +35,24 @@
 <div class="wrap">
 <div class="kicker">USRT &middot; V2 &middot; Dry Run</div>
 <h1>Dry Run &mdash; 21 August</h1>
+
+<style class="usrt-stale-reset">
+/* Scope-reset for the 4 Sep staleness notices.  Each notice paints its own
+   light background and dark ink inline, but descendants re-style themselves
+   from the host document -- notably code{background:var(--code-bg)}, which
+   under prefers-color-scheme:dark resolves to #24242b and rendered dark-on-
+   dark inside the notice.  Force code and inline emphasis to inherit. */
+.usrt-stale-2026-09-04 code{
+  background:rgba(0,0,0,.06)!important; color:inherit!important;
+  border:0!important; padding:.08em .34em!important; border-radius:4px!important;
+  font-size:.88em!important; text-shadow:none!important;
+  font-family:ui-monospace,SFMono-Regular,Consolas,monospace!important;
+}
+.usrt-stale-2026-09-04 b, .usrt-stale-2026-09-04 strong, .usrt-stale-2026-09-04 em,
+.usrt-stale-2026-09-04 i, .usrt-stale-2026-09-04 a{ color:inherit!important; }
+</style>
+<div class="usrt-stale-2026-09-04" style="margin:18px 0;padding:16px 18px;border:2px solid #b35900;border-left-width:7px;border-radius:9px;background:#fff4e5;color:#3d2a10;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;line-height:1.58;font-size:14.5px;"><div style="font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:10.5px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:#8a4500;margin-bottom:8px;">&#9888; BEHIND THE CODEBASE &middot; re-verified against the code 4 Sep 2026</div><p style='margin:0 0 10px'><b>v7 is missing.</b> <code>heuristic_v7</code> (Phase&nbsp;1M multi-start + Phase&nbsp;1R guided repair) is in the tree and is the better default: <b>3.97% mean gap in 15.1&nbsp;ms</b> vs v6&rsquo;s 3.52% in 28.8&nbsp;ms, and it never loses to v5b (31 better / 19 equal / 0 worse). See <code>22Aug_better_mapping_SPS.html</code>. &sect;7&rsquo;s pipeline listing stops at Phase&nbsp;1c.</p><p style='margin:0 0 10px'><b>Caveat on every SPS-mapping number.</b> <code>mapping/quantum.py</code> accumulates <code>proc_util</code> across the whole hyper-period instead of releasing it, so once it passes 1.0 every later quantum reports <code>MAND_OVERUTIL</code> and its jobs fall through to a min-util round-robin &mdash; <b>22 of 30 jobs on <code>testcase.py</code></b>, 3%&ndash;42% on generated instances. This is finding <b>B2</b> in <code>usrt_code_review_report.html</code> (12 Jun), still unfixed. Any SPS-vs-alternative comparison is therefore measuring a partly-broken SPS.</p><p style='margin:0'><b>Still accurate:</b> &sect;7&rsquo;s descriptions of Phases 1, 1b, 1b&prime;, 1c and 2&ndash;6b match the code, and &sect;8&rsquo;s Phase&nbsp;3 defect write-up is the correct account of that fix.</p></div>
+
 <p class="sub">A small, ILP-tractable sweep to see how the exact solvers and the heuristics behave
 as <strong>energy</strong> and <strong>utilisation</strong> tighten. Not a published result &mdash;
 a diagnostic.</p>
@@ -145,6 +163,8 @@ infeasible budgets. claudeoptimal now matches the exact solver on feasibility ev
 </table>
 <p class="muted">At this size (J=10&ndash;13) the exact ILP is not a bottleneck &mdash; every solve proved optimality well inside the 20&nbsp;s limit. The heuristics are still 1&ndash;2 orders of magnitude faster, which is the scalability argument, but on <em>these</em> instances speed is not the differentiator.</p>
 <h2 id="phases">7 &middot; The phase pipeline, as it stands today</h2>
+
+<div class="usrt-stale-2026-09-04" style="margin:10px 0;padding:10px 13px;border-left:5px solid #b35900;background:#fff4e5;color:#3d2a10;border-radius:0 7px 7px 0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:13.5px;line-height:1.55;"><span style="font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:10px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#8a4500;display:block;margin-bottom:5px;">BEHIND THE CODEBASE &middot; 4 Sep 2026</span>&ldquo;As it stands today&rdquo; means 21 August. Missing since: <b>Phase&nbsp;1M</b> (<code>mapping/multistart.py</code> &mdash; scores 7 structurally different mappings with one pipeline each) and <b>Phase&nbsp;1R</b> (guided repair &mdash; moves the least-valuable job off the most TIME-blocked processor, skipping ENERGY-blocked ones).</div>
 <p class="sub">Every phase is a separate module; the heuristic <em>versions</em> are different
 assemblies of them. This section documents the <strong>current</strong> logic, including the
 Phase&nbsp;3 fix described in &sect;8 and the frequency-trade work that followed it &mdash; so it

@@ -59,6 +59,24 @@
 
 <header>
   <h1>USRT Online Phase — How It Is Implemented</h1>
+
+<style class="usrt-stale-reset">
+/* Scope-reset for the 4 Sep staleness notices.  Each notice paints its own
+   light background and dark ink inline, but descendants re-style themselves
+   from the host document -- notably code{background:var(--code-bg)}, which
+   under prefers-color-scheme:dark resolves to #24242b and rendered dark-on-
+   dark inside the notice.  Force code and inline emphasis to inherit. */
+.usrt-stale-2026-09-04 code{
+  background:rgba(0,0,0,.06)!important; color:inherit!important;
+  border:0!important; padding:.08em .34em!important; border-radius:4px!important;
+  font-size:.88em!important; text-shadow:none!important;
+  font-family:ui-monospace,SFMono-Regular,Consolas,monospace!important;
+}
+.usrt-stale-2026-09-04 b, .usrt-stale-2026-09-04 strong, .usrt-stale-2026-09-04 em,
+.usrt-stale-2026-09-04 i, .usrt-stale-2026-09-04 a{ color:inherit!important; }
+</style>
+<div class="usrt-stale-2026-09-04" style="margin:18px 0;padding:16px 18px;border:2px solid #b35900;border-left-width:7px;border-radius:9px;background:#fff4e5;color:#3d2a10;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;line-height:1.58;font-size:14.5px;"><div style="font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:10.5px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:#8a4500;margin-bottom:8px;">&#9888; BEHIND THE CODEBASE &middot; re-verified against the code 4 Sep 2026</div><p style='margin:0 0 10px'>The energy constants changed on 22 Aug. This document was written under <b>&alpha;=1.0, &beta;=0.5</b>, where <code>f_max</code> is energy-optimal and DVFS is degenerate. The project now uses <b>&alpha;=0.15, &beta;=1.0</b> (<code>usrt/models.py</code>, the single source of truth), giving <b>f* &asymp; 0.42</b> &mdash; so running <i>below</i> f_max is 2.15&times; cheaper per unit of work. Every claim below that Options&nbsp;3/4 are &ldquo;inert&rdquo;, or that lowering frequency costs energy, is <b>wrong-premised</b>. Measured on the same code: B=400 &rarr; 0 frequency changes, B=200 &rarr; 3, B=165 &rarr; 5. The options were never inert &mdash; the test budget simply was not energy-binding.</p><p style='margin:0 0 10px'><b>Per-task <code>theta</code> is not covered.</b> Generated test-cases now emit a per-task &theta; (paper &sect;VII.A.2(f)) and <code>OnlineSimulator._ratio(i)</code> prefers it over <code>SimConfig.acet_ratio</code> (<code>use_task_theta=False</code> forces the fallback). ACETs are reproducible data now, not a simulator knob.</p><p style='margin:0'><b>What is still accurate:</b> the module map, the data structures, <code>compose</code>/<code>prune</code>/<code>query</code>, the per-processor DP build, the shared energy pool and semaphore, and <code>_commit_with_guarantee</code>. Only the energy-regime commentary and the missing pieces above are stale. &sect;2 (module map), &sect;7 (shared pool + semaphore) and &sect;9 (controller) match the code as it stands.</p></div>
+
   <p>An implementation walkthrough of <code>usrt/online/</code>: the modules, data structures, and value flow.</p>
   <p>Reflects the current code, including the shared global energy pool guarded by a semaphore ("Two DP with shared Energy").</p>
   <p>Paper Section VI · design doc <code>usrt_online_dp_doc.pdf</code> · verified on <code>testcase.py</code>.</p>
@@ -238,6 +256,8 @@ v5b pipeline  ──►  (seg_k, freq_idx, mapping)        <span class="cm"># th
   effective time fits the job's <code>time_cap</code> (the timing gate; a negative <code>a_t</code>
   always passes), and returns them baseline-first. Energy is <em>not</em> gated here — it is global
   and handled by the DP state <code>req_e</code> and the pool.</p>
+
+<div class="usrt-stale-2026-09-04" style="margin:10px 0;padding:10px 13px;border-left:5px solid #b3261e;background:#fdecea;color:#4a1512;border-radius:0 7px 7px 0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:13.5px;line-height:1.55;"><span style="font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:10px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#8c1d18;display:block;margin-bottom:5px;">NOT IN CODEBASE &middot; 4 Sep 2026</span>The constants below are the <i>old</i> pair. Current: <b>&alpha;=0.15, &beta;=1.0</b>, f*&asymp;0.42, so energy is <b>not</b> minimised at f_max.</div>
   <div class="key"><strong>Note on the current constants.</strong> With α=1, β=0.5 energy is minimised
   at f<sub>max</sub>, so every Option-3/4 conversion action has gain 0 and a non-improving
   <code>(req_t, req_e)</code> — it is dominated by <code>(0,0,0)</code> and pruned away. The machinery
