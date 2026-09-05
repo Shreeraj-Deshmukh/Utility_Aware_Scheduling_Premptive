@@ -87,9 +87,12 @@ def repair_mapping(mapping, tasks, processors, h):
 
         mi, mj = max(offenders, key=lambda ij: tasks[ij[0]]['e_m'])
 
+        # JOB-SHARE: one job of task i occupies e_m_i/h of a processor over the
+        # hyper-period, so this sums to the processor's true utilisation however
+        # the task's jobs are split across cores (see quantum.py).
         util = defaultdict(float)
         for (i, j), px in mapping.items():
-            util[px] += tasks[i]['e_m'] / tasks[i]['p_i']
+            util[px] += tasks[i]['e_m'] / h
         target = min((x for x in range(m) if x != x_bad), key=lambda x: util[x])
         mapping[(mi, mj)] = target
 

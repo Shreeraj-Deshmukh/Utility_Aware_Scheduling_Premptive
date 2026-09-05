@@ -22,12 +22,36 @@ from .repair  import check_dbf_mandatory, repair_mapping
 from ..utils  import generate_jobs
 
 
-def quantum_sps_mapping(tasks, processors, h, quantum, verbose=True):
+def quantum_sps_mapping(tasks, processors, h, quantum, verbose=True,
+                        job_weight=None):
     """
     Map all jobs to processors using per-quantum SPS.
 
+    job_weight : optional {(i, j): float} giving the item size DPS/SPS balances
+                 on.  Defaults to mandatory work share e_m_i/h.  ILP v3 passes
+                 PREDICTED total work (mandatory + affordable optional) so the
+                 packer balances what the schedule will actually carry -- see
+                 mapping/predictive.py.  Only the item sizes change; the
+                 criss-cross algorithm and the capacity gate are untouched.
+
     Returns: mapping dict  {(i, j): proc_idx}.
     """
+    def _w(i, j):
+        """Item size DPS/SPS balances on.  The default is the historical
+        e_m/p_i -- deliberately NOT the e_m/h capacity metric, so the validated
+        default path is bit-identical.  (e_m/h as a BALANCE metric looks
+        promising but is a separate change needing its own measurement.)"""
+        if job_weight is None:
+            return tasks[i]['e_m'] / tasks[i]['p_i']
+        return job_weight[(i, j)]
+
+    def _dw(i, j):
+        """Deferral ranking key.  Historically e_m/p_i; left EXACTLY as it was
+        on the default path so the validated behaviour is bit-identical, and
+        follows the supplied weight when one is given."""
+        if job_weight is None:
+            return tasks[i]['e_m'] / tasks[i]['p_i']
+        return job_weight[(i, j)]
     m        = len(processors)
     all_jobs = generate_jobs(tasks, h)
 
@@ -59,9 +83,7 @@ def quantum_sps_mapping(tasks, processors, h, quantum, verbose=True):
         # tie decided placement order purely by list construction; prefer the
         # HEAVIER job (larger e_m/p_i) so that when capacity forces a deferral
         # the most capacity is freed per job deferred.
-        optional.sort(key=lambda x: (x[3],
-                                     -tasks[x[0]]['e_m'] / tasks[x[0]]['p_i'],
-                                     x[0], x[1]))
+        optional.sort(key=lambda x: (x[3], -_dw(x[0], x[1]), x[0], x[1]))
 
         n_mand   = len(mandatory)
         n_opt    = len(optional)
@@ -74,7 +96,11 @@ def quantum_sps_mapping(tasks, processors, h, quantum, verbose=True):
             if not active:
                 status = "EMPTY"; break
 
-            total_util_active = sum(tasks[i]['e_m'] / tasks[i]['p_i']
+            # JOB-SHARE metric: one job of task i occupies e_m_i/h of a
+            # processor over the hyper-period.  Summing this over a task's
+            # h/p_i jobs recovers e_m_i/p_i exactly, so proc_util below stays a
+            # true utilisation however the task's jobs are split across cores.
+            total_util_active = sum(tasks[i]['e_m'] / h
                                     for (i, j, r, d) in active)
             remaining_cap     = sum(1.0 - proc_util[x] for x in range(m))
 
@@ -85,9 +111,7 @@ def quantum_sps_mapping(tasks, processors, h, quantum, verbose=True):
                 # latest deadline (least urgent) defers first; among equal
                 # deadlines defer the HEAVIEST, which frees the most capacity
                 to_defer = max(opt_now,
-                               key=lambda x: (x[3],
-                                              tasks[x[0]]['e_m'] / tasks[x[0]]['p_i'],
-                                              x[0], x[1]))
+                               key=lambda x: (x[3], _dw(x[0], x[1]), x[0], x[1]))
                 active.remove(to_defer); leftover.append(to_defer)
                 deferred += 1; continue
 
@@ -98,7 +122,7 @@ def quantum_sps_mapping(tasks, processors, h, quantum, verbose=True):
             # gap, so the tighter job gets the better choice of processor.
             # deterministic, but WITHOUT the deadline preference (that variant
             # measured slightly worse: ilp_v2 4.79% -> 4.99%)
-            jl      = sorted([((i, j), tasks[i]['e_m'] / tasks[i]['p_i'])
+            jl      = sorted([((i, j), _w(i, j))
                               for (i, j, r, d) in active],
                              key=lambda x: (-x[1], x[0]))
             ps_list = run_dps(jl, m)
@@ -110,7 +134,7 @@ def quantum_sps_mapping(tasks, processors, h, quantum, verbose=True):
             new_util = list(proc_util)
             for px, job_set in enumerate(result.assign):
                 for (i, j) in job_set:
-                    new_util[px] += tasks[i]['e_m'] / tasks[i]['p_i']
+                    new_util[px] += tasks[i]['e_m'] / h
 
             if max(new_util) <= 1.0 + 1e-9:
                 final_ps  = result
@@ -144,7 +168,7 @@ def quantum_sps_mapping(tasks, processors, h, quantum, verbose=True):
         for (i, j, r, d) in leftover:
             px = min(range(m), key=lambda x: proc_util[x])
             mapping[(i, j)] = px
-            proc_util[px]  += tasks[i]['e_m'] / tasks[i]['p_i']
+            proc_util[px]  += tasks[i]['e_m'] / h
             if verbose:
                 print(f"      T{tasks[i]['id']},job{j}  r={r}  d={d}  → P{px}")
 
@@ -157,7 +181,7 @@ def quantum_sps_mapping(tasks, processors, h, quantum, verbose=True):
         for (i, j) in sorted(missing):
             px = min(range(m), key=lambda x: proc_util[x])
             mapping[(i, j)] = px
-            proc_util[px]  += tasks[i]['e_m'] / tasks[i]['p_i']
+            proc_util[px]  += tasks[i]['e_m'] / h
 
     # DBF check + repair
     ok, viols = check_dbf_mandatory(mapping, tasks, processors, h)

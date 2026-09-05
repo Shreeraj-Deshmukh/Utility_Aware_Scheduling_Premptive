@@ -55,7 +55,7 @@ def run(processors, tasks, B_BUDGET):
 
     print(f"\n  Processor utilisation after SPS:")
     for x in range(N_prc):
-        ul = sum(tasks[i]['e_m'] / tasks[i]['p_i'] for (i, j) in proc_jobs[x])
+        ul = sum(tasks[i]['e_m'] / h for (i, j) in proc_jobs[x])
         print(f"    P{x}: {len(proc_jobs[x])} jobs  util={ul:.4f}"
               f"{'  ← OVER 1.0' if ul > 1 else ''}")
 
@@ -70,7 +70,7 @@ def run(processors, tasks, B_BUDGET):
 
     print(f"\n  Processor utilisation after refinement:")
     for x in range(N_prc):
-        ul = sum(tasks[i]['e_m'] / tasks[i]['p_i'] for (i, j) in proc_jobs[x])
+        ul = sum(tasks[i]['e_m'] / h for (i, j) in proc_jobs[x])
         print(f"    P{x}: {len(proc_jobs[x])} jobs  util={ul:.4f}"
               f"{'  ← OVER 1.0' if ul > 1 else ''}")
 

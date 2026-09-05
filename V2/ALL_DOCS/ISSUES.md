@@ -50,111 +50,99 @@ several issues share a root and fixing them separately produces layered patches 
 ### B2 — Quantum SPS capacity is never released, so most jobs bypass SPS
 | field | value |
 |---|---|
-| Status      | open |
-| Confidence  | verified live 2026-09-04 |
+| Status      | **fixed 2026-09-05** |
+| Confidence  | verified live 2026-09-04; fix measured 2026-09-05 over 900 instances |
 | Layer       | **B** — output stays legal, quality is wrong |
-| Costs us    | every SPS-vs-alternative result we have published |
-| Location    | `usrt/mapping/quantum.py:39, 79, 84, 117, 124, 156` |
-| Shares root | UTIL-METRIC |
-| Blocks      | — |
-| Blocked by  | — |
+| Cost us     | every SPS-vs-alternative result published before 2026-09-05 |
+| Location    | `usrt/mapping/quantum.py:81, 117, 151, 164` (was `:39, 79, 84, 117, 124, 156`) |
+| Landed with | UTIL-METRIC — same change, as the register required |
 
-**Intent — what the gate is actually for.** `quantum_sps_mapping` walks the hyper-period one
-quantum `[q_start, q_end]` at a time (quantum = `gcd(periods)`, so every release and deadline falls
-on a boundary). Inside a quantum it splits pending jobs into *mandatory-now* (`d == q_end`, must be
-placed) and *deferrable* (`d > q_end`), hands them to DPS+SPS for criss-cross load balancing, then
-needs an admission test: **"can the processors still absorb this quantum's jobs, or must some be
-pushed later?"** That test is `proc_util` against capacity `m` (`:79`, `:117`). It matters because
-DPS and SPS see only scalar loads — they know nothing about releases or deadlines — so this gate is
-the *only* thing inside the per-quantum loop preventing a core from being overfilled. All remaining
-timing correctness is deferred to the mandatory-only DBF check + repair after the loop ends.
+**What it was.** `proc_util` was initialised once and only accumulated into, adding `e_m_i/p_i`
+once per **job**. Utilisation is a *rate* — a task using 24.5% of a core uses it at every instant,
+permanently — so charging that rate again on every job release compares a quantity that grows with
+time against a capacity that does not. The comparison was therefore guaranteed to fail eventually;
+processor count only changed *when*. Once it passed `m`, every later quantum took the
+`MAND_OVERUTIL` break, committed nothing, and its jobs fell through to the min-util round-robin
+without ever reaching DPS/SPS.
 
-**Mechanism.** `proc_util` is initialised once (`:39`) and only ever accumulated into (`:117`,
-`:124`). It is therefore a running sum of `e_m/p_i` over the whole hyper-period — one term per
-**job** — not a utilisation, and unbounded. Utilisation is a *rate*: a task consuming 24.5% of a
-core consumes 24.5% at every instant, permanently. The gate adds that rate once per job release and
-never releases it, so it compares a quantity that grows with time against a capacity that does not.
-The comparison is therefore guaranteed to fail eventually; processor count only changes *when*.
-Once it passes `m`, `remaining_cap` at `:79` goes negative, the pre-filter at `:81` tries to defer
-its way back under capacity but never can, every later quantum takes the `MAND_OVERUTIL` break at
-`:84` and commits nothing, and those `active` jobs are not even appended to `leftover` — they fall
-through to the min-util round-robin at `:156`.
+**The fix — JOB-SHARE metric.** One job of task `i` occupies `e_m_i / h` of a processor over the
+hyper-period. Summed over that task's `h/p_i` jobs this is exactly `e_m_i/p_i`, and summed over
+everything exactly `U_M`. So `proc_util[x]` becomes literally *(mandatory work placed on x) / h* —
+a true per-processor utilisation, computed incrementally, correct however a task's jobs are split
+across cores. Four lines, no new state.
 
-**Blast radius.** `repair.py` (same metric drives its target choice) · `multistart.py`
-(3 of 7 candidates route through SPS) · `ilp_v2.py` (consumes the same mapping) ·
-v5a/v5b/v6/v7 (all print the metric) · **every number in `ALL_DOCS/`**.
+**Why not the other candidates.** A *task-set* variant (charge each distinct task once per
+processor) was built and measured first. It is bounded, unlike the original, but **~50% of tasks
+are split across processors** and it charges the whole task to each, so `sum(proc_util) ≈ 1.5·U_M`.
+That inflation trips the gate at roughly two-thirds of real capacity. Measured: fallback only fell
+to 23%, and `heuristic_v5b` **regressed −0.54% overall, −18.5% at α=0.8**. Rejected. Options (1)
+event-based release and (3) gate-on-DBF were never needed — job-share is exact, so the proxy
+question the old entry posed ("what should `proc_util` *mean*?") is answered rather than traded off.
 
-**Evidence.**
-- 22 of 30 jobs on `testcase.py` (73%) placed by fallback. The workload is not the problem: real
-  utilisation there is **1.33 against capacity 2.0** — mandatory-only at f_max is the lightest load
-  the system ever sees and it fits comfortably. The counter nonetheless reaches **6.50**, because
-  T0 (p=10, u=0.245, 12 jobs) contributes 0.245 × 12 = **2.94 by itself** — more than both cores
-  combined, for a task that never needs more than a quarter of one core.
-- **Adding processors does not help.** N_tsk=12, `u_mand_factor`=0.4, sweeping N_prc 2→8:
-  fallback 16 / 18 / 17 / 17 / 19%. `A = Σ_i (H/p_i)·(e_m_i/p_i)` grows ×4.17 as m grows ×4, so the
-  capacity added is cancelled exactly by the load that comes with it.
-- Fallback fraction is predicted by `1 − m/A`; substituting `A ≈ n̄ · u_mand_factor · m` (n̄ = mean
-  jobs per task) gives **`1 − 1/(n̄ · u_mand_factor)` — N_prc cancels out entirely**. The gate
-  survives the whole hyper-period only when `n̄ · u_mand_factor ≤ 1`.
-- Measured drivers at N_prc=4, n̄=4.17 — `u_mand_factor` 0.2/0.3/0.4/0.5/0.6 → fallback
-  0/18/38/49/60%; period spread `k_max` 2→3 (n̄ 1.75→4.17) → 19%→49%. Both track the formula.
-  **This is the normal operating point, not a corner case** — it vanishes only in the
-  low-utilisation, short-hyper-period corner.
-- First documented 2026-06-12 as `usrt_code_review_report.html` **B2** (High); dropped from
-  `audit_issues_22Aug.html`, so it has been invisible since.
+**Blast radius — two more copies of the same bug, both fixed in the same change.**
+* `repair.py:92` — repair-target choice ranked processors by the same inflated metric.
+* `packers.py:40,116` — **`ffd_mapping` and `bfd_mapping` test `load[x] + u <= 1.0` while
+  accumulating `e_m/p_i` per job.** This is B2 verbatim, inside v7's own multi-start candidates —
+  the ones previously described as "immune to B2 because they bypass SPS". They bypass
+  `quantum.py`, not the defect. Fixing them is where most of v7's gain came from (+0.36% → +0.79%).
+* 9 display sites across `heuristic_v1/v2/v3/v4/v5a/v5b/claudeoptimal` — see UTIL-METRIC.
+* `ilp_v2.py` consumes the mapping and improved with it; no code change needed.
 
-**Fix options.** All four must answer the same question — what should `proc_util` *mean*?
+**Evidence — OFAT on `u_mand_factor` (paper α), 9 points × 100 seeds = 900 instances, `n_prc=2,
+n_tsk=8, n_frq=5, u_opt=0.5, rho=0.7, xi=0.6, H=80` all held fixed. Identical instances before and
+after; results in `tc_b2/u_mand_factor/results_{before,after_taskset,after_jobshare,after_full}.csv`.**
 
-1. **Event-based release** (the June review's proposal). Keep the running load, but subtract a
-   job's `e_m/p_i` at the quantum where its deadline passes. Smallest diff; restores the intended
-   "current occupancy" reading. Still a utilisation proxy, so still not the quantity that decides
-   feasibility.
-2. **Per-quantum interval load.** Replace the metric: measure work against window length
-   (`Σ e_m / quantum`) over jobs whose windows overlap the quantum, rather than `e_m/p_i`.
-   Dimensionally correct for the question being asked *inside* a quantum, and matches what the
-   mandatory-now classification already implies (those jobs share deadline `q_end`). Needs care for
-   work carried in from earlier quanta.
-3. **Drop the proxy — gate on DBF itself.** `check_dbf_mandatory` already exists and already runs
-   after the loop; use it (per affected processor) as the admission test and defer only on real
-   infeasibility. Most correct and removes UTIL-METRIC as a separate issue. Cost is
-   O(|A|·|D|·n) per quantum — but `state.py` already implements incremental DBF with identical
-   semantics and is currently used by nothing but `heuristic_v1`, so the machinery exists.
-4. ~~Per-quantum reset~~ — diagnostic probe only, **not a fix**. See the scoring note below.
+Fallback-mapped jobs (never reach SPS), 25 seeds per α:
 
-**Scoring note — this is the trap.** The fallback path is `min(range(m), key=proc_util)`, i.e.
-worst-fit on cumulative load, which is a respectable partitioning heuristic in its own right. The
-pipeline does not degrade to garbage when SPS drops out; it degrades to *worst-fit*. Probe (4)
-removed the fallback completely and moved final utility **−14%..+11%, mean −2%** across 12
-instances. So a fix must be scored on **downstream utility**, never on "fallback count = 0" — and
-criss-cross SPS is not automatically the winner on the real objective.
+| α | 0.1 | 0.2 | 0.3 | 0.4 | 0.5 | 0.6 | 0.7 | 0.8 | 0.9 | total |
+|---|---|---|---|---|---|---|---|---|---|---|
+| before | 0% | 1.5% | 11.5% | 26.2% | 39.2% | 49.7% | 59.4% | 64.6% | 69.7% | **35.8%** |
+| task-set | 0% | 0% | 0% | 0.4% | 12.1% | 24.0% | 45.0% | 56.1% | 69.0% | 23.0% |
+| **job-share** | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | 0% | **0.0%** |
 
-**Open question.** (1), (2) and (3) are three different semantics, not three spellings of one.
-Decide what `proc_util` is *meant* to be before writing any of them. Note that (3) makes
-UTIL-METRIC moot rather than merely consistent, which is worth weighing against its cost.
+Final change set vs original:
+
+| model | Δ utility (paired) | feasible /900 | mean runtime |
+|---|---|---|---|
+| `ilp_v2` | **+0.20%** | 731 → **741** | 0.472 → **0.345** s (−27%) |
+| `heuristic_v5b` | **+0.38%** | 727 → **737** | 0.027 → **0.022** s (−17%) |
+| `heuristic_v7` | **+0.79%** (204 better / 120 worse) | 753 → **765** | 0.266 → 0.285 s |
+
+α ≤ 0.6 is 100/100 feasible in every run; α = 0.9 is 0/100 in every run; the feasibility gains are
+all at α = 0.7–0.8. `sum(proc_util) == U_M` exactly at every α, and `maxUtil` never exceeds 1.0.
+
+**Still open, deliberately.** The DPS/SPS *balance* metric at `quantum.py:101` and the deferral
+sort keys at `:63, :89` remain on `e_m/p_i`. Those **rank** jobs; they do not gate capacity, so
+they are a separate question with its own experiment. The file now carries two metrics side by
+side — a deliberate choice, not an oversight.
 
 ---
 
 ### UTIL-METRIC — "utilisation" is summed over jobs, not tasks
 | field | value |
 |---|---|
-| Status      | open |
-| Confidence  | verified live 2026-09-04 |
+| Status      | **fixed 2026-09-05** |
+| Confidence  | verified live 2026-09-04; fixed and measured 2026-09-05 |
 | Layer       | **B** (+ display) |
-| Costs us    | every `← OVER 1.0` warning in the logs is spurious |
-| Location    | `quantum.py:77-78, 113, 147, 160` · `heuristic_v5b.py:58, 73` (and v5a/v6/v7) · `repair.py:92` |
-| Shares root | B2 — **must land in the same change** |
-| Blocks      | — |
-| Blocked by  | — |
+| Cost us     | every `← OVER 1.0` warning in the logs was spurious |
+| Location    | 9 display sites in `heuristic_v1/v2/v3/v4/v5a/v5b/claudeoptimal` · `repair.py:92` |
+| Landed with | B2 — same change, as this entry required |
 
 **Mechanism.** `Σ_jobs e_m_i/p_i = Σ_i (H/p_i)·(e_m_i/p_i)` — inflated by `H/p_i`. Utilisation is
 a per-*task* quantity being summed per *job*.
 
-**Evidence.** `testcase.py` prints `P0: util=3.2434 ← OVER 1.0` for a mapping whose true
+**Evidence.** `testcase.py` printed `P0: util=3.2434 ← OVER 1.0` for a mapping whose true
 utilisation is ~0.67 and which DBF confirms feasible.
 
-**Fix options.** Print `Σ over distinct tasks`. Trivial once B2's semantics are settled — but if
-fixed *separately* the diagnostic and the mapper would disagree, which is worse than both being
-wrong consistently.
+**Fix.** All sites now use the job-share metric `e_m_i / h`, identical to B2's, so the diagnostic
+and the mapper agree by construction. The display sites are pure printout — no decision reads them
+— so they carried zero behavioural risk; `repair.py:92` does steer the repair target and was
+validated in the same 900-instance run (byte-identical results for `ilp_v2` and `heuristic_v5b`,
+since repair almost never fires once fallback is 0%).
+
+**Note.** The original entry proposed `Σ over distinct tasks`. That is the *task-set* variant, and
+measuring it showed it double-counts tasks split across processors — see B2. `e_m/h` is used
+instead, and is exact.
 
 ---
 
@@ -167,7 +155,7 @@ wrong consistently.
 | Costs us    | a deadline-missing schedule can print as `SOLUTION (FINAL)` |
 | Location    | `usrt/mapping/repair.py:60, 96` · consumed at `quantum.py:150-152` |
 | Blocks      | — |
-| Blocked by  | B2 (changing the mapper changes how often repair is even reached) |
+| Blocked by  | ~~B2~~ — landed 2026-09-05. Repair now fires far less often (fallback is 0%), so this is rarer but **not** fixed: a PARTIAL return is still unchecked. |
 
 **Mechanism.** `repair_mapping` retries 100 times then returns `(mapping, ok)`. `quantum.py`
 prints `PARTIAL` when `ok` is false **and returns the mapping anyway**. The v5+ solvers never
@@ -325,15 +313,26 @@ Carried from `audit_issues_22Aug.html`; each needs confirming before it earns a 
 Edges known so far:
 
 ```
-B2 ──shares root── UTIL-METRIC        one change, or the mapper and its
-                                       diagnostic disagree
+B2 ──shares root── UTIL-METRIC        LANDED TOGETHER 2026-09-05, as required
 
-B2 ──blocks── REPAIR-PARTIAL           changing the mapper changes how often
-                                       repair is reached at all
+B2 ──blocked── REPAIR-PARTIAL          B2 has landed; repair now fires far less
+                                       often, so REPAIR-PARTIAL is rarer but
+                                       still unfixed and now unblocked
 
 RUN-FEAS, FREQ-SET, ONLINE-DEMO        isolated, land any time
+SWAP-BREAK                             isolated; fix the `break` AND assert on
+                                       the supposedly-unreachable revert
 ```
 
-**Open sequencing question.** B2 moves every published number. Decide whether the plan
-re-baselines `ALL_DOCS/` after it lands, or whether B2 waits until the rest of the offline fixes
-are ready so we re-measure **once**.
+**Sequencing question — now answered.** B2 moved every published number, and the plan taken was
+to re-measure at the point B2 landed rather than batch it: `tc_b2/u_mand_factor/` holds the
+900-instance before/after for all three models, and `ALL_DOCS/` has **not** yet been re-baselined
+against it. Anything in `ALL_DOCS/` quoting mapping quality, SPS-vs-alternative, or per-model
+utility predates 2026-09-05 and is stale — `22Aug_better_mapping_SPS.html` most of all, since its
+`sps`, `sps+refine2b` and `sps+budget` candidates all ran through the broken metric **and** its
+`wfd`/`ffd`/`bfd` candidates ran through the `packers.py` copy of the same bug.
+
+**Next.** With B2 and UTIL-METRIC closed, the remaining open entries are independent of each
+other: REPAIR-PARTIAL and SWAP-BREAK (both need a decision, not just a keystroke), RUN-FEAS
+(`ready`, one line), FREQ-SET and ONLINE-DEMO (latent), IXB-ROUTING (feature), NO-TESTS (blocks
+safe work on any of them).

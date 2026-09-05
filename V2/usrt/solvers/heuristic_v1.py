@@ -50,7 +50,7 @@ def run(processors, tasks, B_BUDGET):
         proc_jobs[x].append((i, j))
 
     for x in range(N_prc):
-        util = sum(tasks[i]['e_m'] / tasks[i]['p_i'] for (i, j) in proc_jobs[x])
+        util = sum(tasks[i]['e_m'] / h for (i, j) in proc_jobs[x])
         print(f"  P{x}: {len(proc_jobs[x]):>4} jobs   utilisation={util:.4f}")
 
     # ── Build ScheduleState ───────────────────────────────────────────────────

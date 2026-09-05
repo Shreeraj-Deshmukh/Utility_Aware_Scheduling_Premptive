@@ -45,7 +45,7 @@ from usrt.utils       import (lcm_list, gcd_list, build_cum, build_job_times,
 from usrt.mapping.quantum import quantum_sps_mapping
 from usrt.dbf.check   import check_all_timing
 
-MODELS = ("ilp_v1", "ilp_v2", "heuristic", "greedy_sps_baseline")
+MODELS = ("ilp_v1", "ilp_v2", "ilp_v3", "heuristic", "greedy_sps_baseline")
 
 _YRE = re.compile(r"^Y\[(\d+),(\d+),(\d+),(\d+)\]$")
 
@@ -173,6 +173,17 @@ def run_ilp_v2(processors, tasks, B, time_limit=30, mip_gap=0.0):
     return _ilp_metrics(mdl, cum, freq_set, "ilp_v2", time.perf_counter() - t0)
 
 
+# -- ILP v3 ----------------------------------------------------------------
+def run_ilp_v3(processors, tasks, B, time_limit=30, mip_gap=0.0):
+    from usrt.solvers import ilp_v3
+    _prep_gurobi(time_limit, mip_gap)
+    cum, freq_set = _cum_freq(processors, tasks)
+    t0 = time.perf_counter()
+    with _suppress():
+        mdl = ilp_v3.solve_ilp_v3(processors, tasks, B)
+    return _ilp_metrics(mdl, cum, freq_set, "ilp_v3", time.perf_counter() - t0)
+
+
 # ── Heuristic ───────────────────────────────────────────────────────────────
 def _mandatory_feasible(processors, tasks):
     """Does the heuristic's SPS mapping yield a DBF-feasible mandatory schedule?"""
@@ -253,6 +264,8 @@ def run_model(name, processors, tasks, B, time_limit=30, heur_variant="v5b",
             return run_ilp_v1(processors, tasks, B, time_limit, mip_gap)
         if name == "ilp_v2":
             return run_ilp_v2(processors, tasks, B, time_limit, mip_gap)
+        if name == "ilp_v3":
+            return run_ilp_v3(processors, tasks, B, time_limit, mip_gap)
         if name == "greedy_sps_baseline":
             return run_baseline(processors, tasks, B)
         if name in ("heuristic", "heuristic_v7", "heuristic_v6", "heuristic_v5b", "heuristic_v5a", "heuristic_v4",

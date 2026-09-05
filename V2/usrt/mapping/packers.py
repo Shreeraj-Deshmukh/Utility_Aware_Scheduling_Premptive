@@ -29,15 +29,22 @@ _TOL = 1e-9
 
 def _job_list(tasks, h, job_d):
     """
-    Jobs in decreasing mandatory utilisation.
+    Jobs in decreasing mandatory utilisation, JOB-SHARE metric.
 
-    e_m/p_i is a PER-TASK quantity, so every job of a task ties; the deadline
-    then the index break it, giving a total order (see the 22 Aug tie-break
-    work -- an unstable order here silently changes the mapping).
+    One job of task i occupies e_m_i/h of a processor over the hyper-period, so
+    summing this over that task's h/p_i jobs recovers e_m_i/p_i exactly -- and
+    the running `load` in wfd/ffd/bfd stays a true per-processor utilisation
+    even when a task's jobs are split across cores (see quantum.py).  Charging
+    e_m_i/p_i per job instead inflates load without bound and makes the
+    `load[x] + u <= 1.0` test in ffd/bfd fire long before a core is full.
+
+    Every job of a task ties on this value; the deadline then the index break
+    it, giving a total order (see the 22 Aug tie-break work -- an unstable
+    order here silently changes the mapping).
     """
     jobs = []
     for (i, j, r, d) in generate_jobs(tasks, h):
-        jobs.append(((i, j), tasks[i]['e_m'] / tasks[i]['p_i'], d))
+        jobs.append(((i, j), tasks[i]['e_m'] / h, d))
     jobs.sort(key=lambda t: (-t[1], t[2], t[0]))
     return [(ij, u) for (ij, u, _d) in jobs]
 
@@ -113,7 +120,7 @@ def donor_harvester_mapping(tasks, processors, h, job_d, cum, N_seg,
     jobs = []
     for (i, j, r, d) in generate_jobs(tasks, h):
         ud = tasks[i]['u_i'] * (cum[i][N_seg[i]] - cum[i][0]) / tasks[i]['p_i']
-        jobs.append(((i, j), tasks[i]['e_m'] / tasks[i]['p_i'], ud, d))
+        jobs.append(((i, j), tasks[i]['e_m'] / h, ud, d))
     jobs.sort(key=lambda t: (-t[2], t[3], t[0]))       # high ud first
 
     donors   = list(range(m - n_donor, m))
