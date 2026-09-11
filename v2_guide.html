@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>V2 Guide &mdash; Commands, Modularity &amp; Lego Wiring</title>
+<style>
+  body { font-family: 'Segoe UI', Arial, sans-serif; margin: 0; background: #f4f6f8; color: #1a1a2e; }
+  .toc { background: #1a1a2e; color: #e0e0e0; padding: 20px 32px; position: sticky; top: 0; z-index: 100; display: flex; gap: 18px; flex-wrap: wrap; align-items: center; }
+  .toc a { color: #7ecfff; text-decoration: none; font-size: 13px; white-space: nowrap; }
+  .toc a:hover { text-decoration: underline; }
+  .toc-title { color: #fff; font-weight: bold; font-size: 15px; margin-right: 10px; }
+  .hero { background: linear-gradient(135deg, #0f3460 0%, #16213e 60%, #1a1a2e 100%); color: #fff; padding: 56px 80px 40px; }
+  .hero h1 { font-size: 2.6em; margin: 0 0 10px; letter-spacing: -1px; }
+  .hero .sub { color: #7ecfff; font-size: 1.05em; }
+  .hero .desc { margin-top: 16px; font-size: 1.02em; color: #c8d6e5; max-width: 700px; line-height: 1.7; }
+  main { max-width: 1100px; margin: 0 auto; padding: 40px 40px 80px; }
+  section { margin-bottom: 56px; }
+  h2 { font-size: 1.65em; color: #0f3460; border-bottom: 3px solid #0f3460; padding-bottom: 8px; margin-bottom: 22px; }
+  h3 { font-size: 1.18em; color: #16213e; margin-top: 26px; margin-bottom: 10px; }
+  h4 { font-size: 1.02em; color: #0f3460; margin-top: 18px; margin-bottom: 6px; }
+  p { line-height: 1.75; margin: 10px 0; }
+  .card { background: #fff; border-radius: 10px; padding: 24px 28px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); margin-bottom: 20px; }
+  .card-blue  { border-left: 5px solid #0f3460; }
+  .card-green { border-left: 5px solid #27ae60; }
+  .card-orange{ border-left: 5px solid #e67e22; }
+  .card-red   { border-left: 5px solid #c0392b; }
+  .card-purple{ border-left: 5px solid #8e44ad; }
+  .terminal { background: #0d1117; color: #c9d1d9; font-family: 'Courier New', monospace; padding: 20px 24px; border-radius: 10px; margin: 14px 0; overflow-x: auto; font-size: 0.93em; line-height: 1.7; }
+  .terminal .prompt { color: #7ecfff; }
+  .terminal .comment { color: #8b949e; }
+  .terminal .output { color: #a8d8a8; }
+  .terminal .warn { color: #f0a500; }
+  code { background: #e8f0fe; color: #0f3460; font-family: 'Courier New', monospace; padding: 2px 7px; border-radius: 4px; font-size: 0.93em; }
+  table { border-collapse: collapse; width: 100%; margin: 14px 0; }
+  th { background: #0f3460; color: #fff; padding: 10px 14px; text-align: left; font-size: 0.93em; }
+  td { padding: 10px 14px; border-bottom: 1px solid #e0e6ed; font-size: 0.93em; vertical-align: top; }
+  tr:nth-child(even) td { background: #f0f4fa; }
+  .highlight { background: #fff9c4; border-left: 4px solid #f39c12; padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 14px 0; }
+  .success { background: #e8f8f0; border-left: 4px solid #27ae60; padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 14px 0; }
+  .warning { background: #fde8e8; border-left: 4px solid #c0392b; padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 14px 0; }
+
+  /* LEGO DIAGRAM */
+  .lego-canvas { background: #fff; border-radius: 12px; padding: 32px; box-shadow: 0 2px 14px rgba(0,0,0,0.1); overflow-x: auto; margin: 16px 0; }
+  .lego-grid { display: flex; flex-direction: column; gap: 14px; min-width: 700px; }
+  .lego-row { display: flex; gap: 10px; align-items: stretch; }
+  .lego-block { border-radius: 8px; padding: 12px 16px; font-size: 0.88em; font-weight: bold; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 100px; }
+  .lego-label { font-size: 0.75em; font-weight: normal; margin-top: 4px; color: rgba(255,255,255,0.85); }
+  .brick-entry { background: #1a1a2e; color: #7ecfff; flex: 0 0 120px; }
+  .brick-utils { background: #16213e; color: #a8d8ea; flex: 1; }
+  .brick-mapping { background: #0f3460; color: #fff; flex: 1; }
+  .brick-phases { background: #27ae60; color: #fff; flex: 1; }
+  .brick-solvers { background: #8e44ad; color: #fff; flex: 1; }
+  .brick-output { background: #e67e22; color: #fff; flex: 1; }
+  .brick-dbf { background: #c0392b; color: #fff; flex: 1; }
+  .brick-models { background: #2c3e50; color: #ecf0f1; flex: 1; }
+  .arrow-down { text-align: center; font-size: 1.4em; color: #0f3460; margin: -4px 0; }
+
+  /* FILE TREE */
+  .tree { font-family: 'Courier New', monospace; font-size: 0.91em; background: #fff; border-radius: 10px; padding: 20px 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); line-height: 1.8; }
+  .tree .dir { color: #0f3460; font-weight: bold; }
+  .tree .file { color: #333; }
+  .tree .comment { color: #888; font-size: 0.9em; }
+  .tree .new-file { color: #27ae60; font-weight: bold; }
+
+  /* SOLVER TABLE */
+  .solver-row td:first-child { font-weight: bold; color: #0f3460; white-space: nowrap; }
+  .solver-tag { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.8em; font-weight: bold; margin-right: 4px; }
+  .tag-new { background: #dcfce7; color: #166534; }
+  .tag-ilp { background: #fce7f3; color: #9d174d; }
+  .tag-base { background: #dbeafe; color: #1e40af; }
+  .tag-exp { background: #fef3c7; color: #92400e; }
+
+  /* LEGO WIRING */
+  .wiring-table td { vertical-align: middle; }
+  .wiring-table td:first-child { font-weight: bold; color: #8e44ad; white-space: nowrap; }
+  .wiring-table .from { color: #0f3460; font-family: monospace; }
+  .wiring-table .to   { color: #27ae60; font-family: monospace; }
+
+  footer { background: #1a1a2e; color: #7ecfff; text-align: center; padding: 24px; font-size: 0.92em; }
+</style>
+</head>
+<body>
+
+<nav class="toc">
+  <span class="toc-title">V2 Guide</span>
+  <a href="#quickstart">Quick Start</a>
+  <a href="#commands">All Commands</a>
+  <a href="#solvers">Solver Reference</a>
+  <a href="#file-tree">File Tree</a>
+  <a href="#lego">Lego Modularity</a>
+  <a href="#wiring">Wiring Detail</a>
+  <a href="#data-flow">Data Flow</a>
+  <a href="#adding">Adding a Solver</a>
+</nav>
+
+<div class="hero">
+  <h1>V2 &mdash; Commands, Modularity &amp; Wiring</h1>
+  <div class="sub">Everything you need to run, understand, and extend the USRT solver suite</div>
+  <div class="desc">
+    The V2 folder is a clean Python package. A single entry point (<code>run.py</code>)
+    drives every solver. Under the hood, each solver is assembled from small, independent
+    modules (mapping, phases, DBF checks) like Lego bricks.
+  </div>
+</div>
+
+<main>
+
+<!-- ===== QUICK START ===== -->
+<section id="quickstart">
+  <h2>1. Quick Start</h2>
+  <div class="warning">
+    <strong>All commands must be run from inside the <code>V2/</code> folder.</strong>
+    The package imports use <code>usrt.*</code> paths which resolve relative to V2.
+  </div>
+
+  <div class="terminal">
+<span class="comment"># Navigate to V2 first</span>
+<span class="prompt">PS C:\homogenous&gt;</span> cd V2
+
+<span class="comment"># Run default solver (heuristic_v4) on the included testcase</span>
+<span class="prompt">PS C:\homogenous\V2&gt;</span> python run.py testcase.py
+
+<span class="comment"># Run a specific solver</span>
+<span class="prompt">PS C:\homogenous\V2&gt;</span> python run.py testcase.py heuristic_v5a
+
+<span class="comment"># Run with ILP (requires Gurobi licence)</span>
+<span class="prompt">PS C:\homogenous\V2&gt;</span> python run.py testcase.py ilp_v2
+  </div>
+</section>
+
+<!-- ===== ALL COMMANDS ===== -->
+<section id="commands">
+  <h2>2. All Commands</h2>
+
+  <div class="card card-blue">
+    <h3>General Form</h3>
+    <div class="terminal">
+<span class="prompt">PS C:\homogenous\V2&gt;</span> python run.py &lt;testcase_file&gt; [solver_name]
+    </div>
+    <ul>
+      <li><code>&lt;testcase_file&gt;</code> &mdash; path to a Python file that defines <code>processors</code>, <code>tasks</code>, and <code>B_BUDGET</code></li>
+      <li><code>[solver_name]</code> &mdash; optional; defaults to <code>heuristic_v4</code> if omitted</li>
+    </ul>
+  </div>
+
+  <div class="terminal">
+<span class="comment">## ---- Heuristic Solvers ---- ##</span>
+
+<span class="prompt">PS C:\homogenous\V2&gt;</span> python run.py testcase.py heuristic_v1
+<span class="comment">  # Single-pass SPS + ScheduleState pipeline (oldest, simplest)</span>
+
+<span class="prompt">PS C:\homogenous\V2&gt;</span> python run.py testcase.py heuristic_v2
+<span class="comment">  # Quantum SPS + left-shift greedy (3-step cases)</span>
+
+<span class="prompt">PS C:\homogenous\V2&gt;</span> python run.py testcase.py heuristic_v3
+<span class="comment">  # Quantum SPS + DBF window-slack greedy, Phases 1-5 (no swap)</span>
+
+<span class="prompt">PS C:\homogenous\V2&gt;</span> python run.py testcase.py heuristic_v4
+<span class="comment">  # Quantum SPS + DBF greedy + swap, Phases 1-6 (recommended baseline)</span>
+
+<span class="prompt">PS C:\homogenous\V2&gt;</span> python run.py testcase.py heuristic_v5a
+<span class="comment">  # v4 + Refine Mapping 2a (linear doublet scan) between Phase 1 and 2</span>
+
+<span class="prompt">PS C:\homogenous\V2&gt;</span> python run.py testcase.py heuristic_v5b
+<span class="comment">  # v4 + Refine Mapping 2b (one-swap-one-scan) between Phase 1 and 2</span>
+
+<span class="prompt">PS C:\homogenous\V2&gt;</span> python run.py testcase.py heuristic_claudeoptimal
+<span class="comment">  # v4 + Phase 7 (double-giver swap) + Phase 8 (iterated greedy)</span>
+
+<span class="comment">## ---- ILP Solver ---- ##</span>
+
+<span class="prompt">PS C:\homogenous\V2&gt;</span> python run.py testcase.py ilp_v2
+<span class="comment">  # Quantum SPS mapping (Phase 1) + Gurobi ILP optimisation (Phase 2)</span>
+<span class="warn">  # Requires: pip install gurobipy  +  valid Gurobi licence</span>
+
+<span class="comment">## ---- Help ---- ##</span>
+
+<span class="prompt">PS C:\homogenous\V2&gt;</span> python run.py
+<span class="comment">  # Prints usage and lists all available solver names</span>
+  </div>
+
+  <div class="highlight">
+    <strong>Tip:</strong> To compare solvers, run the same testcase.py with different solver names
+    and compare the final utility and energy values printed at the end of each run.
+  </div>
+</section>
+
+<!-- ===== SOLVER REFERENCE ===== -->
+<section id="solvers">
+  <h2>3. Solver Reference</h2>
+
+  <table class="solver-row">
+    <tr>
+      <th>Solver Name</th>
+      <th>Phase 1b</th>
+      <th>Phases</th>
+      <th>Notes</th>
+    </tr>
+    <tr>
+      <td>heuristic_v1 <span class="solver-tag tag-base">base</span></td>
+      <td>&mdash;</td>
+      <td>1, 3, 4, 5</td>
+      <td>Uses ScheduleState for incremental DBF tracking. Single-pass SPS. Oldest design.</td>
+    </tr>
+    <tr>
+      <td>heuristic_v2 <span class="solver-tag tag-base">base</span></td>
+      <td>&mdash;</td>
+      <td>1, 2, 5</td>
+      <td>Quantum SPS. Phase 5 uses left-shift time proxy instead of DBF window slack.</td>
+    </tr>
+    <tr>
+      <td>heuristic_v3 <span class="solver-tag tag-base">base</span></td>
+      <td>&mdash;</td>
+      <td>1&ndash;5</td>
+      <td>Quantum SPS + DBF window-slack greedy. No Phase 6 swap.</td>
+    </tr>
+    <tr>
+      <td>heuristic_v4 <span class="solver-tag tag-base">base</span></td>
+      <td>&mdash;</td>
+      <td>1&ndash;6</td>
+      <td>Recommended baseline. All 6 phases including best-first pairwise swap.</td>
+    </tr>
+    <tr>
+      <td>heuristic_v5a <span class="solver-tag tag-new">new</span></td>
+      <td>refine_mapping_2a</td>
+      <td>1, 1b, 2&ndash;6</td>
+      <td>Adds linear doublet scan after SPS to balance utility density. Single pass.</td>
+    </tr>
+    <tr>
+      <td>heuristic_v5b <span class="solver-tag tag-new">new</span></td>
+      <td>refine_mapping_2b</td>
+      <td>1, 1b, 2&ndash;6</td>
+      <td>Adds iterative greedy doublet swap after SPS. Always targets max-UD processor.</td>
+    </tr>
+    <tr>
+      <td>heuristic_claudeoptimal <span class="solver-tag tag-exp">exp</span></td>
+      <td>&mdash;</td>
+      <td>1&ndash;8</td>
+      <td>Experimental. Adds double-giver swap (Phase 7) and iterated greedy (Phase 8).</td>
+    </tr>
+    <tr>
+      <td>ilp_v2 <span class="solver-tag tag-ilp">ilp</span></td>
+      <td>&mdash;</td>
+      <td>1 (SPS) + ILP</td>
+      <td>Uses Gurobi for exact optimisation after SPS mapping. Requires licence.</td>
+    </tr>
+  </table>
+</section>
+
+<!-- ===== FILE TREE ===== -->
+<section id="file-tree">
+  <h2>4. File Tree</h2>
+
+  <div class="tree">
+<span class="dir">V2/</span>
+├── <span class="file">run.py</span>                              <span class="comment">&larr; entry point; select &amp; run any solver</span>
+├── <span class="file">testcase.py</span>                          <span class="comment">&larr; sample test data (processors, tasks, B_BUDGET)</span>
+│
+├── <span class="dir">usrt/</span>                                <span class="comment">&larr; main package</span>
+│   ├── <span class="file">__init__.py</span>
+│   ├── <span class="file">models.py</span>                        <span class="comment">&larr; ALPHA, BETA, total_energy(), total_utility()</span>
+│   ├── <span class="file">utils.py</span>                         <span class="comment">&larr; load_testcase(), lcm_list(), build_cum(), build_job_times(), build_proc_jobs()</span>
+│   ├── <span class="file">output.py</span>                        <span class="comment">&larr; print_schedule(), print_instance_summary()</span>
+│   ├── <span class="file">state.py</span>                         <span class="comment">&larr; ScheduleState (only used by v1)</span>
+│   │
+│   ├── <span class="dir">dbf/</span>                             <span class="comment">&larr; timing feasibility checks</span>
+│   │   ├── <span class="file">check.py</span>                     <span class="comment">&larr; check_all_timing(), check_dbf_proc()</span>
+│   │   └── <span class="file">slack.py</span>                     <span class="comment">&larr; window_slack(), min_slack_for_job()</span>
+│   │
+│   ├── <span class="dir">mapping/</span>                         <span class="comment">&larr; job-to-processor assignment</span>
+│   │   ├── <span class="file">ps.py</span>                        <span class="comment">&larr; PartialSolution data structure</span>
+│   │   ├── <span class="file">dps_sps.py</span>                   <span class="comment">&larr; DPS and SPS algorithms</span>
+│   │   ├── <span class="file">quantum.py</span>                   <span class="comment">&larr; quantum_sps_mapping() &larr; Phase 1</span>
+│   │   ├── <span class="file">single_pass.py</span>               <span class="comment">&larr; flat SPS (v1 only)</span>
+│   │   ├── <span class="file">repair.py</span>                    <span class="comment">&larr; DBF repair after SPS if needed</span>
+│   │   └── <span class="new-file">refine_mapping.py</span>            <span class="comment">&larr; refine_mapping_2a(), refine_mapping_2b() &larr; Phase 1b (NEW)</span>
+│   │
+│   ├── <span class="dir">phases/</span>                          <span class="comment">&larr; pipeline stages 2-8</span>
+│   │   ├── <span class="file">left_shift.py</span>                <span class="comment">&larr; left_shift() &larr; Phase 2</span>
+│   │   ├── <span class="file">energy_slack.py</span>              <span class="comment">&larr; compute_energy_slack() &larr; Phase 3</span>
+│   │   ├── <span class="file">aggressive.py</span>                <span class="comment">&larr; phase_aggressive_scaling() &larr; Phase 4</span>
+│   │   ├── <span class="file">greedy.py</span>                    <span class="comment">&larr; phase_optional_segments() &larr; Phase 5</span>
+│   │   ├── <span class="file">swap.py</span>                      <span class="comment">&larr; phase_swap_local_search() &larr; Phase 6</span>
+│   │   ├── <span class="file">greedy_leftshift.py</span>          <span class="comment">&larr; alt Phase 5 using left-shift proxy</span>
+│   │   └── <span class="file">greedy_state.py</span>              <span class="comment">&larr; alt Phase 3/5 using ScheduleState</span>
+│   │
+│   └── <span class="dir">solvers/</span>                         <span class="comment">&larr; end-to-end pipelines</span>
+│       ├── <span class="file">heuristic_v1.py</span>
+│       ├── <span class="file">heuristic_v2.py</span>
+│       ├── <span class="file">heuristic_v3.py</span>
+│       ├── <span class="file">heuristic_v4.py</span>              <span class="comment">&larr; canonical baseline</span>
+│       ├── <span class="new-file">heuristic_v5a.py</span>             <span class="comment">&larr; NEW: adds refine_mapping_2a</span>
+│       ├── <span class="new-file">heuristic_v5b.py</span>             <span class="comment">&larr; NEW: adds refine_mapping_2b</span>
+│       ├── <span class="file">heuristic_claudeoptimal.py</span>
+│       └── <span class="file">ilp_v2.py</span>
+  </div>
+</section>
+
+<!-- ===== LEGO MODULARITY ===== -->
+<section id="lego">
+  <h2>5. Lego Modularity &mdash; The Architecture</h2>
+
+  <p>
+    The codebase is structured like Lego: each brick (module) does exactly one thing
+    and can be plugged into any solver. Solvers are just sequences of bricks.
+    Adding a new solver means writing a new <code>run()</code> function that calls
+    the bricks in a different order or with different parameters.
+  </p>
+
+  <div class="lego-canvas">
+    <div class="lego-grid">
+
+      <div class="lego-row">
+        <div class="lego-block brick-entry">
+          run.py
+          <span class="lego-label">entry point</span>
+        </div>
+        <div class="lego-block brick-utils" style="flex:2;">
+          load_testcase() &nbsp;&mdash;&nbsp; processors, tasks, B_BUDGET
+          <span class="lego-label">usrt/utils.py</span>
+        </div>
+        <div class="lego-block brick-models">
+          ALPHA, BETA<br>total_energy()
+          <span class="lego-label">usrt/models.py</span>
+        </div>
+      </div>
+
+      <div class="arrow-down">&#8595;</div>
+
+      <div class="lego-row">
+        <div class="lego-block brick-solvers" style="flex:0 0 150px;">
+          Solver<br>(v1/v2/.../v5b)
+          <span class="lego-label">usrt/solvers/</span>
+        </div>
+        <div class="lego-block brick-utils" style="flex:2;">
+          lcm_list() &nbsp; gcd_list() &nbsp; build_cum() &nbsp; build_job_times() &nbsp; build_proc_jobs()
+          <span class="lego-label">usrt/utils.py &mdash; shared by ALL solvers</span>
+        </div>
+        <div class="lego-block brick-output">
+          print_instance_summary()<br>print_schedule()
+          <span class="lego-label">usrt/output.py</span>
+        </div>
+      </div>
+
+      <div class="arrow-down">&#8595;</div>
+
+      <div class="lego-row">
+        <div class="lego-block brick-mapping" style="flex:1.2;">
+          Phase 1<br>quantum_sps_mapping()
+          <span class="lego-label">mapping/quantum.py</span>
+        </div>
+        <div class="lego-block" style="flex:1.2; background:#6c3483; color:#fff;">
+          Phase 1b (v5 only)<br>refine_mapping_2a/2b()
+          <span class="lego-label">mapping/refine_mapping.py</span>
+        </div>
+        <div class="lego-block brick-phases" style="flex:0.8;">
+          Phase 2<br>left_shift()
+          <span class="lego-label">phases/left_shift.py</span>
+        </div>
+        <div class="lego-block brick-phases" style="flex:0.8;">
+          Phase 3<br>compute_energy_slack()
+          <span class="lego-label">phases/energy_slack.py</span>
+        </div>
+      </div>
+
+      <div class="arrow-down">&#8595;</div>
+
+      <div class="lego-row">
+        <div class="lego-block brick-phases" style="flex:1;">
+          Phase 4<br>phase_aggressive_scaling()
+          <span class="lego-label">phases/aggressive.py</span>
+        </div>
+        <div class="lego-block brick-phases" style="flex:1.2;">
+          Phase 5<br>phase_optional_segments()
+          <span class="lego-label">phases/greedy.py</span>
+        </div>
+        <div class="lego-block brick-phases" style="flex:1.2;">
+          Phase 6<br>phase_swap_local_search()
+          <span class="lego-label">phases/swap.py</span>
+        </div>
+        <div class="lego-block brick-dbf" style="flex:0.8;">
+          DBF checks<br>window_slack()
+          <span class="lego-label">dbf/check.py<br>dbf/slack.py</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="success">
+    <strong>Key insight:</strong> Every phase module is stateless relative to other phases.
+    It receives its inputs as function arguments and returns results. No global state, no
+    hidden coupling. This means you can run Phase 5 alone, test Phase 6 in isolation, or
+    skip Phase 4 entirely by just not calling it &mdash; the data structures stay consistent.
+  </div>
+</section>
+
+<!-- ===== WIRING DETAIL ===== -->
+<section id="wiring">
+  <h2>6. Wiring Detail &mdash; What Each Brick Picks Up From Where</h2>
+
+  <p>
+    Below is an exhaustive list of every import in the solver pipeline and what
+    it contributes. Think of each row as one Lego stud connection.
+  </p>
+
+  <table class="wiring-table">
+    <tr>
+      <th>Brick (import)</th>
+      <th>Source module</th>
+      <th>What it provides</th>
+      <th>Who uses it</th>
+    </tr>
+    <tr>
+      <td>ALPHA, BETA</td>
+      <td class="from">usrt/models.py</td>
+      <td>Energy model constants (default: ALPHA=1.0, BETA=0.5)</td>
+      <td class="to">All solvers (for print context), aggressive.py, greedy.py</td>
+    </tr>
+    <tr>
+      <td>total_energy()</td>
+      <td class="from">usrt/models.py</td>
+      <td>Sums E = ALPHA * f^BETA * e_exec across all jobs/segments</td>
+      <td class="to">energy_slack.py, aggressive.py, greedy.py, swap.py, solvers</td>
+    </tr>
+    <tr>
+      <td>total_utility()</td>
+      <td class="from">usrt/models.py</td>
+      <td>Sums u_i * cum[i][k_ij] / cum[i][N_seg] across all jobs</td>
+      <td class="to">All solvers (for final reporting)</td>
+    </tr>
+    <tr>
+      <td>load_testcase()</td>
+      <td class="from">usrt/utils.py</td>
+      <td>Reads a testcase .py file; returns processors, tasks, B_BUDGET</td>
+      <td class="to">run.py (once at startup)</td>
+    </tr>
+    <tr>
+      <td>lcm_list(), gcd_list()</td>
+      <td class="from">usrt/utils.py</td>
+      <td>Compute hyperperiod h = lcm(periods), quantum = gcd(periods)</td>
+      <td class="to">All solvers</td>
+    </tr>
+    <tr>
+      <td>build_cum()</td>
+      <td class="from">usrt/utils.py</td>
+      <td>Builds cum[i][k] = e_{i,0} + ... + e_{i,k-1} cumulative table</td>
+      <td class="to">All solvers; used by every phase and mapping module</td>
+    </tr>
+    <tr>
+      <td>build_job_times()</td>
+      <td class="from">usrt/utils.py</td>
+      <td>Returns job_r[(i,j)] = release time, job_d[(i,j)] = deadline for each job</td>
+      <td class="to">All solvers; used by Phase 1b, DBF checks, Phase 5, Phase 6</td>
+    </tr>
+    <tr>
+      <td>build_proc_jobs()</td>
+      <td class="from">usrt/utils.py</td>
+      <td>Inverts mapping &rarr; proc_jobs[x] = [(i,j),...] and proc_jobs_map for fast lookup</td>
+      <td class="to">All solvers after Phase 1 (and again after Phase 1b in v5)</td>
+    </tr>
+    <tr>
+      <td>print_instance_summary()</td>
+      <td class="from">usrt/output.py</td>
+      <td>Prints task table, processor specs, budget, hyperperiod info</td>
+      <td class="to">All solvers (once at start)</td>
+    </tr>
+    <tr>
+      <td>print_schedule()</td>
+      <td class="from">usrt/output.py</td>
+      <td>Prints final per-job scheduling result: freq, segment count, energy, utility</td>
+      <td class="to">All solvers (at end)</td>
+    </tr>
+    <tr>
+      <td>quantum_sps_mapping()</td>
+      <td class="from">usrt/mapping/quantum.py</td>
+      <td>Phase 1: assigns each job to a processor using Quantum SPS. Returns mapping dict.</td>
+      <td class="to">v3, v4, v5a, v5b, claudeoptimal, ilp_v2</td>
+    </tr>
+    <tr>
+      <td>refine_mapping_2a()</td>
+      <td class="from">usrt/mapping/refine_mapping.py</td>
+      <td>Phase 1b: linear doublet scan to balance UD(x)</td>
+      <td class="to">heuristic_v5a only</td>
+    </tr>
+    <tr>
+      <td>refine_mapping_2b()</td>
+      <td class="from">usrt/mapping/refine_mapping.py</td>
+      <td>Phase 1b: iterative greedy swap targeting max-UD processor</td>
+      <td class="to">heuristic_v5b only</td>
+    </tr>
+    <tr>
+      <td>left_shift()</td>
+      <td class="from">usrt/phases/left_shift.py</td>
+      <td>Phase 2: simulate mandatory-only EDF at f_max; compute slack per job</td>
+      <td class="to">v3, v4, v5a, v5b</td>
+    </tr>
+    <tr>
+      <td>compute_energy_slack()</td>
+      <td class="from">usrt/phases/energy_slack.py</td>
+      <td>Phase 3: returns (E_mandatory, E_slack = B_BUDGET - E_mandatory)</td>
+      <td class="to">v3, v4, v5a, v5b</td>
+    </tr>
+    <tr>
+      <td>phase_aggressive_scaling()</td>
+      <td class="from">usrt/phases/aggressive.py</td>
+      <td>Phase 4: lowers frequency of eligible jobs to free energy</td>
+      <td class="to">v3, v4, v5a, v5b</td>
+    </tr>
+    <tr>
+      <td>phase_optional_segments()</td>
+      <td class="from">usrt/phases/greedy.py</td>
+      <td>Phase 5: greedy optional segment addition gated by DBF window slack</td>
+      <td class="to">v3, v4, v5a, v5b, claudeoptimal</td>
+    </tr>
+    <tr>
+      <td>phase_swap_local_search()</td>
+      <td class="from">usrt/phases/swap.py</td>
+      <td>Phase 6: best-first pairwise giver/receiver swap + Phase 5 fill pass</td>
+      <td class="to">v4, v5a, v5b, claudeoptimal</td>
+    </tr>
+    <tr>
+      <td>window_slack() / min_slack_for_job()</td>
+      <td class="from">usrt/dbf/slack.py</td>
+      <td>Per-window slack computation used inside greedy.py and swap.py</td>
+      <td class="to">phases/greedy.py, phases/swap.py</td>
+    </tr>
+    <tr>
+      <td>check_all_timing() / check_dbf_proc()</td>
+      <td class="from">usrt/dbf/check.py</td>
+      <td>Full DBF feasibility check for all processors</td>
+      <td class="to">refine_mapping.py (_dbf_ok), repair.py, aggressive.py</td>
+    </tr>
+  </table>
+</section>
+
+<!-- ===== DATA FLOW ===== -->
+<section id="data-flow">
+  <h2>7. Core Data Structures &mdash; What Flows Between Bricks</h2>
+
+  <div class="card card-blue">
+    <h3>Primary Data Structures</h3>
+    <table>
+      <tr><th>Variable</th><th>Type</th><th>What It Is</th><th>Created By</th></tr>
+      <tr>
+        <td><code>tasks</code></td>
+        <td>list of dict</td>
+        <td>Task parameters: p_i, e_m, u_i, segments list, etc.</td>
+        <td>load_testcase()</td>
+      </tr>
+      <tr>
+        <td><code>processors</code></td>
+        <td>list of dict</td>
+        <td>Processor specs: frequencies list, power curve params</td>
+        <td>load_testcase()</td>
+      </tr>
+      <tr>
+        <td><code>cum[i][k]</code></td>
+        <td>list of lists</td>
+        <td>Cumulative exec time: cum[i][0]=0, cum[i][k]=e_{i,0}+...+e_{i,k-1}</td>
+        <td>build_cum()</td>
+      </tr>
+      <tr>
+        <td><code>N_seg[i]</code></td>
+        <td>list of int</td>
+        <td>Number of segments for task i</td>
+        <td>build_cum()</td>
+      </tr>
+      <tr>
+        <td><code>job_r[(i,j)]</code></td>
+        <td>dict</td>
+        <td>Release time of job j of task i</td>
+        <td>build_job_times()</td>
+      </tr>
+      <tr>
+        <td><code>job_d[(i,j)]</code></td>
+        <td>dict</td>
+        <td>Deadline of job j of task i</td>
+        <td>build_job_times()</td>
+      </tr>
+      <tr>
+        <td><code>mapping[(i,j)]</code></td>
+        <td>dict</td>
+        <td>Processor index assigned to job (i,j)</td>
+        <td>quantum_sps_mapping() &rarr; refined by refine_mapping_2a/b()</td>
+      </tr>
+      <tr>
+        <td><code>proc_jobs[x]</code></td>
+        <td>dict of lists</td>
+        <td>List of (i,j) jobs assigned to processor x</td>
+        <td>build_proc_jobs() from mapping</td>
+      </tr>
+      <tr>
+        <td><code>freq_idx[(i,j)]</code></td>
+        <td>dict</td>
+        <td>Frequency level index for job (i,j) [0 = lowest, N_frq-1 = f_max]</td>
+        <td>Initialised at N_frq-1; modified by aggressive.py</td>
+      </tr>
+      <tr>
+        <td><code>seg_k[(i,j)]</code></td>
+        <td>dict</td>
+        <td>Number of segments scheduled for job (i,j) [0 = mandatory only]</td>
+        <td>Initialised at 0; incremented by greedy.py, swap.py</td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="card card-green">
+    <h3>The Two Key Read-Write Variables</h3>
+    <p>
+      <code>freq_idx</code> and <code>seg_k</code> are the two mutable state variables
+      that evolve through Phases 4&ndash;6. Every phase reads them and may modify them.
+      The final values determine the schedule:
+    </p>
+    <ul>
+      <li><strong>seg_k[(i,j)] = k</strong> means job (i,j) executes through segment k
+          (cum[i][0] to cum[i][k] execution time)</li>
+      <li><strong>freq_idx[(i,j)] = f</strong> means job (i,j) runs at frequency freq_set[f]</li>
+    </ul>
+    <p>
+      After Phase 6, these two dicts fully specify the schedule. <code>print_schedule()</code>
+      reads only these plus cum and task metadata to produce the final output.
+    </p>
+  </div>
+</section>
+
+<!-- ===== ADDING A SOLVER ===== -->
+<section id="adding">
+  <h2>8. Adding a New Solver</h2>
+
+  <div class="card card-purple">
+    <h3>Step-by-Step</h3>
+
+    <div style="display:flex;gap:14px;margin:10px 0;align-items:flex-start;">
+      <div style="background:#8e44ad;color:#fff;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-weight:bold;flex-shrink:0;">1</div>
+      <div><strong>Create</strong> <code>V2/usrt/solvers/heuristic_v6.py</code>
+      with a <code>def run(processors, tasks, B_BUDGET):</code> function.
+      Import whichever bricks you need.</div>
+    </div>
+
+    <div style="display:flex;gap:14px;margin:10px 0;align-items:flex-start;">
+      <div style="background:#8e44ad;color:#fff;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-weight:bold;flex-shrink:0;">2</div>
+      <div><strong>Register</strong> it in <code>V2/run.py</code>:</div>
+    </div>
+
+    <div class="terminal">
+SOLVERS = {
+    ...
+<span class="output">    "heuristic_v6": "usrt.solvers.heuristic_v6",   # add this line</span>
+}
+    </div>
+
+    <div style="display:flex;gap:14px;margin:10px 0;align-items:flex-start;">
+      <div style="background:#8e44ad;color:#fff;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-weight:bold;flex-shrink:0;">3</div>
+      <div><strong>Run</strong> it immediately:</div>
+    </div>
+
+    <div class="terminal">
+<span class="prompt">PS C:\homogenous\V2&gt;</span> python run.py testcase.py heuristic_v6
+    </div>
+  </div>
+
+  <div class="card card-green">
+    <h3>Minimal New Solver Template</h3>
+    <div class="terminal">
+<span class="comment">"""heuristic_v6 — experimental variant."""</span>
+from ..models import ALPHA, BETA, total_energy, total_utility
+from ..utils  import lcm_list, gcd_list, build_cum, build_job_times, build_proc_jobs
+from ..mapping.quantum        import quantum_sps_mapping
+from ..mapping.refine_mapping import refine_mapping_2b   <span class="comment"># optional</span>
+from ..output import print_instance_summary, print_schedule
+from ..phases.energy_slack import compute_energy_slack
+from ..phases.aggressive   import phase_aggressive_scaling
+from ..phases.greedy       import phase_optional_segments
+from ..phases.swap         import phase_swap_local_search
+
+def run(processors, tasks, B_BUDGET):
+    <span class="comment"># --- set up ---</span>
+    periods  = [int(t['p_i']) for t in tasks]
+    h        = lcm_list(periods)
+    quantum  = gcd_list(periods)
+    cum, N_seg = build_cum(tasks)
+    N_tsk    = len(tasks)
+    N_prc    = len(processors)
+    freq_set = processors[0]['frequencies']
+    N_frq    = len(freq_set)
+    N_job    = [h // periods[i] for i in range(N_tsk)]
+    job_r, job_d = build_job_times(tasks, h)
+
+    <span class="comment"># Phase 1</span>
+    mapping = quantum_sps_mapping(tasks, processors, h, quantum)
+    proc_jobs, proc_jobs_map = build_proc_jobs(mapping)
+
+    <span class="comment"># (optional) Phase 1b — add/remove as needed</span>
+    mapping = refine_mapping_2b(mapping, tasks, N_prc, cum, N_seg, job_r, job_d)
+    proc_jobs, proc_jobs_map = build_proc_jobs(mapping)
+
+    <span class="comment"># Init state</span>
+    freq_idx = {(i,j): N_frq-1 for i in range(N_tsk) for j in range(N_job[i])}
+    seg_k    = {(i,j): 0       for i in range(N_tsk) for j in range(N_job[i])}
+
+    <span class="comment"># Phases 3-6</span>
+    E_init, E_slk = compute_energy_slack(seg_k, freq_idx, freq_set, cum, N_tsk, N_job, B_BUDGET)
+    if E_slk &lt; -1e-9: return
+    phase_aggressive_scaling(seg_k, freq_idx, freq_set, N_frq, cum, N_tsk, N_job,
+                             proc_jobs, job_r, job_d, N_prc)
+    phase_optional_segments(seg_k, freq_idx, freq_set, N_frq, cum, N_seg,
+                            N_tsk, N_job, proc_jobs, proc_jobs_map,
+                            job_r, job_d, tasks, N_prc, B_BUDGET)
+    phase_swap_local_search(seg_k, freq_idx, freq_set, N_frq, cum, N_seg,
+                            N_tsk, N_job, proc_jobs, proc_jobs_map,
+                            job_r, job_d, tasks, N_prc, B_BUDGET)
+
+    print_schedule(seg_k, freq_idx, freq_set, cum, tasks, N_tsk, N_job,
+                   mapping, B_BUDGET, label="v6 SOLUTION")
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  V2 Guide &mdash; USRT Solver Suite &mdash; Generated 2026-05-04
+</footer>
+
+</body>
+</html>

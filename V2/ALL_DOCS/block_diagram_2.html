@@ -1,0 +1,755 @@
+<meta charset="utf-8">
+<title>Four Lanes, One Spine</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@500;600&display=swap">
+
+<style>
+:root{
+  --ground:#F5F7F9;
+  --surface:#FFFFFF;
+  --sunk:#EDF1F5;
+  --ink:#16202B;
+  --ink-soft:#41505F;
+  --muted:#6B7B8C;
+  --rule:#D5DDE5;
+  --rule-soft:#E4EAF0;
+  --time:#0E6E8C;
+  --time-wash:#E2F0F5;
+  --energy:#A2601A;
+  --energy-wash:#F7EDDE;
+  --exact:#4B4A8F;
+  --shadow:rgba(22,32,43,.07);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#0E1620;
+    --surface:#16202B;
+    --sunk:#111A24;
+    --ink:#DCE6EF;
+    --ink-soft:#B0BFCE;
+    --muted:#8497A9;
+    --rule:#26333F;
+    --rule-soft:#1E2A35;
+    --time:#5CC4E4;
+    --time-wash:#132B35;
+    --energy:#E4A857;
+    --energy-wash:#33280F;
+    --exact:#A3A1E8;
+    --shadow:rgba(0,0,0,.3);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0E1620;
+  --surface:#16202B;
+  --sunk:#111A24;
+  --ink:#DCE6EF;
+  --ink-soft:#B0BFCE;
+  --muted:#8497A9;
+  --rule:#26333F;
+  --rule-soft:#1E2A35;
+  --time:#5CC4E4;
+  --time-wash:#132B35;
+  --energy:#E4A857;
+  --energy-wash:#33280F;
+  --exact:#A3A1E8;
+  --shadow:rgba(0,0,0,.3);
+}
+
+*{box-sizing:border-box}
+body{
+  background:var(--ground);
+  color:var(--ink);
+  font-family:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
+  font-size:16px;
+  line-height:1.62;
+  -webkit-font-smoothing:antialiased;
+}
+.page{max-width:1080px;margin:0 auto;padding:0 28px 96px}
+.col{max-width:68ch}
+
+code,.mono{font-family:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+code{
+  font-size:.86em;
+  background:var(--sunk);
+  border:1px solid var(--rule-soft);
+  border-radius:3px;
+  padding:.08em .34em;
+  color:var(--ink-soft);
+  word-break:break-word;
+}
+
+/* ---------- masthead ---------- */
+.masthead{padding:64px 0 40px;border-bottom:2px solid var(--ink)}
+.kicker{
+  font-family:"IBM Plex Mono",monospace;
+  font-size:11px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--muted);margin-bottom:20px;
+}
+h1{
+  font-family:"IBM Plex Serif",Georgia,serif;
+  font-weight:600;font-size:clamp(38px,6vw,60px);
+  line-height:1.04;letter-spacing:-.02em;margin:0 0 22px;
+  text-wrap:balance;max-width:16ch;
+}
+.standfirst{font-size:19px;line-height:1.58;color:var(--ink-soft);max-width:62ch;margin:0}
+.standfirst strong{color:var(--ink);font-weight:600}
+
+/* ---------- sections ---------- */
+section{padding-top:60px}
+.eyebrow{
+  font-family:"IBM Plex Mono",monospace;
+  font-size:11px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--muted);
+  padding-bottom:10px;margin-bottom:26px;
+  border-bottom:1px solid var(--rule);
+  display:flex;justify-content:space-between;gap:16px;align-items:baseline;
+}
+.eyebrow .files{color:var(--ink-soft);letter-spacing:.04em;text-transform:none;font-size:12px}
+h2{
+  font-family:"IBM Plex Serif",Georgia,serif;
+  font-weight:600;font-size:clamp(25px,3.2vw,33px);
+  line-height:1.18;letter-spacing:-.01em;margin:0 0 16px;text-wrap:balance;
+}
+h3{
+  font-family:"IBM Plex Sans",sans-serif;
+  font-weight:600;font-size:17px;margin:34px 0 10px;letter-spacing:-.005em;
+}
+p{margin:0 0 16px;max-width:68ch}
+.lede{font-size:17.5px;color:var(--ink-soft);max-width:64ch}
+
+/* ---------- figures ---------- */
+figure{margin:32px 0;padding:0}
+figure svg{display:block;width:100%;max-width:100%;height:auto;color:var(--ink)}
+.figframe{
+  background:var(--surface);
+  border:1px solid var(--rule);
+  border-radius:2px;
+  padding:28px 24px 20px;
+  box-shadow:0 1px 2px var(--shadow);
+}
+figcaption{
+  font-size:13.5px;line-height:1.5;color:var(--muted);
+  margin-top:14px;padding-top:12px;border-top:1px solid var(--rule-soft);
+  max-width:74ch;
+}
+figcaption b{color:var(--ink-soft);font-weight:600}
+
+/* ---------- tables ---------- */
+.tw{overflow-x:auto;margin:26px 0;border:1px solid var(--rule);border-radius:2px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;min-width:620px;font-size:14px}
+th,td{text-align:left;padding:11px 15px;border-bottom:1px solid var(--rule-soft);vertical-align:top}
+thead th{
+  font-family:"IBM Plex Mono",monospace;
+  font-size:10.5px;letter-spacing:.11em;text-transform:uppercase;
+  color:var(--muted);font-weight:500;
+  background:var(--sunk);border-bottom:1px solid var(--rule);
+  white-space:nowrap;
+}
+tbody tr:last-child td{border-bottom:none}
+td.mono,th.mono{font-family:"IBM Plex Mono",monospace;font-size:12.6px;white-space:nowrap}
+td.path{color:var(--time);font-weight:500}
+.num{font-variant-numeric:tabular-nums}
+
+/* ---------- resource chips ---------- */
+.chip{
+  display:inline-block;font-family:"IBM Plex Mono",monospace;
+  font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;
+  padding:2px 7px;border-radius:2px;white-space:nowrap;font-weight:500;
+}
+.chip-t{background:var(--time-wash);color:var(--time);border:1px solid var(--time)}
+.chip-e{background:var(--energy-wash);color:var(--energy);border:1px solid var(--energy)}
+.chip-n{background:var(--sunk);color:var(--muted);border:1px solid var(--rule)}
+
+/* ---------- io block ---------- */
+.io{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));
+  gap:1px;background:var(--rule);border:1px solid var(--rule);
+  border-radius:2px;margin:26px 0;
+}
+.io > div{background:var(--surface);padding:18px 20px}
+.io h4{
+  font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--muted);font-weight:500;margin:0 0 10px;
+}
+.io ul{margin:0;padding-left:0;list-style:none}
+.io li{
+  font-family:"IBM Plex Mono",monospace;font-size:12.5px;line-height:1.85;
+  color:var(--ink-soft);
+}
+.io li b{color:var(--ink);font-weight:600}
+.io li span{font-family:"IBM Plex Sans",sans-serif;font-size:12.5px;color:var(--muted)}
+
+/* ---------- callout ---------- */
+.note{
+  border-left:2px solid var(--energy);
+  background:var(--surface);
+  padding:16px 20px;margin:26px 0;border-radius:0 2px 2px 0;
+  font-size:14.5px;line-height:1.58;color:var(--ink-soft);
+}
+.note b{color:var(--ink);font-weight:600}
+.note.t{border-left-color:var(--time)}
+.note p{margin:0 0 10px;max-width:none}
+.note p:last-child{margin:0}
+
+/* ---------- next steps ---------- */
+.steps{counter-reset:s;margin:26px 0;padding:0;list-style:none;display:grid;gap:1px;background:var(--rule);border:1px solid var(--rule);border-radius:2px}
+.steps li{
+  counter-increment:s;background:var(--surface);padding:16px 20px 16px 56px;position:relative;
+  font-size:14.5px;line-height:1.55;color:var(--ink-soft);
+}
+.steps li::before{
+  content:counter(s);position:absolute;left:20px;top:16px;
+  font-family:"IBM Plex Mono",monospace;font-size:12px;font-weight:600;
+  color:var(--time);
+}
+.steps li b{color:var(--ink);font-weight:600;display:block;margin-bottom:2px;font-size:15px}
+
+footer{
+  margin-top:76px;padding-top:22px;border-top:1px solid var(--rule);
+  font-size:13px;color:var(--muted);
+}
+footer p{max-width:74ch;margin:0 0 8px}
+
+@media (max-width:640px){
+  .page{padding:0 18px 64px}
+  .masthead{padding:40px 0 30px}
+  section{padding-top:44px}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div class="page">
+
+<header class="masthead">
+  <div class="kicker">USRT V2 &nbsp;·&nbsp; architecture at system level &nbsp;·&nbsp; 11 Sep 2026</div>
+  <h1>Four Lanes, One Spine</h1>
+  <p class="standfirst">Every solver in this codebase answers the same question — map each job
+  <code>T<sub>i,j</sub> ↦ ⟨P<sub>x</sub>, f<sub>z</sub>, k⟩</code> — against the same two scarce
+  resources. <strong>What differs between the lanes is only which of those three decisions is made by
+  search and which by an optimiser.</strong> This page is the map at that level; the functions come after.</p>
+</header>
+
+<section>
+  <div class="eyebrow"><span>The instance</span><span class="files">usrt/utils.py · usrt/models.py</span></div>
+  <h2>What actually enters the system</h2>
+  <p class="lede">Every lane — exact, heuristic, online — begins from one three-element tuple
+  returned by a test-case module, and immediately derives the same handful of tables from it.
+  Nothing downstream reads the raw file again.</p>
+
+  <div class="io">
+    <div>
+      <h4>Loaded — load_testcase()</h4>
+      <ul>
+        <li><b>processors</b> <span>— id + frequency list</span></li>
+        <li><b>tasks</b> <span>— e_m, e_o_k[], p_i, u_i</span></li>
+        <li><b>B_BUDGET</b> <span>— scalar energy cap</span></li>
+      </ul>
+    </div>
+    <div>
+      <h4>Derived once — utils.py</h4>
+      <ul>
+        <li><b>h</b> <span>= lcm(periods), the hyper-period</span></li>
+        <li><b>quantum</b> <span>= gcd(periods)</span></li>
+        <li><b>cum[i][k]</b> <span>— cumulative work at f_max</span></li>
+        <li><b>N_job[i]</b> <span>= h / p_i</span></li>
+        <li><b>job_r, job_d</b> <span>— release &amp; deadline</span></li>
+      </ul>
+    </div>
+    <div>
+      <h4>Returned — solver contract</h4>
+      <ul>
+        <li><b>seg_k[(i,j)]</b> <span>— segment level k</span></li>
+        <li><b>freq_idx[(i,j)]</b> <span>— frequency index z</span></li>
+        <li><b>utility</b> <span>— the objective Φ</span></li>
+        <li><b>energy</b> <span>— total E, checked ≤ B</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <p>Three modules make up the substrate every lane shares.
+  <code>models.py</code> is the single source of truth for the energy model —
+  <code>E(w,f) = α·w/f + β·f²·w</code> with <code>α=0.15, β=1.0</code>, so energy per unit work
+  <code>g(f)</code> bottoms out at <code>f* ≈ 0.42</code> and running below f_max is genuinely cheaper.
+  <code>dbf/</code> holds the timing law: <code>window_slack</code>, <code>min_slack_for_job</code>,
+  <code>check_all_timing</code>. <code>output.py</code> does the printing. Only heuristic v1 departs,
+  carrying its own incremental state in <code>state.py</code>.</p>
+</section>
+
+<section>
+  <div class="eyebrow"><span>The shape of the problem</span><span class="files">paper §II–III</span></div>
+  <h2>Three decisions, two constraints</h2>
+  <p class="lede">Hold this diagram in your head and the rest of the codebase falls into place.
+  The processor choice touches only time; frequency and segment count touch both resources —
+  and frequency is the only decision that can <em>convert</em> one into the other.</p>
+
+  <figure>
+    <div class="figframe">
+      <svg viewBox="0 0 900 356" role="img" aria-label="A job maps to three decisions: processor, frequency and segment count. Processor affects only the per-processor time constraint; frequency and segment count affect both the time constraint and the global energy budget.">
+        <defs>
+          <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+          </marker>
+          <marker id="aht" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="var(--time)"/>
+          </marker>
+          <marker id="ahe" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="var(--energy)"/>
+          </marker>
+        </defs>
+
+        <!-- job -->
+        <rect x="14" y="140" width="126" height="64" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/>
+        <text x="77" y="166" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="15" font-weight="600" fill="currentColor">T i,j</text>
+        <text x="77" y="186" text-anchor="middle" font-family="IBM Plex Sans, sans-serif" font-size="11" fill="var(--muted)">one job</text>
+
+        <!-- fan out -->
+        <path d="M140 172 L152 172 L152 62 L196 62" fill="none" stroke="currentColor" stroke-width="1.2" marker-end="url(#ah)"/>
+        <path d="M140 172 L196 172" fill="none" stroke="currentColor" stroke-width="1.2" marker-end="url(#ah)"/>
+        <path d="M140 172 L152 172 L152 282 L196 282" fill="none" stroke="currentColor" stroke-width="1.2" marker-end="url(#ah)"/>
+
+        <!-- decisions -->
+        <rect x="200" y="34" width="198" height="56" rx="2" fill="var(--sunk)" stroke="currentColor" stroke-width="1.2"/>
+        <text x="216" y="58" font-family="IBM Plex Mono, monospace" font-size="13" font-weight="600" fill="currentColor">processor  x</text>
+        <text x="216" y="76" font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="var(--muted)">which core owns the job</text>
+
+        <rect x="200" y="144" width="198" height="56" rx="2" fill="var(--sunk)" stroke="currentColor" stroke-width="1.2"/>
+        <text x="216" y="168" font-family="IBM Plex Mono, monospace" font-size="13" font-weight="600" fill="currentColor">frequency  z</text>
+        <text x="216" y="186" font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="var(--muted)">the exchange rate</text>
+
+        <rect x="200" y="254" width="198" height="56" rx="2" fill="var(--sunk)" stroke="currentColor" stroke-width="1.2"/>
+        <text x="216" y="278" font-family="IBM Plex Mono, monospace" font-size="13" font-weight="600" fill="currentColor">segments  k</text>
+        <text x="216" y="296" font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="var(--muted)">the only source of utility</text>
+
+        <!-- edges to constraints -->
+        <path d="M398 62 L560 62 L560 96" fill="none" stroke="var(--time)" stroke-width="1.4" marker-end="url(#aht)"/>
+        <text x="470" y="54" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--time)">picks the windows</text>
+
+        <path d="M398 162 L560 162 L560 132" fill="none" stroke="var(--time)" stroke-width="1.4" marker-end="url(#aht)"/>
+        <text x="472" y="155" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--time)">e_eff = w / f</text>
+
+        <path d="M398 182 L740 182 L740 132" fill="none" stroke="var(--energy)" stroke-width="1.4" marker-end="url(#ahe)"/>
+        <text x="600" y="199" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--energy)">E = w · g(f),  g(f) = α/f + βf²</text>
+
+        <path d="M398 272 L560 272 L560 244" fill="none" stroke="var(--time)" stroke-width="1.4" marker-end="url(#aht)"/>
+        <text x="474" y="265" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--time)">more w</text>
+
+        <path d="M398 292 L740 292 L740 244" fill="none" stroke="var(--energy)" stroke-width="1.4" marker-end="url(#ahe)"/>
+        <text x="600" y="309" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--energy)">more w</text>
+
+        <!-- constraint pillars -->
+        <rect x="490" y="98" width="140" height="144" rx="2" fill="var(--time-wash)" stroke="var(--time)" stroke-width="1.5"/>
+        <text x="560" y="132" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="12" font-weight="600" fill="var(--time)">C2 · TIME</text>
+        <text x="560" y="156" text-anchor="middle" font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="var(--time)">DBF per window</text>
+        <text x="560" y="174" text-anchor="middle" font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="var(--time)">per processor</text>
+        <text x="560" y="200" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--time)">Σ e_eff ≤ t2 − t1</text>
+        <text x="560" y="224" text-anchor="middle" font-family="IBM Plex Sans, sans-serif" font-size="11" font-style="italic" fill="var(--time)">local · not shared</text>
+
+        <rect x="670" y="98" width="140" height="144" rx="2" fill="var(--energy-wash)" stroke="var(--energy)" stroke-width="1.5"/>
+        <text x="740" y="132" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="12" font-weight="600" fill="var(--energy)">C3 · ENERGY</text>
+        <text x="740" y="156" text-anchor="middle" font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="var(--energy)">one budget</text>
+        <text x="740" y="174" text-anchor="middle" font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="var(--energy)">for the whole system</text>
+        <text x="740" y="200" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--energy)">Σ E ≤ B</text>
+        <text x="740" y="224" text-anchor="middle" font-family="IBM Plex Sans, sans-serif" font-size="11" font-style="italic" fill="var(--energy)">global · contended</text>
+
+        <!-- objective -->
+        <rect x="490" y="266" width="320" height="52" rx="2" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="3 3"/>
+        <text x="650" y="288" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="12" font-weight="600" fill="currentColor">maximise  Φ = Σ u_i · (cum[i][k] − cum[i][0])</text>
+        <text x="650" y="306" text-anchor="middle" font-family="IBM Plex Sans, sans-serif" font-size="11" fill="var(--muted)">frequency does not appear — slowing a job costs zero utility</text>
+      </svg>
+      <figcaption><b>Why frequency is the interesting variable.</b> It is the only decision that moves
+      in opposite directions on the two axes — slowing a job frees energy and consumes time — and it
+      costs no utility at all, since <code>f</code> is absent from the objective. Every later stage
+      that looks clever (Phase 4, Phase 6b, the online Options 3 and 4) is exploiting exactly that.</figcaption>
+    </div>
+  </figure>
+</section>
+
+<section>
+  <div class="eyebrow"><span>Lane 1 · exact</span><span class="files">ILP.py · usrt/solvers/ilp_v2·v3·v4.py</span></div>
+  <h2>The ILP lane: four solvers, one model</h2>
+  <p class="lede">ILP v1 lets Gurobi choose the processor too. The other three fix the mapping first
+  and hand an <em>identical</em> Phase 2 to the solver — so v2, v3 and v4 differ from each other in
+  nothing but where their mapping came from.</p>
+
+  <figure>
+    <div class="figframe">
+      <svg viewBox="0 0 900 300" role="img" aria-label="ILP v1 solves mapping, frequency and segments jointly. ILP v2, v3 and v4 each produce a mapping by a different method, then all three feed the same Y-variable Gurobi model.">
+        <defs>
+          <marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+          </marker>
+          <marker id="ahx" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="var(--exact)"/>
+          </marker>
+        </defs>
+
+        <text x="14" y="22" font-family="IBM Plex Mono, monospace" font-size="10.5" letter-spacing="1.4" fill="var(--muted)">PHASE 1 — WHERE x COMES FROM</text>
+        <text x="560" y="22" font-family="IBM Plex Mono, monospace" font-size="10.5" letter-spacing="1.4" fill="var(--muted)">PHASE 2 — IDENTICAL</text>
+
+        <!-- v1 -->
+        <rect x="14" y="36" width="300" height="48" rx="2" fill="none" stroke="var(--exact)" stroke-width="1.5"/>
+        <text x="30" y="57" font-family="IBM Plex Mono, monospace" font-size="12.5" font-weight="600" fill="var(--exact)">ILP v1 — no mapping stage</text>
+        <text x="30" y="74" font-family="IBM Plex Sans, sans-serif" font-size="11.5" fill="var(--muted)">ILP.py :: solve()  ·  paper §III</text>
+
+        <path d="M314 60 L470 60 L470 96" fill="none" stroke="var(--exact)" stroke-width="1.5" marker-end="url(#ahx)"/>
+
+        <rect x="360" y="98" width="220" height="56" rx="2" fill="var(--surface)" stroke="var(--exact)" stroke-width="1.5"/>
+        <text x="470" y="122" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="13" font-weight="600" fill="var(--exact)">V[i,j,k,x,z]</text>
+        <text x="470" y="141" text-anchor="middle" font-family="IBM Plex Sans, sans-serif" font-size="11" fill="var(--muted)">x is a variable · C2 over global A×D</text>
+
+        <path d="M580 126 L676 126" fill="none" stroke="var(--exact)" stroke-width="1.5" marker-end="url(#ahx)"/>
+        <rect x="680" y="98" width="206" height="56" rx="2" fill="var(--sunk)" stroke="currentColor" stroke-width="1.2"/>
+        <text x="783" y="122" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="12.5" font-weight="600" fill="currentColor">Gurobi optimize()</text>
+        <text x="783" y="141" text-anchor="middle" font-family="IBM Plex Sans, sans-serif" font-size="11" fill="var(--muted)">the optimality yardstick</text>
+
+        <!-- divider -->
+        <line x1="14" y1="174" x2="886" y2="174" stroke="var(--rule)" stroke-width="1" stroke-dasharray="2 4"/>
+
+        <!-- v2 v3 v4 -->
+        <rect x="14" y="190" width="300" height="30" rx="2" fill="none" stroke="currentColor" stroke-width="1.2"/>
+        <text x="28" y="210" font-family="IBM Plex Mono, monospace" font-size="12" fill="currentColor">v2  SPS on mandatory work</text>
+
+        <rect x="14" y="226" width="300" height="30" rx="2" fill="none" stroke="currentColor" stroke-width="1.2"/>
+        <text x="28" y="246" font-family="IBM Plex Mono, monospace" font-size="12" fill="currentColor">v3  SPS on predicted work</text>
+
+        <rect x="14" y="262" width="300" height="30" rx="2" fill="none" stroke="currentColor" stroke-width="1.2"/>
+        <text x="28" y="282" font-family="IBM Plex Mono, monospace" font-size="12" fill="currentColor">v4  heuristic v6's map search</text>
+
+        <path d="M314 205 L340 205 L340 240 L360 240" fill="none" stroke="currentColor" stroke-width="1.2" marker-end="url(#ah2)"/>
+        <path d="M314 241 L360 241" fill="none" stroke="currentColor" stroke-width="1.2" marker-end="url(#ah2)"/>
+        <path d="M314 277 L340 277 L340 242 L360 242" fill="none" stroke="currentColor" stroke-width="1.2" marker-end="url(#ah2)"/>
+        <text x="337" y="196" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--muted)">x fixed</text>
+
+        <rect x="364" y="214" width="216" height="56" rx="2" fill="var(--surface)" stroke="currentColor" stroke-width="1.5"/>
+        <text x="472" y="238" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="13" font-weight="600" fill="currentColor">Y[i,j,k,z]</text>
+        <text x="472" y="257" text-anchor="middle" font-family="IBM Plex Sans, sans-serif" font-size="11" fill="var(--muted)">no x · C2 over Ax×Dx only</text>
+
+        <path d="M580 242 L676 242" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#ah2)"/>
+        <rect x="680" y="214" width="206" height="56" rx="2" fill="var(--sunk)" stroke="currentColor" stroke-width="1.2"/>
+        <text x="783" y="238" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="12.5" font-weight="600" fill="currentColor">Gurobi optimize()</text>
+        <text x="783" y="257" text-anchor="middle" font-family="IBM Plex Sans, sans-serif" font-size="11" fill="var(--muted)">exact, given the mapping</text>
+      </svg>
+      <figcaption><b>The whole difference is one index.</b> Dropping <code>x</code> from the variable
+      makes the model size independent of <code>N_prc</code> and shrinks every C2 constraint to one
+      processor's own release/deadline set — fast, but it inherits whatever error the mapper made and
+      can never repair it.</figcaption>
+    </div>
+  </figure>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Solver</th><th>File</th><th>Phase 1 — mapping</th><th>Phase 2</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">ILP v1</td><td class="mono path">ILP.py</td><td>none — Gurobi picks <code>x</code></td><td>joint, paper §III</td></tr>
+        <tr><td class="mono">ILP v2</td><td class="mono path">usrt/solvers/ilp_v2.py</td><td>quantum SPS on <code>e_m</code></td><td rowspan="3" style="vertical-align:middle">byte-for-byte identical<br><span style="color:var(--muted)">paper §IV</span></td></tr>
+        <tr><td class="mono">ILP v3</td><td class="mono path">usrt/solvers/ilp_v3.py</td><td>quantum SPS on <em>predicted</em> work — <code>mapping/predictive.py</code> estimates what optional work the budget affords, then backs off 1.0 → 0.5 → 0.25 → plain SPS if DBF fails</td></tr>
+        <tr><td class="mono">ILP v4</td><td class="mono path">usrt/solvers/ilp_v4.py</td><td>heuristic v6's search verbatim — SPS + budget refine (1b′) + local search (1c), scored by v6's own pipeline</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note t">
+    <p><b>Why v3 and v4 exist.</b> SPS packs by <em>mandatory</em> work; Phase 2 then spends the budget
+    on <em>optional</em> work. The packer is balancing a quantity the finished schedule does not carry.
+    v3 attacks that in the packer (predict the optional work first); v4 sidesteps it by borrowing the
+    mapping search that measurably beat the plain ILP — heuristic v6 outscored <code>ilp_v2</code>
+    on mean utility over 900 instances, which can only have been the mapping.</p>
+  </div>
+</section>
+
+<section>
+  <div class="eyebrow"><span>Lane 2 · heuristic</span><span class="files">usrt/solvers/heuristic_v*.py · usrt/phases/</span></div>
+  <h2>The heuristic lane: a spine that never changes</h2>
+  <p class="lede">This is the single most useful thing to hold in your head. Every heuristic from v3
+  onward is the same downstream pipeline bolted onto a different Phase 1 — same modules, same
+  arguments, same order. When you read v5b and then v7, only the top of the file is new.</p>
+
+  <figure>
+    <div class="figframe">
+      <svg viewBox="0 0 900 350" role="img" aria-label="Five different Phase 1 mapping strategies all feed one fixed chain of phases 2 through 6b, each phase labelled with which resource it spends.">
+        <defs>
+          <marker id="ah3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+          </marker>
+        </defs>
+
+        <text x="14" y="20" font-family="IBM Plex Mono, monospace" font-size="10.5" letter-spacing="1.4" fill="var(--muted)">PHASE 1 — THIS IS WHAT VARIES</text>
+        <text x="392" y="20" font-family="IBM Plex Mono, monospace" font-size="10.5" letter-spacing="1.4" fill="var(--muted)">PHASES 2–6b — SHARED MODULES, FIXED ORDER</text>
+
+        <!-- phase 1 options -->
+        <rect x="14" y="34" width="300" height="32" rx="2" fill="none" stroke="currentColor" stroke-width="1.2"/>
+        <text x="28" y="55" font-family="IBM Plex Mono, monospace" font-size="11.5" fill="currentColor">v3 v4   quantum SPS, as-is</text>
+
+        <rect x="14" y="72" width="300" height="32" rx="2" fill="none" stroke="currentColor" stroke-width="1.2"/>
+        <text x="28" y="93" font-family="IBM Plex Mono, monospace" font-size="11.5" fill="currentColor">v5a v5b  + refine 2a / 2b</text>
+
+        <rect x="14" y="110" width="300" height="32" rx="2" fill="none" stroke="currentColor" stroke-width="1.2"/>
+        <text x="28" y="131" font-family="IBM Plex Mono, monospace" font-size="11.5" fill="currentColor">v6      + budget 1b' + LS 1c</text>
+
+        <rect x="14" y="148" width="300" height="32" rx="2" fill="none" stroke="currentColor" stroke-width="1.2"/>
+        <text x="28" y="169" font-family="IBM Plex Mono, monospace" font-size="11.5" fill="currentColor">v7      multi-start 1M + 1R</text>
+
+        <rect x="14" y="186" width="300" height="32" rx="2" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="3 3"/>
+        <text x="28" y="207" font-family="IBM Plex Mono, monospace" font-size="11.5" fill="var(--muted)">baseline  SPS only, f_max pinned</text>
+
+        <path d="M314 50 L348 50 L348 128 L386 128" fill="none" stroke="currentColor" stroke-width="1.1" marker-end="url(#ah3)"/>
+        <path d="M314 88 L348 88 L348 128 L386 128" fill="none" stroke="currentColor" stroke-width="1.1"/>
+        <path d="M314 126 L348 126 L348 128" fill="none" stroke="currentColor" stroke-width="1.1"/>
+        <path d="M314 164 L348 164 L348 128" fill="none" stroke="currentColor" stroke-width="1.1"/>
+
+        <text x="350" y="114" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--muted)">mapping</text>
+
+        <!-- spine -->
+        <rect x="390" y="32" width="496" height="34" rx="2" fill="var(--sunk)" stroke="currentColor" stroke-width="1.2"/>
+        <text x="404" y="54" font-family="IBM Plex Mono, monospace" font-size="11.5" fill="currentColor">2 · left_shift</text>
+        <text x="596" y="54" font-family="IBM Plex Sans, sans-serif" font-size="11" fill="var(--muted)">packs jobs left, reports slack — diagnostic only</text>
+
+        <rect x="390" y="74" width="496" height="34" rx="2" fill="var(--energy-wash)" stroke="var(--energy)" stroke-width="1.2"/>
+        <text x="404" y="96" font-family="IBM Plex Mono, monospace" font-size="11.5" fill="var(--energy)">3 · energy_slack</text>
+        <text x="596" y="96" font-family="IBM Plex Sans, sans-serif" font-size="11" fill="var(--energy)">B &lt; cheapest-possible cost → stop. The only hard gate.</text>
+
+        <rect x="390" y="116" width="496" height="34" rx="2" fill="var(--time-wash)" stroke="var(--time)" stroke-width="1.2"/>
+        <text x="404" y="138" font-family="IBM Plex Mono, monospace" font-size="11.5" fill="var(--time)">4 · aggressive</text>
+        <text x="596" y="138" font-family="IBM Plex Sans, sans-serif" font-size="11" fill="var(--time)">spends TIME to buy ENERGY — only until the budget fits</text>
+
+        <rect x="390" y="158" width="496" height="34" rx="2" fill="var(--surface)" stroke="currentColor" stroke-width="1.5"/>
+        <text x="404" y="180" font-family="IBM Plex Mono, monospace" font-size="11.5" font-weight="600" fill="currentColor">5 · greedy</text>
+        <text x="596" y="180" font-family="IBM Plex Sans, sans-serif" font-size="11" fill="currentColor">the utility engine — adds segments, spends both resources</text>
+
+        <rect x="390" y="200" width="496" height="34" rx="2" fill="var(--sunk)" stroke="currentColor" stroke-width="1.2"/>
+        <text x="404" y="222" font-family="IBM Plex Mono, monospace" font-size="11.5" fill="currentColor">6 · swap</text>
+        <text x="596" y="222" font-family="IBM Plex Sans, sans-serif" font-size="11" fill="var(--muted)">reallocates segments between jobs, then re-runs Phase 5</text>
+
+        <rect x="390" y="242" width="496" height="34" rx="2" fill="var(--energy-wash)" stroke="var(--energy)" stroke-width="1.2"/>
+        <text x="404" y="264" font-family="IBM Plex Mono, monospace" font-size="11.5" fill="var(--energy)">6b · freq_trade</text>
+        <text x="596" y="264" font-family="IBM Plex Sans, sans-serif" font-size="11" fill="var(--energy)">prices both resources, trades one for the other: λ·dE &gt; μ·dT</text>
+
+        <path d="M638 66 L638 72" stroke="currentColor" stroke-width="1.1" marker-end="url(#ah3)"/>
+        <path d="M638 108 L638 114" stroke="currentColor" stroke-width="1.1" marker-end="url(#ah3)"/>
+        <path d="M638 150 L638 156" stroke="currentColor" stroke-width="1.1" marker-end="url(#ah3)"/>
+        <path d="M638 192 L638 198" stroke="currentColor" stroke-width="1.1" marker-end="url(#ah3)"/>
+        <path d="M638 234 L638 240" stroke="currentColor" stroke-width="1.1" marker-end="url(#ah3)"/>
+        <path d="M638 276 L638 300" stroke="currentColor" stroke-width="1.1" marker-end="url(#ah3)"/>
+
+        <rect x="390" y="302" width="496" height="34" rx="2" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="3 3"/>
+        <text x="638" y="324" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11.5" font-weight="600" fill="currentColor">(seg_k, freq_idx, utility, energy)</text>
+      </svg>
+      <figcaption><b>Colour marks which resource each phase spends.</b> Only two phases move
+      frequency — Phase 4 to reach feasibility, Phase 6b to trade for utility — and only Phase 5 and
+      Phase 6 change <code>k</code>. Everything else is bookkeeping or diagnosis.</figcaption>
+    </div>
+  </figure>
+
+  <h3>Version matrix — which phases each solver actually calls</h3>
+  <div class="tw">
+    <table>
+      <thead><tr><th>Version</th><th>Phase 1 — mapping</th><th>Downstream phases</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">v1</td><td>single-pass SPS (flat, no quanta)</td><td class="mono">state-based 4, greedy</td><td>own substrate: <code>state.py</code>, incremental DBF</td></tr>
+        <tr><td class="mono">v2</td><td>quantum SPS</td><td class="mono">3, greedy_leftshift</td><td>left-shift greedy instead of DBF-slack greedy</td></tr>
+        <tr><td class="mono">v3</td><td>quantum SPS</td><td class="mono">2 · 3 · 4 · 5</td><td>no swap</td></tr>
+        <tr><td class="mono">v4</td><td>quantum SPS</td><td class="mono">2 · 3 · 4 · 5 · 6</td><td><code>run.py</code>'s default solver</td></tr>
+        <tr><td class="mono">v5a</td><td>+ refine 2a — linear doublet scan</td><td class="mono">2 · 3 · 4 · 5 · 6</td><td>no 6b</td></tr>
+        <tr><td class="mono">v5b</td><td>+ refine 2b — one-swap-one-scan</td><td class="mono">2 · 3 · 4 · 5 · 6 · 6b</td><td>the online lane's starting schedule</td></tr>
+        <tr><td class="mono">v6</td><td>+ budget refine 1b′ + local search 1c</td><td class="mono">3 · 4 · 5 · 6 · 6b</td><td>balances or <em>concentrates</em> by regime; best quality</td></tr>
+        <tr><td class="mono">v7</td><td>multi-start 1M over 7 mappings + guided repair 1R</td><td class="mono">3 · 4 · 5 · 6 · 6b</td><td>1L local search present but disabled</td></tr>
+        <tr><td class="mono">claudeoptimal</td><td>quantum SPS</td><td class="mono">2…6b + 7 · 8</td><td>double-giver swap + iterated greedy</td></tr>
+        <tr><td class="mono">baseline</td><td>quantum SPS only</td><td class="mono">greedy segments only</td><td>f_max pinned, no DVFS — the floor</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>The mapping toolbox Phase 1 draws from</h3>
+  <div class="tw">
+    <table>
+      <thead><tr><th>File</th><th>Provides</th><th>Used by</th></tr></thead>
+      <tbody>
+        <tr><td class="mono path">mapping/quantum.py</td><td>the canonical per-quantum SPS mapper</td><td>everything except v1</td></tr>
+        <tr><td class="mono path">mapping/dps_sps.py · ps.py</td><td>the DPS/SPS criss-cross balancer beneath it</td><td>quantum.py, single_pass.py</td></tr>
+        <tr><td class="mono path">mapping/repair.py</td><td>mandatory-only DBF check + greedy repair</td><td>quantum.py</td></tr>
+        <tr><td class="mono path">mapping/refine_mapping.py</td><td>utility-density balancing, 2a and 2b</td><td>v5a, v5b, v7</td></tr>
+        <tr><td class="mono path">mapping/budget_refine.py</td><td>regime-aware refine (1b′) + mapping local search (1c)</td><td>v6, v7, ILP v4</td></tr>
+        <tr><td class="mono path">mapping/packers.py</td><td>WFD / FFD / BFD / donor-harvester alternatives</td><td>v7 multi-start</td></tr>
+        <tr><td class="mono path">mapping/multistart.py</td><td>score-many-keep-best + blocked-resource diagnosis</td><td>v7</td></tr>
+        <tr><td class="mono path">mapping/predictive.py</td><td>predicted-work item sizes for the packer</td><td>ILP v3</td></tr>
+        <tr><td class="mono path">mapping/single_pass.py</td><td>flat SPS, no quanta</td><td>v1</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <div class="eyebrow"><span>Lane 3 · online</span><span class="files">usrt/online/ · usrt/solvers/online_demo.py</span></div>
+  <h2>The online lane consumes a schedule, not an instance</h2>
+  <p class="lede">This is the structural fact that makes the online phase confusing until you see it.
+  It does not solve the problem. It takes a <em>finished offline schedule</em> as its input and
+  improves it at runtime, when jobs finish sooner than their worst case said they would.</p>
+
+  <figure>
+    <div class="figframe">
+      <svg viewBox="0 0 900 320" role="img" aria-label="A finished offline schedule feeds a per-processor DP precompute and one global energy pool. At each early completion the freed time and energy are arbitrated, looked up in the DP, verified against a dynamic DBF, and committed.">
+        <defs>
+          <marker id="ah4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+          </marker>
+          <marker id="ah4t" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="var(--time)"/>
+          </marker>
+          <marker id="ah4e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="var(--energy)"/>
+          </marker>
+        </defs>
+
+        <text x="14" y="20" font-family="IBM Plex Mono, monospace" font-size="10.5" letter-spacing="1.4" fill="var(--muted)">PRECOMPUTE — ONCE</text>
+        <text x="470" y="20" font-family="IBM Plex Mono, monospace" font-size="10.5" letter-spacing="1.4" fill="var(--muted)">RUNTIME — EVERY EARLY COMPLETION</text>
+
+        <!-- input -->
+        <rect x="14" y="110" width="176" height="72" rx="2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="3 3"/>
+        <text x="102" y="136" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11.5" font-weight="600" fill="currentColor">v5b schedule</text>
+        <text x="102" y="154" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--muted)">seg_k · freq_idx</text>
+        <text x="102" y="170" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--muted)">mapping</text>
+
+        <path d="M190 132 L224 132 L224 76 L258 76" fill="none" stroke="var(--time)" stroke-width="1.4" marker-end="url(#ah4t)"/>
+        <path d="M190 160 L224 160 L224 216 L258 216" fill="none" stroke="var(--energy)" stroke-width="1.4" marker-end="url(#ah4e)"/>
+
+        <!-- DP tables -->
+        <rect x="262" y="48" width="180" height="56" rx="2" fill="var(--time-wash)" stroke="var(--time)" stroke-width="1.5"/>
+        <text x="352" y="72" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11.5" font-weight="600" fill="var(--time)">ProcessorDP × N_prc</text>
+        <text x="352" y="90" text-anchor="middle" font-family="IBM Plex Sans, sans-serif" font-size="11" fill="var(--time)">time is local — one table per core</text>
+
+        <!-- pool -->
+        <rect x="262" y="188" width="180" height="56" rx="2" fill="var(--energy-wash)" stroke="var(--energy)" stroke-width="1.5"/>
+        <text x="352" y="212" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11.5" font-weight="600" fill="var(--energy)">SharedEnergyPool</text>
+        <text x="352" y="230" text-anchor="middle" font-family="IBM Plex Sans, sans-serif" font-size="11" fill="var(--energy)">one pool, mutex-guarded</text>
+
+        <!-- event -->
+        <rect x="480" y="110" width="150" height="72" rx="2" fill="var(--surface)" stroke="currentColor" stroke-width="1.5"/>
+        <text x="555" y="136" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11.5" font-weight="600" fill="currentColor">job finishes</text>
+        <text x="555" y="152" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11.5" font-weight="600" fill="currentColor">early</text>
+        <text x="555" y="170" text-anchor="middle" font-family="IBM Plex Sans, sans-serif" font-size="10.5" fill="var(--muted)">θ · WCET</text>
+
+        <path d="M442 76 L462 76 L462 132 L476 132" fill="none" stroke="var(--time)" stroke-width="1.4" marker-end="url(#ah4t)"/>
+        <path d="M442 216 L462 216 L462 160 L476 160" fill="none" stroke="var(--energy)" stroke-width="1.4" marker-end="url(#ah4e)"/>
+
+        <path d="M630 146 L668 146" fill="none" stroke="currentColor" stroke-width="1.4" marker-end="url(#ah4)"/>
+        <text x="649" y="138" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9.5" fill="var(--muted)">Δt, Δe</text>
+
+        <!-- commit chain -->
+        <rect x="672" y="48" width="214" height="34" rx="2" fill="var(--sunk)" stroke="currentColor" stroke-width="1.2"/>
+        <text x="686" y="70" font-family="IBM Plex Mono, monospace" font-size="11" fill="currentColor">1 · arbitrate energy share</text>
+
+        <rect x="672" y="90" width="214" height="34" rx="2" fill="var(--sunk)" stroke="currentColor" stroke-width="1.2"/>
+        <text x="686" y="112" font-family="IBM Plex Mono, monospace" font-size="11" fill="currentColor">2 · DP lookup + rebuild</text>
+
+        <rect x="672" y="132" width="214" height="34" rx="2" fill="var(--sunk)" stroke="currentColor" stroke-width="1.2"/>
+        <text x="686" y="154" font-family="IBM Plex Mono, monospace" font-size="11" fill="currentColor">3 · dynamic-DBF verify</text>
+
+        <rect x="672" y="174" width="214" height="34" rx="2" fill="var(--surface)" stroke="currentColor" stroke-width="1.5"/>
+        <text x="686" y="196" font-family="IBM Plex Mono, monospace" font-size="11" font-weight="600" fill="currentColor">4 · commit or degrade k</text>
+
+        <path d="M779 82 L779 88" stroke="currentColor" stroke-width="1.1" marker-end="url(#ah4)"/>
+        <path d="M779 124 L779 130" stroke="currentColor" stroke-width="1.1" marker-end="url(#ah4)"/>
+        <path d="M779 166 L779 172" stroke="currentColor" stroke-width="1.1" marker-end="url(#ah4)"/>
+
+        <path d="M886 191 L896 191 L896 268 L352 268 L352 246" fill="none" stroke="var(--energy)" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#ah4e)"/>
+        <text x="620" y="284" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--energy)">unspent energy is refunded to the pool — the only cross-processor coupling</text>
+      </svg>
+      <figcaption><b>Time is local, energy is shared — and that asymmetry is the whole design.</b>
+      Each processor owns an independent DP table built right-to-left over its EDF chain, so timing
+      needs no lock; the single global pool is the one variable every processor touches, so it — and
+      only it — sits behind a semaphore.</figcaption>
+    </div>
+  </figure>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>File</th><th>Role</th></tr></thead>
+      <tbody>
+        <tr><td class="mono path">online/value_function.py</td><td>the DP's representation — a Pareto frontier of (time, energy) requirements rather than a dense grid, so float costs need no quantisation</td></tr>
+        <tr><td class="mono path">online/actions.py</td><td>per-job action set: every (k′, z′) pair, whose signed (Δt, Δe) encode the paper's four options</td></tr>
+        <tr><td class="mono path">online/dp.py</td><td>builds one table per processor, right-to-left over its EDF chain; every suffix answered by one precompute</td></tr>
+        <tr><td class="mono path">online/energy_pool.py</td><td>the global budget as an atomic, mutex-guarded pool — the hard C3 gate</td></tr>
+        <tr><td class="mono path">online/density.py</td><td>future utility density per processor, and how a contended pool is split</td></tr>
+        <tr><td class="mono path">online/controller.py</td><td>the runtime: handles a completion, verifies, commits, rebuilds the affected table</td></tr>
+        <tr><td class="mono path">online/simulator.py</td><td>drives a hyper-period of early completions using each task's θ</td></tr>
+        <tr><td class="mono path">online/worked_examples.py</td><td>reproduces the design document's published tables exactly — the only self-check in the project</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <div class="eyebrow"><span>Lane 4 · the harness</span><span class="files">usrt/gen/ · usrt/runner/ · make_figures.py</span></div>
+  <h2>Generation and measurement, which touch no solver</h2>
+  <p class="lede">Orthogonal to all three solver lanes: one half only writes test cases, the other half
+  only reads them. They meet on disk, at a manifest — which is why a sweep can be interrupted and
+  resumed, and why any result joins back to the parameters that produced it.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Stage</th><th>Files</th><th>In → out</th></tr></thead>
+      <tbody>
+        <tr><td><b>Design</b></td><td class="mono path">gen/spec.py</td><td>the parameter set — system params fixed, simulation params swept one at a time</td></tr>
+        <tr><td><b>Draw</b></td><td class="mono path">gen/primitives.py · generate.py</td><td>UUniFast, donation, harmonic periods, per-task θ → one <code>TaskSet</code></td></tr>
+        <tr><td><b>Emit</b></td><td class="mono path">gen/emit.py</td><td><code>TaskSet</code> → a runnable <code>testcase.py</code> + one <code>manifest.csv</code> row</td></tr>
+        <tr><td><b>Sweep</b></td><td class="mono path">gen/sweeps.py</td><td>one factor × its grid × N seeds → a directory tree</td></tr>
+        <tr><td><b>Adapt</b></td><td class="mono path">runner/adapters.py</td><td>each solver's own return shape → one metric schema; energy re-scored through <code>models.py</code> so all models share one yardstick</td></tr>
+        <tr><td><b>Run</b></td><td class="mono path">runner/runner.py</td><td>manifest → <code>results.csv</code>, resumable, one row per instance × model</td></tr>
+        <tr><td><b>Time</b></td><td class="mono path">run_timed.py</td><td>best-of-N repeats with determinism and censoring recorded — single timings were shown wrong by 97×</td></tr>
+        <tr><td><b>Plot</b></td><td class="mono path">make_figures.py</td><td><code>results.csv</code> → vector PDFs in <code>ALL_DOCS/figures/</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>The five ways in</h3>
+  <div class="tw">
+    <table>
+      <thead><tr><th>Command</th><th>What it is for</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">python run.py &lt;tc.py&gt; &lt;solver&gt;</td><td>one instance, full verbose printout — the way to read a pipeline</td></tr>
+        <tr><td class="mono">python run_models.py &lt;target&gt;</td><td>a whole sweep, silent, appending to results.csv</td></tr>
+        <tr><td class="mono">python run_timed.py &lt;dir&gt;</td><td>the same, when the runtime number itself is the result</td></tr>
+        <tr><td class="mono">python gen_testcases.py &lt;sweep&gt;</td><td>build a batch of instances</td></tr>
+        <tr><td class="mono">python make_figures.py</td><td>redraw every figure from whatever results exist</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note">
+    <p><b>Two registry gaps worth knowing before you go looking.</b> ILP v1 lives at
+    <code>ILP.py</code> in the repo root, outside the package — it is reachable through
+    <code>run_models.py</code> but is not in <code>run.py</code>'s solver list. ILP v4 has a full
+    adapter and dispatch entry but is likewise missing from <code>run.py</code>'s
+    <code>SOLVERS</code> dict, so <code>python run.py tc.py ilp_v4</code> will not find it. The
+    online lane has no runner adapter at all, which is why it has no sweep-scale evidence.</p>
+  </div>
+</section>
+
+<section>
+  <div class="eyebrow"><span>Reading order</span><span class="files">when you go function-level</span></div>
+  <h2>Where to start next</h2>
+  <p class="lede">The dependency order below is also the comprehension order — each step only needs
+  the ones above it, so nothing forward-references.</p>
+
+  <ol class="steps">
+    <li><b>The substrate</b><code>models.py</code>, then <code>utils.py</code>, then <code>dbf/slack.py</code> and <code>dbf/check.py</code>. Roughly 200 lines total, and every other file assumes them.</li>
+    <li><b>One complete simple pipeline</b><code>heuristic_v4.py</code> end to end — quantum SPS plus phases 2 to 6, no mapping refinement to distract you. It is also <code>run.py</code>'s default.</li>
+    <li><b>The mapper</b><code>mapping/quantum.py</code>, then <code>dps_sps.py</code> and <code>ps.py</code> beneath it. This is the single most consequential stage in the codebase.</li>
+    <li><b>The two clever phases</b><code>phases/greedy.py</code> (its three cases) and <code>phases/freq_trade.py</code> (the shadow prices λ and μ). Everything else is bookkeeping.</li>
+    <li><b>The mapping variants</b><code>refine_mapping.py</code> → <code>budget_refine.py</code> → <code>multistart.py</code>, in that order, which is also v5b → v6 → v7.</li>
+    <li><b>The exact lane</b><code>ilp_v2.py</code> — short, and reading it after the heuristics shows you exactly which decisions the heuristic was approximating.</li>
+    <li><b>The online lane</b><code>value_function.py</code> first — the representation is the hard part — then <code>actions.py</code>, <code>dp.py</code>, <code>controller.py</code>. Run <code>worked_examples.py</code> to see the DP reproduce the design document's tables.</li>
+  </ol>
+</section>
+
+<footer>
+  <p>Current as of 11 September 2026, against the working tree at <code>c:\homogenous\V2</code>
+  (last commit <code>9407caeb</code>, "ilpv4").</p>
+  <p>One dated caveat that matters for anything you read in <code>ALL_DOCS/</code>: the SPS capacity
+  metric was corrected on 5 September 2026, and before that fix between 0% and 70% of jobs bypassed
+  SPS entirely depending on utilisation. Numbers published before that date are not comparable with
+  numbers after it.</p>
+</footer>
+
+</div>

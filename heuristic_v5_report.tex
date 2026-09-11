@@ -1,0 +1,592 @@
+\documentclass[10pt,twocolumn]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{parskip}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{mdframed}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{hyperref}
+
+\hypersetup{colorlinks=true, linkcolor=blue, urlcolor=blue}
+
+\titleformat{\section}{\large\bfseries}{}{0em}{}[\titlerule]
+\titleformat{\subsection}{\normalsize\bfseries}{}{0em}{}
+
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{Heuristic v5 --- Utility-Density Refine Mapping}
+\lhead{USRT Scheduling}
+\cfoot{\thepage}
+
+\definecolor{boxblue}{RGB}{230,240,255}
+\definecolor{boxgray}{RGB}{245,245,245}
+\definecolor{highlight}{RGB}{255,245,210}
+
+\newmdenv[backgroundcolor=boxblue, linewidth=1pt, linecolor=blue!40,
+          innerleftmargin=6pt, innerrightmargin=6pt,
+          innertopmargin=4pt, innerbottommargin=4pt]{bluebox}
+
+\newmdenv[backgroundcolor=highlight, linewidth=1pt, linecolor=orange!60,
+          innerleftmargin=6pt, innerrightmargin=6pt,
+          innertopmargin=4pt, innerbottommargin=4pt]{yellowbox}
+
+\newmdenv[backgroundcolor=boxgray, linewidth=0.5pt, linecolor=gray!60,
+          innerleftmargin=6pt, innerrightmargin=6pt,
+          innertopmargin=4pt, innerbottommargin=4pt]{graybox}
+
+\algnewcommand\algorithmicforeach{\textbf{for each}}
+\algdef{S}[FOR]{ForEach}[1]{\algorithmicforeach\ #1\ \algorithmicdo}
+
+\begin{document}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\twocolumn[{%
+\begin{center}
+  {\LARGE\bfseries Heuristic v5: Utility-Density Aware Mapping Refinement}\\[0.4em]
+  {\large\itshape Post-SPS Balancing of Optional-Segment Utility Potential}\\[0.4em]
+  {\normalsize Technical Report --- USRT Scheduling System}
+\end{center}
+\vspace{0.5em}
+\hrule
+\vspace{1em}
+}]
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Motivation and Problem}
+
+\subsection{The USRT Problem}
+The Utility-Aware Scheduling with Real-Time constraints (USRT) problem maps
+periodic real-time tasks to processors. Each task $T_i$ has:
+\begin{itemize}[nosep]
+  \item A \textbf{mandatory segment} with execution time $e_{i,0}$, which
+        \emph{must} always complete before the deadline.
+  \item $N_i^{seg}$ \textbf{optional segments} with incremental times
+        $e_{i,1},\ldots,e_{i,N_i^{seg}}$. Executing optional segments yields
+        utility, but is not required.
+  \item A utility rate $u_i$ (reward per unit of optional execution time).
+\end{itemize}
+The objective is to maximise total utility subject to timing feasibility (EDF)
+and a global energy budget $B$.
+
+\subsection{What SPS Does --- and Misses}
+
+SPS (Sum Partial Solutions) is used in Phase~1 to map jobs to processors. Its
+load metric is mandatory \textbf{utilisation}:
+\[
+  \ell_i \;=\; \frac{e_{i,0}}{p_i}
+\]
+SPS minimises the gap between the most- and least-loaded processor, producing
+a mapping where every processor carries approximately equal mandatory load.
+This is correct for timing feasibility: by Liu \& Layland, EDF schedules a
+processor successfully if and only if $\sum \ell_i \leq 1$.
+
+\begin{yellowbox}
+\textbf{The SPS inadequacy.}
+SPS knows nothing about optional segments or utility. It can map all
+high-utility tasks onto one processor. Even if the energy budget allows their
+optional segments to run, the \emph{timing constraint} on that congested
+processor prevents it. Optional segment time slots compete, and many are lost.
+The other processor has free time but nothing valuable to fill it with.
+\end{yellowbox}
+
+\subsection{Heuristic v5 --- the fix}
+
+Heuristic v5 inserts a new \textbf{Phase~1b} (Refine Mapping) immediately
+after Phase~1 (SPS). It adjusts \emph{which jobs sit on which processor}
+to spread utility potential evenly, without breaking the feasible mandatory
+mapping SPS produced.
+
+Two algorithms are provided:
+\begin{itemize}[nosep]
+  \item \textbf{v5a} --- Step 2a: single linear scan over all doublets.
+  \item \textbf{v5b} --- Step 2b: iterative one-swap-one-scan, always
+        targeting the most overloaded processor.
+\end{itemize}
+Phases 2--6 (left-shift, energy, freq-scaling, greedy optional segments,
+pairwise swap) are identical to Heuristic v4.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Key Definitions}
+
+\subsection{Cumulative Execution Time}
+Let
+\[
+  c_{i,k} \;=\; \sum_{q=0}^{k} e_{i,q}, \quad k \in [0, N_i^{seg}]
+\]
+so $c_{i,0} = e_{i,0}$ (mandatory only) and $c_{i,N_i^{seg}}$ is the total
+execution time if all segments run (at $f_{\max}$).
+
+\subsection{Utility Density of a Task}
+\begin{bluebox}
+\[
+  ud(i) \;=\; \frac{u_i \;\times\; \bigl(c_{i,N_i^{seg}} - c_{i,0}\bigr)}{p_i}
+\]
+\end{bluebox}
+
+\noindent\textit{Plain English}: if this task could always run all its optional
+segments, how much utility would it generate per unit of clock time?
+
+The numerator $u_i \times (c_{i,N_i^{seg}} - c_{i,0})$ is the maximum utility
+gain from a single job. Dividing by $p_i$ converts it to a rate (utility per
+unit time). Every job of task $T_i$ has the same $ud(i)$.
+
+\subsection{Processor Utility Density}
+\[
+  UD(x) \;=\; \sum_{(i,j)\;\text{mapped to}\;x} ud(i)
+\]
+This is the total utility potential sitting on processor $x$. The refinement
+goal is to make $UD(x)$ approximately equal across all processors.
+
+\subsection{Mandatory Utilisation}
+\[
+  \mu(i) \;=\; \frac{e_{i,0}}{p_i}, \qquad
+  MU(x) \;=\; \sum_{(i,j)\;\text{mapped to}\;x} \mu(i)
+\]
+SPS balances $MU(x)$. The refinement must not disturb this balance.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Doublets}
+
+A \textbf{doublet} is any pair of jobs $(a, b)$ drawn from the full job set
+(one job from any task, one from any other task, or the same task).
+All $\binom{N_{\text{jobs}}}{2}$ pairs are formed and sorted by
+\textbf{ascending} $|ud(a) - ud(b)|$.
+
+\begin{graybox}
+\textit{Why this order?} Jobs with similar $ud$ are the most interchangeable
+--- swapping them between processors barely changes the UD distribution.
+Jobs with very different $ud$ are the ``big moves''. Sorted ascending,
+the list moves from safe, small adjustments up to large disruptive ones.
+Both 2a and 2b scan this list from the front.
+\end{graybox}
+
+Doublets are built once before any swaps and reused throughout the algorithm.
+Each pair is considered at most a bounded number of times.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Swap Acceptance Conditions}
+
+Any proposed swap of job $a$ (currently on processor $P_a$) with job $b$
+(currently on processor $P_b$) must pass \emph{all three} of the following
+conditions before being committed.
+
+\subsection*{Condition~1 --- UD imbalance decreases}
+
+Compute hypothetical processor UD values after the swap:
+\[
+  UD'(P_a) = UD(P_a) - ud(a) + ud(b)
+\]
+\[
+  UD'(P_b) = UD(P_b) - ud(b) + ud(a)
+\]
+\textbf{For Step 2a (pair-level check):}
+\[
+  |UD'(P_a) - UD'(P_b)| \;<\; |UD(P_a) - UD(P_b)| - \varepsilon
+\]
+The imbalance between these two specific processors must strictly decrease.
+
+\textbf{For Step 2b (global max-UD check):}
+\[
+  \max\bigl(UD'(P_1),\; UD'(P_b)\bigr) \;<\; UD(P_1) - \varepsilon
+\]
+where $P_1$ is the globally highest-UD processor. The new maximum UD across
+both affected processors must be strictly less than the current maximum.
+This also prevents cycling (each accepted swap strictly reduces the global max).
+
+\subsection*{Condition~2 --- Mandatory utilisation balance does not worsen}
+
+\begin{yellowbox}
+\textbf{Why this guard is needed.}
+If a swap moves a high-$e_m$ job onto an already-loaded processor,
+mandatory utilisation becomes unbalanced. The overloaded processor then
+has little timing slack left for optional segments, even though UD is
+``balanced'' on paper. Phase~5 finds fewer optional segments can fit,
+and total utility drops. This was the root cause of the ``low utility''
+failure before the guard was added.
+\end{yellowbox}
+
+Compute the mandatory utilisation imbalance before and after:
+\[
+  \delta_{\text{cur}} = |MU(P_a) - MU(P_b)|
+\]
+\[
+  \delta_{\text{new}} = \bigl|(MU(P_a) - \mu(a) + \mu(b)) -
+                               (MU(P_b) - \mu(b) + \mu(a))\bigr|
+\]
+Accept only if $\delta_{\text{new}} \leq \delta_{\text{cur}} + \varepsilon$.
+
+\subsection*{Condition~3 --- DBF timing feasibility}
+
+Build hypothetical job lists for both processors after the swap and run
+a full mandatory-only DBF check at $f_{\max}$:
+\[
+  \text{For every window } [t_1, t_2] \text{ on processor } x\text{:}\quad
+  \sum_{\substack{(i,j)\;\text{on}\;x\\r_{i,j}\geq t_1,\;d_{i,j}\leq t_2}}
+  \!\!e_{i,0} \;\leq\; t_2 - t_1
+\]
+If either affected processor violates this, the swap is rejected.
+This is the hard correctness guarantee: no committed swap ever makes
+the mandatory schedule infeasible.
+
+This check is performed on \emph{temporary} copies of the job lists.
+The real data structures are not modified. Only if all three conditions
+pass does the swap get committed via \textsc{DoSwap}.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Algorithm Step 2a --- Linear Doublet Scan (v5a)}
+
+\begin{algorithm}[H]
+\caption{Refine Mapping --- Step 2a}
+\begin{algorithmic}[1]
+\State Compute $ud(i)$, $\mu(i)$ for all tasks
+\State Initialise $UD(x)$, $MU(x)$ for all processors from current mapping
+\State Build $\mathit{doublets}$ $\leftarrow$ all job pairs sorted by
+       ascending $|ud(a)-ud(b)|$
+\ForEach{$(a,\,b) \in \mathit{doublets}$}
+  \State $P_a \leftarrow \text{mapping}[a]$;\;
+         $P_b \leftarrow \text{mapping}[b]$
+  \If{$P_a = P_b$} \textbf{continue} \EndIf
+  \State Compute $|UD'(P_a)-UD'(P_b)|$ \Comment{Condition 1}
+  \If{not improved} \textbf{continue} \EndIf
+  \State Compute $\delta_{\text{new}}$ \Comment{Condition 2}
+  \If{$\delta_{\text{new}} > \delta_{\text{cur}} + \varepsilon$}
+    \textbf{continue}
+  \EndIf
+  \If{\textsc{SwapFeasible}$(a, b, P_a, P_b)$} \Comment{Condition 3}
+    \State \textsc{DoSwap}$(a, b, P_a, P_b)$
+    \State Update $UD(P_a)$, $UD(P_b)$, $MU(P_a)$, $MU(P_b)$
+  \EndIf
+\EndFor \Comment{No break --- every pair is considered once}
+\end{algorithmic}
+\end{algorithm}
+
+\textbf{Key property of 2a:} the inner loop \emph{never breaks early}. Every
+doublet pair is visited exactly once regardless of how many swaps have already
+been made. When a swap is committed, $UD$ and $MU$ are updated immediately,
+so subsequent pairs see the current state. This is a \emph{distributed}
+approach: it fixes many local imbalances in a single left-to-right pass.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Algorithm Step 2b --- One-Swap-One-Scan (v5b)}
+
+\begin{algorithm}[H]
+\caption{Refine Mapping --- Step 2b}
+\begin{algorithmic}[1]
+\State Compute $ud(i)$, $\mu(i)$; initialise $UD(x)$, $MU(x)$
+\State Build $\mathit{doublets}$ as in Step 2a
+\Loop
+  \State $P_1 \leftarrow \arg\max_x\; UD(x)$
+  \State $P_2 \leftarrow \arg\min_x\; UD(x)$
+  \If{$UD(P_1) - UD(P_2) < \varepsilon$} \textbf{break} \EndIf
+  \State $\mathit{swapped} \leftarrow \text{false}$
+  \ForEach{$(a,\,b) \in \mathit{doublets}$}
+    \State $\mathit{hi} \leftarrow$ job with higher $ud$ in the pair
+    \State $\mathit{lo} \leftarrow$ the other job
+    \If{$\text{mapping}[\mathit{hi}] \neq P_1$} \textbf{continue} \EndIf
+    \State $P_b \leftarrow \text{mapping}[\mathit{lo}]$
+    \If{$P_b = P_1$} \textbf{continue} \EndIf
+    \If{$\max(UD'(P_1),\,UD'(P_b)) \geq UD(P_1)-\varepsilon$}
+      \textbf{continue} \Comment{Condition 1}
+    \EndIf
+    \If{$\delta_{\text{new}} > \delta_{\text{cur}} + \varepsilon$}
+      \textbf{continue} \Comment{Condition 2}
+    \EndIf
+    \If{\textsc{SwapFeasible}$(\mathit{hi},\mathit{lo},P_1,P_b)$}
+      \Comment{Condition 3}
+      \State \textsc{DoSwap}$(\mathit{hi},\mathit{lo},P_1,P_b)$
+      \State Update $UD$, $MU$ for $P_1$ and $P_b$
+      \State $\mathit{swapped} \leftarrow \text{true}$
+      \State \textbf{break} \Comment{Exit inner loop, re-identify $P_1$}
+    \EndIf
+  \EndFor
+  \If{not $\mathit{swapped}$} \textbf{break} \EndIf
+\EndLoop
+\end{algorithmic}
+\end{algorithm}
+
+\textbf{Key property of 2b:} the inner loop breaks as soon as the
+\emph{first} valid swap is found. Control returns to the outer loop, which
+re-identifies $P_1$ from the updated $UD$ values. The next inner scan
+restarts from the beginning of the doublet list with this new target.
+
+\textbf{Termination guarantee:} Condition~1 for 2b requires
+$\max(UD'(P_1), UD'(P_b)) < UD(P_1)$. Every accepted swap strictly
+reduces the global maximum UD. Since UD values are bounded below by
+zero, the outer loop must terminate.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{DoSwap --- Data Structures Updated}
+
+When a swap of job $a$ (on $P_a$) with job $b$ (on $P_b$) is committed,
+six quantities are updated atomically:
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+\textbf{Structure} & \textbf{Update} \\
+\midrule
+$\text{mapping}[a]$ & $P_a \to P_b$ \\
+$\text{mapping}[b]$ & $P_b \to P_a$ \\
+$\text{proc\_jobs}[P_a]$ & remove $a$, add $b$ \\
+$\text{proc\_jobs}[P_b]$ & remove $b$, add $a$ \\
+$UD(P_a)$ & $-\,ud(a) + ud(b)$ \\
+$UD(P_b)$ & $-\,ud(b) + ud(a)$ \\
+$MU(P_a)$ & $-\,\mu(a) + \mu(b)$ \\
+$MU(P_b)$ & $-\,\mu(b) + \mu(a)$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The running tallies $UD$ and $MU$ are maintained incrementally so that
+Conditions~1 and~2 can be evaluated in $O(1)$ per candidate pair.
+Condition~3 (DBF) is only computed after~1 and~2 pass, keeping the
+typical per-pair cost low.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Comparison of 2a and 2b}
+
+\begin{center}
+\begin{tabular}{p{2.2cm}p{2.2cm}p{2.2cm}}
+\toprule
+& \textbf{Step 2a} & \textbf{Step 2b} \\
+\midrule
+\textbf{Structure} &
+Single linear pass over all doublets &
+Outer loop + inner scan, repeated \\[4pt]
+\textbf{Target} &
+Any two processors the current pair happens to sit on &
+Always the globally highest-UD processor $P_1$ \\[4pt]
+\textbf{After a swap} &
+Continue to next pair (no break) &
+Break inner loop; re-identify $P_1$ \\[4pt]
+\textbf{Doublet scans} &
+Exactly one &
+One per accepted swap \\[4pt]
+\textbf{UD condition} &
+Pair-level imbalance $|UD(P_a)-UD(P_b)|$ decreases &
+Global max UD strictly decreases \\[4pt]
+\textbf{Approach} &
+Distributed: fixes many local imbalances simultaneously &
+Greedy: always attacks the single biggest problem first \\[4pt]
+\textbf{Run time} &
+$O(N^2 \cdot W^2)$ where $W$ = distinct time windows &
+$O(k \cdot N^2 \cdot W^2)$, $k$ = number of accepted swaps \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+In practice, 2a is faster but may miss the globally optimal swap order.
+2b is more targeted but rescans from the beginning each time.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Why SPS Uses Utilisation, Not Execution Time}
+
+SPS operates on the load value $\ell_i = e_{i,0}/p_i$, not on $e_{i,0}$
+directly. Raw execution time alone is meaningless for scheduling balance:
+a job with $e_m = 10$ and $p = 10$ occupies a processor 100\% of the time,
+while one with $e_m = 10$ and $p = 100$ occupies only 10\%.
+Utilisation correctly normalises for the period and directly measures
+``fraction of processor time consumed.''
+
+The feasibility checks in the quantum SPS mapping also work in utilisation
+units: total active utilisation must not exceed remaining capacity, and the
+per-processor utilisation must stay $\leq 1.0$ after each assignment.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Why Utility Density is the Right Metric}
+
+Three natural alternative metrics for the refinement are compared below.
+
+\begin{center}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{p{1.7cm}p{1.3cm}p{1.3cm}p{2.0cm}}
+\toprule
+\textbf{Metric} &
+\textbf{Reward?} &
+\textbf{Amount?} &
+\textbf{Problem} \\
+\midrule
+$e_{i,0}/p_i$ \newline (mand.\ util.) &
+No & No &
+SPS already balances this --- refinement is a no-op \\
+\midrule
+$u_i$ only &
+Yes & No &
+Ignores how much optional work exists and how often the task repeats \\
+\midrule
+$(c_{i,N} - c_{i,0})/p_i$ \newline (opt.\ exec.) &
+No & Yes &
+Treats all optional work as equally valuable; misleads when $u_i$ varies \\
+\midrule
+$u_i\!\cdot\!(c_{i,N}-c_{i,0})/p_i$ \newline \textbf{(UD, used)} &
+\textbf{Yes} & \textbf{Yes} &
+Overestimates achievable; needs mutil guard \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+UD = ``if all optional segments ran, how much utility per unit clock time
+would this task contribute?'' It correctly weights tasks that are both
+frequent (small $p_i$) and valuable (large $u_i$) with large optional
+segments.
+
+\textbf{Known limitation:} UD uses the theoretical maximum ($c_{i,N}$).
+In practice, timing or energy may allow only a subset of optional segments.
+The actual achievable utility per processor cannot be computed without
+running Phase~5 first (chicken-and-egg). UD is therefore the best available
+proxy computable before scheduling.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Full Pipeline --- Heuristic v5}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{clp{4.2cm}}
+\toprule
+\textbf{Phase} & \textbf{Name} & \textbf{What it does} \\
+\midrule
+1  & Quantum SPS &
+     Maps jobs to processors balancing $e_m/p_i$. Knows nothing about utility. \\
+1b & \textbf{Refine Mapping} &
+     \textbf{Rebalances $UD(x)$ via doublet swaps. Preserves $MU(x)$ and DBF.} \\
+2  & Left Shift &
+     Diagnostic: confirms timing slack at $f_{\max}$. \\
+3  & Energy Slack &
+     Checks if mandatory segments at $f_{\max}$ fit within budget $B$. \\
+4  & Freq.\ Scaling &
+     Attempts to lower frequency to save energy (no-op at $\alpha{=}1, \beta{=}0.5$). \\
+5  & Greedy Optional &
+     Adds optional segments greedily by utility density, checking DBF + energy. \\
+6  & Pairwise Swap &
+     Swaps low-value optional segments for high-value ones; fill pass after each. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{bluebox}
+\textbf{Why Phase~1b helps Phase~5.}
+Phase~5 can only schedule optional segments where there is timing slack.
+Timing slack on processor $x$ is approximately proportional to
+$1 - MU(x)$. If Phase~1b has spread high-$UD$ jobs across processors
+while keeping $MU(x)$ balanced, then:
+(a) every processor has similar timing slack available, and
+(b) every processor has high-utility jobs ready to fill that slack.
+Phase~5 can therefore exploit capacity on all processors, instead of
+being blocked on the congested one and idle on the empty one.
+\end{bluebox}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Concrete Worked Example}
+
+Suppose 2 processors, 4 tasks, hyper-period $h = 10$.
+
+\begin{center}
+\small
+\begin{tabular}{ccccccc}
+\toprule
+Task & $e_m$ & $p$ & $u$ & $e_{\text{opt}}$ & $\mu(i)$ & $ud(i)$ \\
+\midrule
+$T_A$ & 0.4 & 1 & 8 & 0.5 & 0.40 & 4.0 \\
+$T_B$ & 0.3 & 1 & 7 & 0.4 & 0.30 & 2.8 \\
+$T_C$ & 0.1 & 1 & 1 & 0.3 & 0.10 & 0.3 \\
+$T_D$ & 0.1 & 1 & 1 & 0.2 & 0.10 & 0.2 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{After SPS} (balances $\mu$):
+\[
+  P_0 = \{T_A, T_B\},\;\; MU(P_0)=0.7,\;\; UD(P_0)=6.8
+\]
+\[
+  P_1 = \{T_C, T_D\},\;\; MU(P_1)=0.2,\;\; UD(P_1)=0.5
+\]
+$MU$ is imbalanced because SPS had limited choice (it also wasn't perfectly
+balanced in this small example). More critically, $UD$ is catastrophically
+skewed: all the utility potential is on $P_0$, which has only $30\%$ of its
+time free for optional segments.
+
+\textbf{Doublet pairs} (sorted by $|ud_a - ud_b|$, top entries):
+
+\begin{center}
+\small
+\begin{tabular}{ccc}
+\toprule
+Pair & $|ud_a - ud_b|$ & On same proc? \\
+\midrule
+$(T_C, T_D)$ & 0.1 & Yes (skip) \\
+$(T_A, T_B)$ & 1.2 & Yes (skip) \\
+$(T_B, T_C)$ & 2.5 & No \\
+$(T_B, T_D)$ & 2.6 & No \\
+$(T_A, T_C)$ & 3.7 & No \\
+$(T_A, T_D)$ & 3.8 & No \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Step 2b} identifies $P_1 = P_0$ ($UD=6.8$). Scans doublets. First
+pair with $\mathit{hi}$ on $P_0$: $(T_B, T_C)$ --- $T_B$ is on $P_0$.
+
+Check Condition~1: swap $T_B \leftrightarrow T_C$:
+\[
+  UD'(P_0) = 6.8 - 2.8 + 0.3 = 4.3
+\]
+\[
+  UD'(P_1) = 0.5 - 0.3 + 2.8 = 3.0
+\]
+$\max(4.3, 3.0) = 4.3 < 6.8$. \checkmark
+
+Check Condition~2: $\mu(T_B)=0.30$, $\mu(T_C)=0.10$:
+\[
+  MU'(P_0)=0.7-0.3+0.1=0.5,\;\; MU'(P_1)=0.2-0.1+0.3=0.4
+\]
+$\delta_{\text{new}}=|0.5-0.4|=0.1 < \delta_{\text{cur}}=|0.7-0.2|=0.5$. \checkmark
+
+Condition~3 (DBF): both processors feasible. \checkmark
+
+\textbf{Swap committed.} New state:
+\[
+  P_0 = \{T_A, T_C\},\;\; MU=0.50,\;\; UD=4.3
+\]
+\[
+  P_1 = \{T_B, T_D\},\;\; MU=0.40,\;\; UD=3.0
+\]
+Re-identify $P_1 = P_0$ ($UD=4.3$). Next scan finds $(T_A, T_D)$ with $T_A$
+on $P_0$. Swap $T_A \leftrightarrow T_D$:
+$UD'(P_0)=4.3-4.0+0.2=0.5$, $UD'(P_1)=3.0-0.2+4.0=6.8$.
+$\max(0.5, 6.8)=6.8 \geq 4.3$. Condition~1 fails --- rejected. The algorithm
+eventually terminates with a reasonably balanced state, having made the one
+beneficial swap. Phase~5 now sees both processors with similar mandatory load
+and similar utility potential.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Summary}
+
+\begin{enumerate}[nosep]
+  \item SPS balances mandatory utilisation $e_m/p_i$ but ignores utility.
+  \item Phase~1b (Refine Mapping) fixes this by rebalancing utility density
+        $ud(i) = u_i \cdot (c_{i,N} - c_{i,0}) / p_i$ across processors.
+  \item Doublets (all job pairs sorted by ascending $|ud_a - ud_b|$)
+        provide the candidates for swapping.
+  \item Every swap must pass three conditions: UD improves, mandatory
+        utilisation balance does not worsen, DBF remains feasible.
+  \item \textbf{v5a} makes a single pass; \textbf{v5b} iterates,
+        always targeting the most overloaded processor.
+  \item The mandatory utilisation guard (Condition~2) was essential:
+        without it, UD-focused swaps disrupted timing slack and reduced
+        the utility that Phase~5 could achieve.
+  \item UD is the best cheap proxy for ``utility potential'' available
+        before scheduling, correctly combining reward rate $u_i$,
+        optional volume $e_{\text{opt}}$, and task frequency $1/p_i$.
+\end{enumerate}
+
+\end{document}

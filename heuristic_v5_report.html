@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Heuristic v5a &amp; v5b — Deep Explanation</title>
+<style>
+  body { font-family: 'Segoe UI', Arial, sans-serif; margin: 0; background: #f4f6f8; color: #1a1a2e; }
+  .toc { background: #1a1a2e; color: #e0e0e0; padding: 24px 32px; position: sticky; top: 0; z-index: 100; display: flex; gap: 20px; flex-wrap: wrap; align-items: center; }
+  .toc a { color: #7ecfff; text-decoration: none; font-size: 13px; white-space: nowrap; }
+  .toc a:hover { text-decoration: underline; }
+  .toc-title { color: #fff; font-weight: bold; font-size: 15px; margin-right: 10px; }
+  .hero { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 60%, #0f3460 100%); color: #fff; padding: 64px 80px 48px; }
+  .hero h1 { font-size: 2.8em; margin: 0 0 12px; letter-spacing: -1px; }
+  .hero .sub { color: #7ecfff; font-size: 1.1em; }
+  .hero .desc { margin-top: 18px; font-size: 1.05em; color: #c8d6e5; max-width: 800px; line-height: 1.7; }
+  main { max-width: 1100px; margin: 0 auto; padding: 40px 40px 80px; }
+  section { margin-bottom: 56px; }
+  h2 { font-size: 1.7em; color: #0f3460; border-bottom: 3px solid #0f3460; padding-bottom: 8px; margin-bottom: 24px; }
+  h3 { font-size: 1.2em; color: #16213e; margin-top: 28px; margin-bottom: 10px; }
+  h4 { font-size: 1.05em; color: #0f3460; margin-top: 20px; margin-bottom: 8px; }
+  p { line-height: 1.75; margin: 10px 0; }
+  .card { background: #fff; border-radius: 10px; padding: 28px 32px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); margin-bottom: 24px; }
+  .card-blue { border-left: 5px solid #0f3460; }
+  .card-green { border-left: 5px solid #27ae60; }
+  .card-orange { border-left: 5px solid #e67e22; }
+  .card-red { border-left: 5px solid #c0392b; }
+  .card-purple { border-left: 5px solid #8e44ad; }
+  .formula { background: #1a1a2e; color: #7ecfff; font-family: 'Courier New', monospace; padding: 16px 22px; border-radius: 8px; font-size: 1.05em; margin: 16px 0; overflow-x: auto; white-space: pre; }
+  code { background: #e8f0fe; color: #0f3460; font-family: 'Courier New', monospace; padding: 2px 7px; border-radius: 4px; font-size: 0.93em; }
+  pre.code { background: #1a1a2e; color: #a8d8ea; font-family: 'Courier New', monospace; padding: 20px 24px; border-radius: 10px; font-size: 0.92em; margin: 16px 0; overflow-x: auto; line-height: 1.6; }
+  pre.code .kw { color: #ff79c6; }
+  pre.code .str { color: #f1fa8c; }
+  pre.code .cm { color: #6272a4; }
+  pre.code .fn { color: #50fa7b; }
+  pre.code .num { color: #bd93f9; }
+  table { border-collapse: collapse; width: 100%; margin: 16px 0; }
+  th { background: #0f3460; color: #fff; padding: 10px 16px; text-align: left; font-size: 0.95em; }
+  td { padding: 10px 16px; border-bottom: 1px solid #e0e6ed; font-size: 0.95em; }
+  tr:nth-child(even) td { background: #f0f4fa; }
+  .highlight { background: #fff9c4; border-left: 4px solid #f39c12; padding: 14px 18px; border-radius: 0 8px 8px 0; margin: 16px 0; }
+  .warning { background: #fde8e8; border-left: 4px solid #c0392b; padding: 14px 18px; border-radius: 0 8px 8px 0; margin: 16px 0; }
+  .success { background: #e8f8f0; border-left: 4px solid #27ae60; padding: 14px 18px; border-radius: 0 8px 8px 0; margin: 16px 0; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 16px 0; }
+  .phase-block { background: #fff; border-radius: 10px; padding: 20px 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); border-top: 4px solid; }
+  .phase1 { border-color: #3498db; }
+  .phase1b { border-color: #9b59b6; }
+  .phase2 { border-color: #1abc9c; }
+  .phase3 { border-color: #e67e22; }
+  .phase4 { border-color: #e74c3c; }
+  .phase5 { border-color: #f39c12; }
+  .phase6 { border-color: #27ae60; }
+  .step { display: flex; gap: 16px; align-items: flex-start; margin: 14px 0; }
+  .step-num { background: #0f3460; color: #fff; border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; font-weight: bold; flex-shrink: 0; font-size: 0.9em; }
+  .step-body { flex: 1; }
+  ul.clean { list-style: none; padding: 0; margin: 0; }
+  ul.clean li { padding: 6px 0 6px 20px; position: relative; border-bottom: 1px solid #f0f0f0; }
+  ul.clean li::before { content: "▸"; position: absolute; left: 0; color: #0f3460; }
+  .badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 0.82em; font-weight: bold; margin-left: 8px; }
+  .badge-v5a { background: #dbeafe; color: #1e40af; }
+  .badge-v5b { background: #fce7f3; color: #9d174d; }
+  .badge-both { background: #dcfce7; color: #166534; }
+  .diff-table th { background: #374151; }
+  .diff-v5a { color: #1e40af; font-weight: bold; }
+  .diff-v5b { color: #9d174d; font-weight: bold; }
+  footer { background: #1a1a2e; color: #7ecfff; text-align: center; padding: 24px; font-size: 0.92em; }
+</style>
+</head>
+<body>
+
+<nav class="toc">
+  <span class="toc-title">USRT v5</span>
+  <a href="#motivation">Motivation</a>
+  <a href="#sps-problem">SPS Problem</a>
+  <a href="#key-defs">Key Definitions</a>
+  <a href="#doublets">Doublets</a>
+  <a href="#conditions">Swap Conditions</a>
+  <a href="#algo-2a">Algorithm 2a</a>
+  <a href="#algo-2b">Algorithm 2b</a>
+  <a href="#doswap">DoSwap</a>
+  <a href="#comparison">2a vs 2b</a>
+  <a href="#why-ud">Why UD?</a>
+  <a href="#pipeline">Full Pipeline</a>
+  <a href="#worked-example">Example</a>
+</nav>
+
+<div class="hero">
+  <h1>Heuristic v5a &amp; v5b</h1>
+  <div class="sub">Utility-Density Refinement on top of Quantum SPS Mapping</div>
+  <div class="desc">
+    v5a and v5b are identical to v4 in Phases 2&ndash;6 (energy, greedy, swap).
+    The only addition is <strong>Phase 1b</strong>: a post-SPS remapping step that
+    swaps individual jobs between processors to improve <em>utility-density balance</em>,
+    while carefully preserving the timing and energy feasibility that SPS established.
+    v5a uses a one-pass doublet scan; v5b uses an iterative greedy loop.
+  </div>
+</div>
+
+<main>
+
+<!-- ===== SECTION 1: WHY ===== -->
+<section id="motivation">
+  <h2>1. Motivation &mdash; Why does v4 leave utility on the table?</h2>
+
+  <div class="card card-blue">
+    <h3>The Core Problem with SPS</h3>
+    <p>
+      SPS (Sum Partial Solutions) distributes jobs across processors by balancing
+      <strong>mandatory utilisation</strong> &mdash; the fraction of each period spent on the
+      mandatory segment. Its load metric is:
+    </p>
+    <div class="formula">load(i) = e_m(i) / p_i</div>
+    <p>
+      SPS guarantees that no processor is overloaded with mandatory work. But it
+      knows nothing about optional segments. A task with a small mandatory segment
+      but enormous optional reward potential looks identical to one with the same
+      e_m and zero optional benefit.
+    </p>
+  </div>
+
+  <div class="warning">
+    <strong>The Imbalance:</strong> SPS may concentrate all the high-utility tasks
+    (tasks with large u_i and many optional segments) on a single processor. That
+    processor then has a huge pile of competing optional work in Phase 5. Because
+    Phase 5 uses DBF window-slack to gate additions, a crowded processor has less
+    slack per job, fewer optional segments get scheduled, and total utility suffers.
+  </div>
+
+  <div class="card card-green">
+    <h3>The v5 Fix</h3>
+    <p>
+      After SPS (Phase 1), run a <strong>refinement step (Phase 1b)</strong> that selectively
+      swaps individual jobs between processors to spread the utility potential more evenly.
+      This gives Phase 5 a better starting canvas where every processor has
+      roughly equal opportunity to accumulate utility.
+    </p>
+  </div>
+</section>
+
+<!-- ===== SECTION 2: SPS PROBLEM DETAIL ===== -->
+<section id="sps-problem">
+  <h2>2. What SPS Does &mdash; and What It Misses</h2>
+
+  <div class="card">
+    <h3>How SPS Works (in Brief)</h3>
+    <p>
+      Quantum SPS processes the hyperperiod in time-quanta of size <code>gcd(all periods)</code>.
+      At each quantum boundary, newly arriving jobs are inserted into Partial Solutions (PSs)
+      using DPS (Determining Partial Solutions), which fills the PS with the largest gap first.
+      The "gap" is the difference between the most-loaded and least-loaded processor in that PS,
+      measured in utilisation units.
+    </p>
+    <div class="formula">Gap of a PS = loads[0] - loads[-1]   (in e_m/p_i units)</div>
+    <p>
+      The result is a mapping where every processor's sum of <code>e_m/p_i</code> values
+      is as close to equal as possible. This ensures EDF can schedule all mandatory segments.
+    </p>
+  </div>
+
+  <div class="card card-orange">
+    <h3>What SPS Does Not See</h3>
+    <ul class="clean">
+      <li>The utility reward <code>u_i</code> earned for completing optional segments</li>
+      <li>How many optional segments each task has (the depth of optional work)</li>
+      <li>The cumulative execution time of optional segments <code>cum[i][k]</code></li>
+      <li>Any interaction between utility rate and task frequency</li>
+    </ul>
+    <p>
+      Two tasks with the same <code>e_m = 2, p_i = 10</code> look identical to SPS
+      even if one has <code>u_i = 0.01</code> (almost no reward) and the other has
+      <code>u_i = 10.0</code> (enormous reward per unit time).
+    </p>
+  </div>
+</section>
+
+<!-- ===== SECTION 3: KEY DEFINITIONS ===== -->
+<section id="key-defs">
+  <h2>3. Key Definitions</h2>
+
+  <div class="two-col">
+    <div class="card card-blue">
+      <h3>Mandatory Utilisation &mdash; mu(i)</h3>
+      <div class="formula">mu(i) = e_m(i) / p_i</div>
+      <p>Fraction of processor time consumed by task i's mandatory segment per period.
+      SPS balances this across processors. Tracked as <code>proc_mutil[x]</code>.</p>
+    </div>
+    <div class="card card-purple">
+      <h3>Utility Density &mdash; ud(i)</h3>
+      <div class="formula">ud(i) = u_i * (cum[i][N_seg[i]] - cum[i][0]) / p_i</div>
+      <p>Maximum utility per unit time if ALL optional segments of task i ran at f_max,
+      every period. It combines reward rate, optional volume, and task frequency.
+      Tracked as <code>task_ud[i]</code>.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Breaking Down ud(i)</h3>
+    <table>
+      <tr><th>Component</th><th>Meaning</th><th>Why It Matters</th></tr>
+      <tr>
+        <td><code>u_i</code></td>
+        <td>Utility reward per job if all optionals complete</td>
+        <td>Directly scales the value of scheduling this task's optionals</td>
+      </tr>
+      <tr>
+        <td><code>cum[i][N_seg[i]] - cum[i][0]</code></td>
+        <td>Total execution time of all optional segments (e_opt_total)</td>
+        <td>How much time the optionals need &mdash; affects how crowded a processor becomes</td>
+      </tr>
+      <tr>
+        <td><code>1 / p_i</code></td>
+        <td>Jobs per unit time (frequency)</td>
+        <td>Faster tasks contribute utility more often per hyperperiod</td>
+      </tr>
+    </table>
+    <p><strong>Result:</strong> ud(i) = utility earned per unit processor time in the best case.
+    Two tasks with the same ud(i) generate the same long-run utility rate, so they are
+    equivalent from Phase 5's perspective.</p>
+  </div>
+
+  <div class="two-col">
+    <div class="card card-green">
+      <h3>Processor Utility Density &mdash; UD(x)</h3>
+      <div class="formula">UD(x) = sum of ud(i) for all jobs (i,j) mapped to processor x</div>
+      <p>Total utility potential of processor x. When UD(x) is high, x has many
+      high-value optional segments competing for its time slots.</p>
+    </div>
+    <div class="card card-orange">
+      <h3>Processor Mandatory Utilisation &mdash; MU(x)</h3>
+      <div class="formula">MU(x) = sum of mu(i) for all jobs (i,j) mapped to x</div>
+      <p>Total mandatory load on processor x. SPS keeps this balanced. The refinement
+      must not break this balance, or Phase 5 will have less slack on some processors.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ===== SECTION 4: DOUBLETS ===== -->
+<section id="doublets">
+  <h2>4. Doublets &mdash; The Candidate Pool</h2>
+
+  <div class="card card-blue">
+    <h3>What is a Doublet?</h3>
+    <p>
+      A <strong>doublet</strong> is any pair of two jobs (from possibly different tasks)
+      that could be swapped between processors. The full candidate pool is all C(N_jobs, 2)
+      pairs from the entire hyperperiod.
+    </p>
+    <div class="highlight">
+      Example: If the hyperperiod contains 12 jobs total, there are C(12,2) = 66 doublets.
+    </div>
+    <h3>How Doublets Are Sorted</h3>
+    <div class="formula">Sort by ascending |ud(job_a) - ud(job_b)|</div>
+    <p>
+      Pairs with similar utility densities come first. Why? Because swapping two jobs with
+      <em>very different</em> ud values moves a lot of utility potential from one processor
+      to the other &mdash; high risk of overshooting the balance. Pairs with similar ud values
+      are "safe" trades that can correct small imbalances without causing large ones.
+    </p>
+    <p>
+      This is the same intuition as SPS's gap-first insertion: work on the smallest
+      adjustments first to avoid oscillation.
+    </p>
+  </div>
+
+  <pre class="code"><span class="kw">def</span> <span class="fn">_build_doublets</span>(mapping, task_ud):
+    jobs  = list(mapping.keys())              <span class="cm"># all (i,j) pairs in hyperperiod</span>
+    pairs = list(combinations(jobs, <span class="num">2</span>))       <span class="cm"># all C(N,2) combinations</span>
+    pairs.sort(key=<span class="kw">lambda</span> p: abs(task_ud[p[<span class="num">0</span>][<span class="num">0</span>]] - task_ud[p[<span class="num">1</span>][<span class="num">0</span>]]))
+    <span class="cm"># p[0] = job_a = (task_index, job_index), p[0][0] = task_index</span>
+    <span class="kw">return</span> pairs</pre>
+
+  <div class="card">
+    <h3>Important: ud is Per-Task, Not Per-Job</h3>
+    <p>
+      All jobs of the same task <code>i</code> share the same <code>ud(i)</code> value
+      because they all have the same <code>u_i</code>, <code>cum[i][...]</code>, and <code>p_i</code>.
+      So sorting by <code>|ud(a) - ud(b)|</code> groups together jobs from different tasks
+      that have similar utility rates.
+    </p>
+  </div>
+</section>
+
+<!-- ===== SECTION 5: SWAP CONDITIONS ===== -->
+<section id="conditions">
+  <h2>5. Three Swap Acceptance Conditions</h2>
+
+  <div class="highlight">
+    A swap of job_a (on processor pa) and job_b (on processor pb) is accepted
+    <strong>only if ALL THREE conditions hold simultaneously</strong>.
+    Any single failure blocks the swap.
+  </div>
+
+  <div class="card card-green">
+    <h3>Condition 1 &mdash; Utility Density Improves</h3>
+    <p>The swap must reduce the UD imbalance between the two processors.</p>
+    <div class="formula">new_UD_pa = UD(pa) - ud(job_a) + ud(job_b)
+new_UD_pb = UD(pb) - ud(job_b) + ud(job_a)
+
+Condition: |new_UD_pa - new_UD_pb| &lt; |UD(pa) - UD(pb)|  (strict)</div>
+    <p>In 2a this is a pair-level check. In 2b the condition is stricter: max(new_UD_P1, new_UD_pb) must be less than UD(P1).</p>
+  </div>
+
+  <div class="card card-orange">
+    <h3>Condition 2 &mdash; Mandatory Utilisation Balance Does Not Worsen</h3>
+    <p>
+      This is the guard added to fix the "low utility" problem that early versions
+      of v5 had. A UD-improving swap might happen to move a high-mutil job from a
+      lightly-loaded processor to a heavily-loaded one, destroying the timing slack
+      that SPS carefully established.
+    </p>
+    <div class="formula">cur_mu_diff = |MU(pa) - MU(pb)|
+new_mu_diff = |(MU(pa) - mu(a) + mu(b)) - (MU(pb) - mu(b) + mu(a))|
+
+Condition: new_mu_diff &lt;= cur_mu_diff  (must not worsen)</div>
+    <div class="warning">
+      Why this matters: If MU(pa) becomes much larger than MU(pb), processor pa
+      has less DBF slack in Phase 5. Fewer optional segments can be inserted before
+      the demand bound is hit, directly hurting total utility &mdash; even though
+      the UD balance looked better on paper.
+    </div>
+  </div>
+
+  <div class="card card-red">
+    <h3>Condition 3 &mdash; DBF Feasibility After Swap</h3>
+    <p>
+      Check whether the mandatory-only schedule remains timing-feasible on both
+      affected processors <em>as if the swap had already happened</em>, before
+      actually committing it.
+    </p>
+    <div class="formula"><span class="cm">For processor pa: temporarily remove job_a, add job_b</span>
+new_pa = [jobs on pa] - {job_a} + {job_b}
+
+<span class="cm">For processor pb: temporarily remove job_b, add job_a</span>
+new_pb = [jobs on pb] - {job_b} + {job_a}
+
+<span class="cm">DBF check: for all windows [t1, t2] on the new job list:</span>
+sum of e_m(i,j) for jobs in [t1,t2] &lt;= (t2 - t1)</div>
+    <p>
+      The DBF (Demand Bound Function) check scans all pairs of release times and
+      deadlines to verify that no time window is overloaded with mandatory work.
+      This is the formal EDF schedulability condition for hard real-time tasks.
+    </p>
+    <p>
+      <strong>Why might DBF fail after a UD-improving swap?</strong> Two jobs from the
+      same task on the same processor create back-to-back mandatory demands in the same
+      timing windows. A swap that places job (i,0) and job (i,1) both on the same processor
+      could create windows where the demand exceeds the available time.
+    </p>
+  </div>
+</section>
+
+<!-- ===== SECTION 6: ALGORITHM 2a ===== -->
+<section id="algo-2a">
+  <h2>6. Algorithm 2a &mdash; Linear Doublet Scan <span class="badge badge-v5a">v5a</span></h2>
+
+  <div class="card">
+    <h3>High-Level Idea</h3>
+    <p>
+      Make one linear pass through all doublets (sorted by ascending ud difference).
+      For each pair, check the three conditions. Accept the swap if all pass.
+      Never revisit a pair. Stop after one full scan.
+    </p>
+  </div>
+
+  <div class="step">
+    <div class="step-num">1</div>
+    <div class="step-body">
+      <strong>Build the doublet list</strong> &mdash; all C(N_jobs,2) pairs sorted by |ud_a - ud_b| ascending.
+    </div>
+  </div>
+  <div class="step">
+    <div class="step-num">2</div>
+    <div class="step-body">
+      <strong>For each (job_a, job_b) in order:</strong>
+      <ul class="clean">
+        <li>Skip if both are on the same processor (pa == pb)</li>
+        <li>Check Condition 1: pair-level UD improvement</li>
+        <li>Check Condition 2: mutil balance does not worsen</li>
+        <li>Check Condition 3: DBF feasibility after swap</li>
+        <li>If all pass: execute the swap, update UD and mutil tracking, increment counter</li>
+        <li>Continue to next pair (no break, no restart)</li>
+      </ul>
+    </div>
+  </div>
+  <div class="step">
+    <div class="step-num">3</div>
+    <div class="step-body">
+      <strong>Finish</strong> &mdash; after the full scan, return the refined mapping.
+    </div>
+  </div>
+
+  <pre class="code"><span class="kw">def</span> <span class="fn">refine_mapping_2a</span>(mapping, tasks, N_prc, cum, N_seg, job_r, job_d, verbose=<span class="kw">True</span>):
+    task_ud    = _task_ud(tasks, cum, N_seg)
+    task_mutil = _task_mutil(tasks)
+    proc_ud    = _init_proc_ud(mapping, task_ud, N_prc)
+    proc_mutil = _init_proc_mutil(mapping, task_mutil, N_prc)
+    doublets   = _build_doublets(mapping, task_ud)
+
+    n_swaps = <span class="num">0</span>
+    <span class="kw">for</span> (job_a, job_b) <span class="kw">in</span> doublets:
+        pa = mapping[job_a];  pb = mapping[job_b]
+        <span class="kw">if</span> pa == pb: <span class="kw">continue</span>               <span class="cm"># same processor, skip</span>
+
+        <span class="cm"># Condition 1: pair-level UD improvement</span>
+        cur_diff = abs(proc_ud[pa] - proc_ud[pb])
+        new_diff = abs((proc_ud[pa] - ud_a + ud_b) - (proc_ud[pb] - ud_b + ud_a))
+        <span class="kw">if</span> new_diff >= cur_diff - <span class="num">1e-9</span>: <span class="kw">continue</span>
+
+        <span class="cm"># Condition 2: mutil balance must not worsen</span>
+        cur_mu_diff = abs(proc_mutil[pa] - proc_mutil[pb])
+        new_mu_diff = abs((proc_mutil[pa] - mu_a + mu_b) - (proc_mutil[pb] - mu_b + mu_a))
+        <span class="kw">if</span> new_mu_diff > cur_mu_diff + <span class="num">1e-9</span>: <span class="kw">continue</span>
+
+        <span class="cm"># Condition 3: DBF must stay feasible</span>
+        <span class="kw">if</span> _swap_feasible(proc_jobs, job_a, job_b, pa, pb, tasks, job_r, job_d):
+            _do_swap(...)    <span class="cm"># commits the swap in-place</span>
+            n_swaps += <span class="num">1</span>
+        <span class="cm"># NO break — continue to next pair</span>
+    <span class="kw">return</span> mapping</pre>
+
+  <div class="card card-blue">
+    <h3>Properties of 2a</h3>
+    <ul class="clean">
+      <li><strong>Distributed:</strong> Each pair is evaluated independently against its own current pa/pb UD values</li>
+      <li><strong>Single pass:</strong> O(N_jobs^2) in the worst case, but only one scan</li>
+      <li><strong>Non-greedy globally:</strong> Does not always target the "worst" processor; fixes whichever pairs it encounters</li>
+      <li><strong>Safe:</strong> Swaps earlier in the sorted list (similar ud values) are least disruptive</li>
+      <li><strong>May miss:</strong> A better swap later in the list won't "undo" an earlier one that was slightly suboptimal</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ===== SECTION 7: ALGORITHM 2b ===== -->
+<section id="algo-2b">
+  <h2>7. Algorithm 2b &mdash; One-Swap-One-Scan <span class="badge badge-v5b">v5b</span></h2>
+
+  <div class="card">
+    <h3>High-Level Idea</h3>
+    <p>
+      Repeat until convergence: always find the single most-overloaded processor P1
+      (highest UD), scan doublets for the first pair that moves a high-UD job <em>away</em>
+      from P1, execute that swap, then restart the outer loop. Stop when no improving
+      swap exists.
+    </p>
+  </div>
+
+  <div class="step">
+    <div class="step-num">1</div>
+    <div class="step-body">
+      <strong>Outer loop:</strong> Identify P1 (max UD) and P2 (min UD). If spread &lt; epsilon, stop.
+    </div>
+  </div>
+  <div class="step">
+    <div class="step-num">2</div>
+    <div class="step-body">
+      <strong>Inner scan</strong> through doublets:
+      <ul class="clean">
+        <li>Identify which job in the pair has higher ud &rarr; call it hi_job</li>
+        <li>Skip if hi_job is not on P1</li>
+        <li>Skip if lo_job is also on P1 (same processor, no gain)</li>
+        <li>Check Condition 1 (strict): max(new_UD_P1, new_UD_pb) &lt; UD(P1)</li>
+        <li>Check Condition 2: mutil balance between P1 and pb must not worsen</li>
+        <li>Check Condition 3: DBF feasibility after swap</li>
+        <li>If all pass: execute swap, set swapped=True, BREAK the inner loop</li>
+      </ul>
+    </div>
+  </div>
+  <div class="step">
+    <div class="step-num">3</div>
+    <div class="step-body">
+      <strong>If no swap found</strong> in inner scan &rarr; globally optimal, exit outer loop.
+    </div>
+  </div>
+
+  <pre class="code"><span class="kw">def</span> <span class="fn">refine_mapping_2b</span>(mapping, tasks, N_prc, cum, N_seg, job_r, job_d, verbose=<span class="kw">True</span>):
+    ...
+    <span class="kw">while True</span>:
+        P1 = max(range(N_prc), key=<span class="kw">lambda</span> x: proc_ud[x])   <span class="cm"># highest-UD processor</span>
+        P2 = min(range(N_prc), key=<span class="kw">lambda</span> x: proc_ud[x])   <span class="cm"># lowest-UD processor</span>
+        <span class="kw">if</span> proc_ud[P1] - proc_ud[P2] &lt; <span class="num">1e-9</span>: <span class="kw">break</span>         <span class="cm"># already balanced</span>
+
+        swapped = <span class="kw">False</span>
+        <span class="kw">for</span> (job_a, job_b) <span class="kw">in</span> doublets:
+            hi_job = job_a <span class="kw">if</span> task_ud[job_a[<span class="num">0</span>]] >= task_ud[job_b[<span class="num">0</span>]] <span class="kw">else</span> job_b
+            lo_job = job_b <span class="kw">if</span> hi_job == job_a <span class="kw">else</span> job_a
+
+            <span class="kw">if</span> mapping[hi_job] != P1: <span class="kw">continue</span>             <span class="cm"># must take FROM P1</span>
+
+            pb = mapping[lo_job]
+            <span class="kw">if</span> pb == P1: <span class="kw">continue</span>                         <span class="cm"># lo_job also on P1</span>
+
+            <span class="cm"># Condition 1: strict max-UD reduction</span>
+            <span class="kw">if</span> max(new_UD_P1, new_UD_pb) >= proc_ud[P1] - <span class="num">1e-9</span>: <span class="kw">continue</span>
+
+            <span class="cm"># Condition 2: mutil guard</span>
+            <span class="kw">if</span> new_mu_diff > cur_mu_diff + <span class="num">1e-9</span>: <span class="kw">continue</span>
+
+            <span class="cm"># Condition 3: DBF check</span>
+            <span class="kw">if</span> _swap_feasible(...):
+                _do_swap(...)
+                swapped = <span class="kw">True</span>
+                <span class="kw">break</span>                                     <span class="cm"># restart outer loop</span>
+
+        <span class="kw">if not</span> swapped: <span class="kw">break</span>                              <span class="cm"># no improvement found</span>
+    <span class="kw">return</span> mapping</pre>
+
+  <div class="card card-purple">
+    <h3>Properties of 2b</h3>
+    <ul class="clean">
+      <li><strong>Greedy globally:</strong> Always focuses on the highest-UD processor first</li>
+      <li><strong>Iterative:</strong> Can perform many rounds; each round does exactly one swap</li>
+      <li><strong>No cycling:</strong> The max-UD-must-strictly-decrease condition prevents returning to the same state</li>
+      <li><strong>Terminates:</strong> Each swap strictly lowers max UD; bounded number of possible UD arrangements</li>
+      <li><strong>More swaps possible:</strong> After each swap, the new P1 might benefit from a completely different exchange</li>
+      <li><strong>Heavier computation:</strong> O(N_jobs^2 * N_swaps) in the worst case</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ===== SECTION 8: DOSWAP ===== -->
+<section id="doswap">
+  <h2>8. DoSwap &mdash; How the Swap is Committed</h2>
+
+  <div class="card">
+    <h3>Data Structures Maintained</h3>
+    <table>
+      <tr><th>Structure</th><th>Type</th><th>What It Holds</th></tr>
+      <tr><td><code>mapping</code></td><td>dict (i,j) &rarr; x</td><td>Which processor each job is assigned to</td></tr>
+      <tr><td><code>proc_jobs</code></td><td>dict x &rarr; [(i,j), ...]</td><td>List of jobs on each processor</td></tr>
+      <tr><td><code>proc_ud</code></td><td>list[float]</td><td>UD(x) for each processor</td></tr>
+      <tr><td><code>proc_mutil</code></td><td>list[float]</td><td>MU(x) for each processor</td></tr>
+    </table>
+  </div>
+
+  <pre class="code"><span class="kw">def</span> <span class="fn">_do_swap</span>(mapping, proc_jobs, proc_ud, proc_mutil,
+             task_ud, task_mutil, job_a, job_b, pa, pb):
+    <span class="cm"># 1. Update the main mapping table</span>
+    mapping[job_a] = pb
+    mapping[job_b] = pa
+
+    <span class="cm"># 2. Update the processor job lists</span>
+    proc_jobs[pa].remove(job_a)
+    proc_jobs[pa].append(job_b)
+    proc_jobs[pb].remove(job_b)
+    proc_jobs[pb].append(job_a)
+
+    <span class="cm"># 3. Update UD accumulators (incremental, O(1))</span>
+    delta_ud = task_ud[job_a[<span class="num">0</span>]] - task_ud[job_b[<span class="num">0</span>]]
+    proc_ud[pa] -= delta_ud          <span class="cm"># pa loses ud(a), gains ud(b)</span>
+    proc_ud[pb] += delta_ud          <span class="cm"># pb gains ud(a), loses ud(b)</span>
+
+    <span class="cm"># 4. Update mutil accumulators (incremental, O(1))</span>
+    delta_mu = task_mutil[job_a[<span class="num">0</span>]] - task_mutil[job_b[<span class="num">0</span>]]
+    proc_mutil[pa] -= delta_mu
+    proc_mutil[pb] += delta_mu</pre>
+
+  <div class="success">
+    All four data structures are updated atomically in a single call. The UD and mutil
+    updates are O(1) incremental operations (just add/subtract a delta) rather than
+    recomputing the full sum every time. This keeps the refinement step fast even with
+    many jobs.
+  </div>
+
+  <div class="card card-red">
+    <h3>DBF Feasibility Check Before Committing</h3>
+    <p>
+      <code>_swap_feasible()</code> is called <em>before</em> <code>_do_swap()</code>.
+      It creates temporary views of what the job lists would look like after the swap,
+      without modifying any shared state:
+    </p>
+    <pre class="code"><span class="kw">def</span> <span class="fn">_swap_feasible</span>(proc_jobs, job_a, job_b, pa, pb, tasks, job_r, job_d):
+    new_pa = [ij <span class="kw">for</span> ij <span class="kw">in</span> proc_jobs[pa] <span class="kw">if</span> ij != job_a] + [job_b]
+    new_pb = [ij <span class="kw">for</span> ij <span class="kw">in</span> proc_jobs[pb] <span class="kw">if</span> ij != job_b] + [job_a]
+    <span class="kw">return</span> (_dbf_ok(new_pa, tasks, job_r, job_d) <span class="kw">and</span>
+            _dbf_ok(new_pb, tasks, job_r, job_d))</pre>
+    <p>
+      <code>_dbf_ok()</code> scans all pairs of release time t1 and deadline t2 for
+      jobs on that processor. For each window [t1, t2], it sums the mandatory execution
+      times of jobs whose release &ge; t1 and deadline &le; t2. If any window's demand
+      exceeds the window length, the check fails and the swap is rejected.
+    </p>
+  </div>
+</section>
+
+<!-- ===== SECTION 9: COMPARISON ===== -->
+<section id="comparison">
+  <h2>9. v5a vs v5b &mdash; Side-by-Side Comparison</h2>
+
+  <table class="diff-table">
+    <tr>
+      <th>Aspect</th>
+      <th>v5a (Algorithm 2a)</th>
+      <th>v5b (Algorithm 2b)</th>
+    </tr>
+    <tr>
+      <td>Scan structure</td>
+      <td class="diff-v5a">Single linear pass, no restart</td>
+      <td class="diff-v5b">Outer while-loop + inner scan; restarts after each swap</td>
+    </tr>
+    <tr>
+      <td>Target processor</td>
+      <td class="diff-v5a">No specific target; any pair where current pa/pb improve</td>
+      <td class="diff-v5b">Always targets P1 = globally highest-UD processor</td>
+    </tr>
+    <tr>
+      <td>Condition 1 check</td>
+      <td class="diff-v5a">Pair-level: |UD(pa) - UD(pb)| must strictly decrease</td>
+      <td class="diff-v5b">Max-UD-level: max(new_UD_P1, new_UD_pb) &lt; UD(P1)</td>
+    </tr>
+    <tr>
+      <td>After finding a valid swap</td>
+      <td class="diff-v5a">Execute and continue scanning remaining pairs</td>
+      <td class="diff-v5b">Execute and BREAK (restart outer loop)</td>
+    </tr>
+    <tr>
+      <td>Anti-cycling guarantee</td>
+      <td class="diff-v5a">Inherent (each pair visited once)</td>
+      <td class="diff-v5b">max UD strictly decreases at every step</td>
+    </tr>
+    <tr>
+      <td>Computational cost</td>
+      <td class="diff-v5a">O(N^2) one time</td>
+      <td class="diff-v5b">O(N^2) per swap, repeated until convergence</td>
+    </tr>
+    <tr>
+      <td>Global optimality</td>
+      <td class="diff-v5a">Weaker (local pair fixes; no global view)</td>
+      <td class="diff-v5b">Stronger (always removes the global worst bottleneck first)</td>
+    </tr>
+    <tr>
+      <td>Risk of over-swapping</td>
+      <td class="diff-v5a">Lower (pair-level check limits scope)</td>
+      <td class="diff-v5b">Very low (max-UD check is conservative)</td>
+    </tr>
+    <tr>
+      <td>Typical swap count</td>
+      <td class="diff-v5a">Can be more (one per valid pair seen)</td>
+      <td class="diff-v5b">Usually fewer but each swap matters more</td>
+    </tr>
+    <tr>
+      <td>Best use case</td>
+      <td class="diff-v5a">When many small adjustments are needed</td>
+      <td class="diff-v5b">When there is one or two clear hot-spots to fix</td>
+    </tr>
+  </table>
+
+  <div class="highlight">
+    <strong>Empirical expectation:</strong> v5b tends to produce a more balanced UD distribution
+    because it always attacks the worst processor. v5a may end up with a slightly higher max UD
+    if the worst processor's jobs happen to be near the end of the sorted doublet list.
+    However, v5a may produce more total swaps, spreading the load more broadly.
+  </div>
+</section>
+
+<!-- ===== SECTION 10: WHY UD ===== -->
+<section id="why-ud">
+  <h2>10. Why Utility Density? Alternative Metrics Compared</h2>
+
+  <table>
+    <tr>
+      <th>Metric</th>
+      <th>Formula</th>
+      <th>What it Balances</th>
+      <th>What it Misses</th>
+      <th>Verdict</th>
+    </tr>
+    <tr>
+      <td><strong>Mandatory utilisation</strong></td>
+      <td>e_m / p_i</td>
+      <td>Mandatory load (same as SPS)</td>
+      <td>Everything about optional segments and utility</td>
+      <td>Redundant with SPS; no benefit</td>
+    </tr>
+    <tr>
+      <td><strong>Utility u_i only</strong></td>
+      <td>u_i</td>
+      <td>Reward weight per job</td>
+      <td>How often task runs (1/p_i) and how many optionals it has</td>
+      <td>Ignores task frequency; rare high-u_i tasks overvalued</td>
+    </tr>
+    <tr>
+      <td><strong>Optional execution sum</strong></td>
+      <td>e_opt_total / p_i</td>
+      <td>Optional segment density</td>
+      <td>How valuable those optional segments are (u_i)</td>
+      <td>May spread high-volume but low-value tasks</td>
+    </tr>
+    <tr>
+      <td><strong>Utility density ud(i)</strong></td>
+      <td>u_i * e_opt_total / p_i</td>
+      <td>Value rate: reward per unit time</td>
+      <td>Nothing &mdash; covers all three dimensions</td>
+      <td><strong>Best proxy for Phase 5 contribution</strong></td>
+    </tr>
+    <tr>
+      <td><strong>Total execution e_m + e_opt</strong></td>
+      <td>e_total / p_i</td>
+      <td>Raw computational demand</td>
+      <td>Utility; conflates mandatory and optional differently</td>
+      <td>No connection to utility objective</td>
+    </tr>
+  </table>
+
+  <div class="success">
+    <strong>ud(i) is the right metric because:</strong> It tells you exactly how much
+    utility processor x could earn per unit time if all optional segments ran. Balancing UD
+    gives Phase 5 equal opportunity on every processor. Alternatives either duplicate SPS work
+    or miss one of the three key dimensions: reward rate, optional volume, and task frequency.
+  </div>
+</section>
+
+<!-- ===== SECTION 11: FULL PIPELINE ===== -->
+<section id="pipeline">
+  <h2>11. The Full v5a/v5b Pipeline</h2>
+
+  <div class="two-col">
+    <div class="phase-block phase1">
+      <h3>Phase 1: Quantum SPS Mapping</h3>
+      <p>Process hyperperiod in quanta. For each quantum, arriving jobs are assigned
+      using DPS/SPS to balance mandatory utilisation across processors.</p>
+      <p><strong>Output:</strong> <code>mapping[(i,j)] = x</code> (job to processor)</p>
+    </div>
+    <div class="phase-block phase1b">
+      <h3>Phase 1b: Refine Mapping (NEW in v5)</h3>
+      <p>Apply 2a (v5a) or 2b (v5b) to swap individual jobs between processors, balancing UD(x) while preserving MU(x) balance and DBF feasibility.</p>
+      <p><strong>Output:</strong> Refined <code>mapping</code></p>
+    </div>
+    <div class="phase-block phase2">
+      <h3>Phase 2: Left-Shift Diagnostic</h3>
+      <p>Simulate EDF scheduling of mandatory-only segments at f_max.
+      Compute slack for each job. Report any negative slacks (should be 0 if SPS + DBF passed).</p>
+    </div>
+    <div class="phase-block phase3">
+      <h3>Phase 3: Energy Slack</h3>
+      <p>Compute total mandatory energy at f_max. Check against budget B.
+      If mandatory cost exceeds B, report INFEASIBLE and return early.</p>
+    </div>
+    <div class="phase-block phase4">
+      <h3>Phase 4: Aggressive Scaling</h3>
+      <p>Try to reduce frequency of jobs to save energy, subject to:
+      timing feasibility (DBF), energy guard, and parameter constraints.</p>
+    </div>
+    <div class="phase-block phase5">
+      <h3>Phase 5: Greedy Optional Segments</h3>
+      <p>For each processor, repeatedly add the next optional segment for the job with maximum DBF window slack. Continue until no segment can be added without violating timing or energy.</p>
+    </div>
+    <div class="phase-block phase6">
+      <h3>Phase 6: Best-First Pairwise Swap</h3>
+      <p>Try all (giver, receiver) pairs of already-scheduled optional segments.
+      Swap if net utility increases. After each swap, re-run Phase 5 to fill freed slots.
+      Repeat until no improvement.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>The Refinement Effect on Phase 5</h3>
+    <p>
+      Phase 5's greedy algorithm adds optional segments one at a time, gated by the
+      <em>DBF window slack</em> of the job being extended. Slack is the difference between
+      the available time in a window and the mandatory demand already in that window.
+    </p>
+    <p>
+      If one processor has too many high-utility tasks (high UD, high MU), it has tighter
+      windows. Less slack means fewer optional segments can be inserted before a deadline
+      constraint binds. The refinement step distributes both UD (optional potential) and
+      preserves MU (mandatory load) balance, ensuring roughly equal slack headroom across
+      all processors entering Phase 5.
+    </p>
+  </div>
+</section>
+
+<!-- ===== SECTION 12: WORKED EXAMPLE ===== -->
+<section id="worked-example">
+  <h2>12. Worked Example</h2>
+
+  <div class="card">
+    <h3>Setup: 4 tasks, 2 processors, after SPS</h3>
+    <table>
+      <tr><th>Task</th><th>p_i</th><th>e_m</th><th>u_i</th><th>e_opt_total</th><th>mu(i) = e_m/p_i</th><th>ud(i) = u_i*e_opt/p_i</th></tr>
+      <tr><td>T0</td><td>10</td><td>2</td><td>5.0</td><td>6</td><td>0.20</td><td>3.00</td></tr>
+      <tr><td>T1</td><td>10</td><td>3</td><td>1.0</td><td>4</td><td>0.30</td><td>0.40</td></tr>
+      <tr><td>T2</td><td>20</td><td>4</td><td>4.0</td><td>8</td><td>0.20</td><td>1.60</td></tr>
+      <tr><td>T3</td><td>20</td><td>2</td><td>0.5</td><td>6</td><td>0.10</td><td>0.15</td></tr>
+    </table>
+
+    <h3>After SPS: MU balanced, UD unbalanced</h3>
+    <p>Suppose SPS assigns jobs of T0 and T2 to P0, and T1 and T3 to P1 (in hyperperiod h=20, so T0 has 2 jobs: (0,0) and (0,1)).</p>
+    <table>
+      <tr><th>Processor</th><th>Jobs</th><th>MU(x)</th><th>UD(x)</th></tr>
+      <tr><td>P0</td><td>(T0,j0), (T0,j1), (T2,j0)</td><td>0.20+0.20+0.20 = 0.60</td><td>3.00+3.00+1.60 = 7.60</td></tr>
+      <tr><td>P1</td><td>(T1,j0), (T1,j1), (T3,j0)</td><td>0.30+0.30+0.10 = 0.70</td><td>0.40+0.40+0.15 = 0.95</td></tr>
+    </table>
+    <p>MU spread = 0.10 (good). UD spread = 7.60 - 0.95 = <strong>6.65</strong> (bad! P0 has all the valuable optional work).</p>
+
+    <h3>Doublets (sorted by |ud_a - ud_b|)</h3>
+    <table>
+      <tr><th>#</th><th>Pair</th><th>|ud_a - ud_b|</th></tr>
+      <tr><td>1</td><td>(T1,j0) &amp; (T1,j1)</td><td>0.00</td></tr>
+      <tr><td>2</td><td>(T3,j0) &amp; something</td><td>small</td></tr>
+      <tr><td>...</td><td>...</td><td>...</td></tr>
+      <tr><td>last</td><td>(T0,j0) &amp; (T1,j0)</td><td>|3.00 - 0.40| = 2.60</td></tr>
+    </table>
+
+    <h3>Refinement Finds: Swap (T0,j0) from P0 with (T1,j0) from P1</h3>
+    <p>Condition 1: |new_UD_P0 - new_UD_P1| = |(7.60-3.00+0.40) - (0.95-0.40+3.00)| = |5.00 - 3.55| = 1.45 &lt; 6.65. YES.</p>
+    <p>Condition 2: mu diff becomes |(0.60-0.20+0.30) - (0.70-0.30+0.20)| = |0.70 - 0.60| = 0.10 = 0.10. NOT worse. YES.</p>
+    <p>Condition 3: DBF check passes for both processors with new job lists. YES.</p>
+    <p><strong>Swap committed.</strong></p>
+    <table>
+      <tr><th>After Swap</th><th>Jobs</th><th>MU(x)</th><th>UD(x)</th></tr>
+      <tr><td>P0</td><td>(T1,j0), (T0,j1), (T2,j0)</td><td>0.70</td><td>5.00</td></tr>
+      <tr><td>P1</td><td>(T0,j0), (T1,j1), (T3,j0)</td><td>0.60</td><td>3.55</td></tr>
+    </table>
+    <p>UD spread reduced from 6.65 to <strong>1.45</strong>. Phase 5 now has a more balanced starting point on both processors.</p>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  USRT v5a &amp; v5b &mdash; Heuristic Documentation &mdash; Generated 2026-05-04
+</footer>
+
+</body>
+</html>
