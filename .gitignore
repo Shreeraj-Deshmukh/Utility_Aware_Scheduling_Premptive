@@ -1,0 +1,30 @@
+# ── Generated experiment data ────────────────────────────────────────────────
+# Every instance is regenerable from its (TestSpec, seed) provenance, which is
+# embedded in each testcase file and in the sweep's manifest.csv -- so the data
+# itself does not belong in the repository.  Regenerate with:
+#     python gen_testcases.py <sweep> --sets N --out <dir>
+V2/testcases/
+V2/dry_run_tc/
+V2/tc_smoke/
+
+# Model results are likewise reproducible:
+#     python run_models.py <dir> --models ...
+**/results.csv
+
+# ── Solver artefacts ─────────────────────────────────────────────────────────
+# Gurobi IIS dumps written on infeasible models (the runner suppresses these,
+# but a standalone ILP.py / ilp2.py run still emits them).
+*.ilp
+
+# ── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# ── Editor / OS ──────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
