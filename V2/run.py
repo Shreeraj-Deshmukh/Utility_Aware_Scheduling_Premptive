@@ -7,6 +7,7 @@ Usage
 
   solver (optional, default: heuristic_v4):
     ilp_v2        — Quantum SPS + Gurobi ILP optimisation
+    ilp_v3        — Predicted-work SPS mapping + the SAME Gurobi ILP as v2
     heuristic_v1  — Single-pass SPS + ScheduleState + freq scaling + greedy
     heuristic_v2  — Quantum SPS + left-shift greedy (3-step cases)
     heuristic_v3  — Quantum SPS + DBF window-slack greedy, Phases 1-5
@@ -23,6 +24,7 @@ Examples
   python run.py testcase.py heuristic_v5a
   python run.py testcase.py heuristic_v5b
   python run.py testcase.py ilp_v2
+  python run.py testcase.py ilp_v3
   python run.py testcase.py online
 """
 
@@ -44,6 +46,7 @@ from usrt.utils import load_testcase
 
 SOLVERS = {
     "ilp_v2":                 "usrt.solvers.ilp_v2",
+    "ilp_v3":                 "usrt.solvers.ilp_v3",
     "heuristic_v1":           "usrt.solvers.heuristic_v1",
     "heuristic_v2":           "usrt.solvers.heuristic_v2",
     "heuristic_v3":           "usrt.solvers.heuristic_v3",

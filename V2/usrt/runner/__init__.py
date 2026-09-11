@@ -10,6 +10,8 @@ Models
                them to usrt.models (alpha=0.15, beta=1.0) so every model solves
                the SAME energy model and the optimality gap is meaningful.
   ilp_v2     : Quantum SPS mapping + Gurobi ILP (already uses usrt.models).
+  ilp_v3     : predicted-work SPS mapping + the SAME Gurobi ILP as v2; only
+               Phase 1 differs, so v3-v2 isolates the mapping.
   heuristic  : the staged offline heuristic (default v5b).
 
 All three are normalised to one metrics schema by adapters.py:

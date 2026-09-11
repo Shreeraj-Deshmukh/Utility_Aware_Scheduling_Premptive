@@ -10,7 +10,8 @@ Usage
   python run_models.py <manifest.csv | sweep_dir | testcases_root> [options]
 
 Options (defaults in brackets):
-  --models M      comma list of ilp_v1,ilp_v2,heuristic   [ilp_v2,heuristic]
+  --models M      comma list of ilp_v1,ilp_v2,ilp_v3,heuristic,
+                  heuristic_v3..v7, greedy_sps_baseline   [ilp_v2,heuristic]
   --heur V        heuristic variant (v5b,v5a,v4,...)       [v5b]
   --time-limit S  Gurobi TimeLimit seconds per ILP solve  [30]
   --mip-gap G     stop ILP at this relative gap (0=exact)  [0]
@@ -20,6 +21,7 @@ Examples
 --------
   python run_models.py testcases/energy_rho/manifest.csv --models ilp_v1,ilp_v2,heuristic
   python run_models.py testcases/ --models ilp_v2,heuristic        # whole tree
+  python run_models.py testcases/x/manifest.csv --models ilp_v2,ilp_v3  # mapping A/B
   python run_models.py testcases/util_success --models heuristic   # one sweep
 
 Notes

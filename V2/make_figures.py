@@ -41,6 +41,7 @@ MODELS = [
     ('heuristic_v5b',           'v5b',        '#1f77b4', '>', (0, (5, 1))),
     ('heuristic_claudeoptimal', 'DoubleP6',   '#ff7f0e', 's', (0, (3, 1, 1, 1, 1, 1))),
     ('ilp_v2',                  'ILP v2',     '#2ca02c', 'D', (0, (2, 2))),
+    ('ilp_v3',                  'ILP v3',     '#bcbd22', 'h', (0, (4, 1, 1, 1))),
     ('heuristic_v7',            'v7',         '#17becf', 'X', (0, (7, 1, 1, 1))),
     ('heuristic_v6',            'v6',         '#d62728', 'P', (0, ())),
     # ILP v1 is the optimality reference: its own gap is 0 by construction, so in
