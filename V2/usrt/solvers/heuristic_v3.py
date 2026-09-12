@@ -26,6 +26,14 @@ _S2 = "-" * 76
 
 
 def run(processors, tasks, B_BUDGET):
+    """
+    Returns (seg_k, freq_idx, utility, energy, mapping).
+
+    `mapping` is part of the contract, not a convenience: a schedule is only
+    meaningful relative to the job->processor assignment it was built on, so
+    without it a caller cannot DBF-check what it was handed.  See
+    usrt/runner/adapters._schedule_feasible and ISSUES.md -> REPAIR-PARTIAL.
+    """
     N_tsk    = len(tasks)
     N_prc    = len(processors)
     freq_set = processors[0]['frequencies']
@@ -84,7 +92,7 @@ def run(processors, tasks, B_BUDGET):
         print(f"  Budget below cheapest-possible mandatory cost — infeasible at any frequency.")
         print_schedule(seg_k, freq_idx, freq_set, cum, tasks, N_tsk, N_job,
                        mapping, B_BUDGET, label="INFEASIBLE MANDATORY")
-        return seg_k, freq_idx, 0.0, E_consumed
+        return seg_k, freq_idx, 0.0, E_consumed, mapping
 
     # ── Phase 4: Aggressive scaling ───────────────────────────────────────────
     print(f"\n{_S}")
@@ -122,4 +130,4 @@ def run(processors, tasks, B_BUDGET):
         seg_k, freq_idx, freq_set, cum, tasks, N_tsk, N_job,
         mapping, B_BUDGET, label="HEURISTIC v3 SOLUTION")
 
-    return seg_k, freq_idx, tot_u, tot_e
+    return seg_k, freq_idx, tot_u, tot_e, mapping

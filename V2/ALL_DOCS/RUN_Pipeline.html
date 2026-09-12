@@ -1,0 +1,480 @@
+<title>USRT — End-to-End Run Pipeline</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+ :root{--bg:#f7f7f5;--panel:#fff;--ink:#1a1a18;--muted:#5c5c56;--line:#e3e2dc;
+  --accent:#1f4d7a;--accent2:#7a1f1f;--code-bg:#f2f1ec;--ok:#1f6b45;--warn:#9a6a12;--bad:#a33;
+  --mono:"SFMono-Regular",Consolas,monospace;--serif:Georgia,serif;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+ @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#16161a;--panel:#1e1e24;--ink:#e9e8e2;--muted:#a7a69e;--line:#31313a;
+  --accent:#8ab4e0;--accent2:#e08a8a;--code-bg:#24242b;--ok:#7fd0a3;--warn:#e0bd6a;--bad:#e08a8a;}}
+ *{box-sizing:border-box}
+ body{background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.6;margin:0}
+ .wrap{max-width:1100px;margin:0 auto;padding:2.2rem 1.3rem 5rem}
+ h1{font-family:var(--serif);font-size:1.95rem;margin:.2rem 0 .4rem}
+ h2{font-family:var(--serif);font-size:1.34rem;margin:2.2rem 0 .5rem;padding-top:1rem;border-top:1px solid var(--line)}
+ h3{font-size:1.03rem;margin:1.5rem 0 .35rem}
+ h4{font-size:.93rem;margin:1.1rem 0 .3rem;color:var(--accent)}
+ .kicker{font-family:var(--mono);font-size:.72rem;letter-spacing:.15em;text-transform:uppercase;color:var(--accent)}
+ .sub{color:var(--muted);max-width:80ch}
+ code{font-family:var(--mono);font-size:.86em;background:var(--code-bg);padding:.08em .35em;border-radius:4px}
+ pre{background:var(--code-bg);border:1px solid var(--line);border-radius:8px;padding:.8rem 1rem;
+     overflow-x:auto;font-family:var(--mono);font-size:.775rem;line-height:1.5}
+ table{border-collapse:collapse;width:100%;margin:.8rem 0;font-size:.82rem;display:block;overflow-x:auto}
+ th,td{border:1px solid var(--line);padding:.4rem .55rem;text-align:left;vertical-align:top}
+ th{background:var(--code-bg);font-weight:650}
+ .callout{border-left:4px solid var(--accent);background:var(--panel);padding:.75rem 1rem;
+          border-radius:0 8px 8px 0;margin:1rem 0}
+ .callout.bad{border-left-color:var(--bad)}.callout.ok{border-left-color:var(--ok)}
+ .callout.warn{border-left-color:var(--warn)}
+ .muted{color:var(--muted);font-size:.83rem}
+ .ok{color:var(--ok);font-weight:650}.bad{color:var(--bad);font-weight:650}.warn{color:var(--warn);font-weight:650}
+ .toc{columns:2;column-gap:2rem;font-size:.9rem}
+ .toc a{text-decoration:none;color:var(--accent)}
+ .gap{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--bad);
+      border-radius:0 8px 8px 0;padding:.8rem 1rem;margin:1rem 0}
+ hr{border:none;border-top:1px solid var(--line);margin:1.8rem 0}
+ @media (max-width:640px){.toc{columns:1}}
+</style>
+<div class="wrap">
+<div class="kicker">USRT &middot; V2 &middot; Operating manual</div>
+<h1>End-to-End Run Pipeline</h1>
+<p class="sub">How a result is produced from nothing: which files generate test cases, where they land,
+how solvers consume them, where results are written, and how figures are drawn. Written so a reader
+with no prior exposure to this tree can reproduce the experiments on a fresh machine.</p>
+<p class="muted"><b>Last verified against the live tree: 13 September 2026.</b> Every path, flag and
+constant below was read from the code, not from memory.</p>
+
+<h2 id="toc">Contents</h2>
+<div class="toc"><ol>
+<li><a href="#s1">Quick start</a></li>
+<li><a href="#s2">The three stages</a></li>
+<li><a href="#s3">Stage 1 &mdash; generating test cases</a></li>
+<li><a href="#s4">Where test cases are stored</a></li>
+<li><a href="#s5">Stage 2 &mdash; running solvers</a></li>
+<li><a href="#s6">Where results are stored</a></li>
+<li><a href="#s7">Stage 3 &mdash; figures</a></li>
+<li><a href="#s8">Tuning knobs: which file to edit</a></li>
+<li><a href="#s9">What is NOT built yet</a></li>
+<li><a href="#s10">Installation &amp; dependencies</a></li>
+<li><a href="#s11">Known caveats</a></li>
+</ol></div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<h2 id="s1">1 &middot; Quick start</h2>
+<p>From <code>V2/</code>, with Gurobi licensed and matplotlib installed:</p>
+<pre># 1. GENERATE  -- one OFAT sweep, 100 test cases per configuration
+python gen_testcases.py rho --sets 100 --out tc_demo
+
+# 2. RUN       -- every solver over that batch
+python run_models.py tc_demo --models ilp_v1,ilp_v2,ilp_v3,ilp_v4 --time-limit 60
+python run_models.py tc_demo --models greedy_sps_baseline
+for h in v3 v4 v5a v5b v6 v7 claudeoptimal; do
+    python run_models.py tc_demo --models heuristic --heur $h
+done
+
+# 3. INSPECT   -- results land beside each manifest
+#    tc_demo/rho/manifest.csv      (what was generated)
+#    tc_demo/rho/results.csv       (what each solver achieved)</pre>
+<p>PowerShell equivalent for the loop:</p>
+<pre>foreach ($h in 'v3','v4','v5a','v5b','v6','v7','claudeoptimal') {
+    python run_models.py tc_demo --models heuristic --heur $h
+}</pre>
+<div class="callout warn"><strong>For runtime measurements use <code>run_timed.py</code> instead.</strong>
+<code>run_models.py</code> times each solve <em>once</em>, and a single measurement was observed to be
+wrong by <b>97&times;</b> (a 0.27&nbsp;s solve recorded as 90.7&nbsp;s when the OS descheduled the
+process). <code>run_timed.py</code> takes the best of N repeats and marks time-limit censoring
+explicitly. Use it for any claim about speed; <code>run_models.py</code> is fine for utility only.</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<h2 id="s2">2 &middot; The three stages</h2>
+<pre>  STAGE 1 — GENERATE                STAGE 2 — RUN                 STAGE 3 — FIGURES
+  ──────────────────                ─────────────                 ─────────────────
+  gen_testcases.py                  run_models.py   (utility)     make_figures.py
+      │                             run_timed.py    (timing)           │
+      ▼                             run.py          (one instance)     ▼
+  usrt/gen/                             │                         ALL_DOCS/figures/
+    spec.py      knobs                  ▼                           *.pdf  (vector)
+    primitives.py  UUniFast, periods  usrt/runner/
+    generate.py  draw one task set      runner.py   loop + resume
+    emit.py      write .py + manifest   adapters.py normalise metrics
+    sweeps.py    OFAT drivers               │
+      │                                     ▼
+      ▼                                 usrt/solvers/*.py
+  tc_&lt;name&gt;/&lt;sweep&gt;/setNN/*.py         ILP.py  (ilp_v1, repo root)
+  tc_&lt;name&gt;/&lt;sweep&gt;/manifest.csv           │
+                                            ▼
+                                    tc_&lt;name&gt;/&lt;sweep&gt;/results.csv</pre>
+<p>The halves are deliberately decoupled: <b>the generator only writes, the runner only reads.</b>
+No solver detail leaks into generation, so the same instances can be replayed against any solver,
+now or later.</p>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<h2 id="s3">3 &middot; Stage 1 &mdash; generating test cases</h2>
+<h4>Entry point</h4>
+<pre>python gen_testcases.py &lt;sweep&gt; [options]</pre>
+<table>
+<tr><th>File</th><th>Responsibility</th></tr>
+<tr><td><code>gen_testcases.py</code></td><td>CLI. Parses flags, builds a <code>TestSpec</code>, calls a sweep driver.</td></tr>
+<tr><td><code>usrt/gen/spec.py</code></td><td><b>All knobs</b> live here as the <code>TestSpec</code> dataclass, plus <code>validate()</code>.</td></tr>
+<tr><td><code>usrt/gen/primitives.py</code></td><td>UUniFast, the 0.01-unit donation, harmonic periods, random frequency sets, normal segment split, &rho; budget, feasibility guard.</td></tr>
+<tr><td><code>usrt/gen/generate.py</code></td><td><code>draw_taskset(spec, seed)</code> &mdash; produces one instance.</td></tr>
+<tr><td><code>usrt/gen/emit.py</code></td><td>Writes the runnable <code>.py</code> file and one <code>manifest.csv</code> row.</td></tr>
+<tr><td><code>usrt/gen/sweeps.py</code></td><td>The OFAT drivers and the factor grids.</td></tr>
+</table>
+
+<h4>The sweeps (one factor at a time)</h4>
+<p>A <b>configuration</b> is one value of one factor with every other parameter at its default.
+Each configuration gets <code>--sets</code> independently seeded instances.</p>
+<table>
+<tr><th>Sweep name</th><th>Default grid (<code>usrt/gen/sweeps.py</code>)</th><th>Studies</th></tr>
+<tr><td><code>n_prc</code></td><td>2, 4, 8, 16</td><td>processor count</td></tr>
+<tr><td><code>n_tsk</code></td><td>4, 6, 8, 10, 12</td><td>task count / problem size</td></tr>
+<tr><td><code>n_frq</code></td><td>2, 3, 5, 8, 12</td><td>number of DVFS levels</td></tr>
+<tr><td><code>u_mand_factor</code></td><td>0.1 &hellip; 0.9</td><td>&alpha; &mdash; mandatory load (timing pressure)</td></tr>
+<tr><td><code>u_opt_factor</code></td><td>0.1 &hellip; 0.9</td><td>&beta; &mdash; optional headroom</td></tr>
+<tr><td><code>rho</code></td><td>0.2 &hellip; 1.0</td><td>&rho; &mdash; energy budget (energy pressure)</td></tr>
+<tr><td><code>xi</code></td><td>0.3 &hellip; 0.9</td><td>&xi; &mdash; ACET spread (online only)</td></tr>
+<tr><td><code>all</code></td><td>every factor above</td><td>full OFAT suite</td></tr>
+<tr><td><code>util_grid</code></td><td>&alpha; &times; &beta; 2-D</td><td>joint utilisation (NOT one-factor-at-a-time)</td></tr>
+<tr><td><code>schedulability</code></td><td>&alpha; past capacity</td><td>success-rate cliff (feasibility guard OFF)</td></tr>
+</table>
+
+<h4>Command-line overrides</h4>
+<pre>--sets N        test cases per configuration (paper uses 100)
+--seed N        base seed (default 1000); set+seed makes runs reproducible
+--out DIR       output root                     --grid a,b,c   override the factor's grid
+--n-prc N       processors                      --n-tsk N      tasks
+--alpha F       u_mand_factor  (NOT energy alpha -- see §8)
+--beta  F       u_opt_factor   (NOT energy beta  -- see §8)
+--rho F         energy budget fraction          --xi F         ACET multiplier floor
+--n-frq N       DVFS levels                     --max-seg N    max optional segments
+--kmax N        periods = base * 2^m, m in 0..kmax  (controls hyper-period H, hence J)
+--base-per N    base period</pre>
+<div class="callout"><strong>To change J (job count) independently of task count</strong>, use
+<code>--kmax</code>. Periods are <code>base &times; 2^m</code>, so H = base&middot;2^kmax and
+J = &Sigma; H/p_i. Raising <code>--kmax</code> raises J at fixed <code>--n-tsk</code> &mdash; the only
+way to separate those two variables, which are otherwise ~98% correlated.</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<h2 id="s4">4 &middot; Where test cases are stored</h2>
+<pre>&lt;out&gt;/&lt;sweep&gt;/manifest.csv              one row per instance — the index
+&lt;out&gt;/&lt;sweep&gt;/results.csv               written later by run_models.py
+&lt;out&gt;/&lt;sweep&gt;/results_timed.csv         written later by run_timed.py
+&lt;out&gt;/&lt;sweep&gt;/set00/&lt;factor&gt;_&lt;value&gt;.py    ← the instances
+&lt;out&gt;/&lt;sweep&gt;/set01/ ...                   one directory per replicate (seed)</pre>
+<p>Concretely:</p>
+<pre>tc_demo/rho/manifest.csv
+tc_demo/rho/set00/rho_0.3.py   rho_0.4.py  ...  rho_1.py
+tc_demo/rho/set01/rho_0.3.py   ...</pre>
+<p><b>setNN</b> = one replicate (one random draw of the task-set shape).
+<b>&lt;factor&gt;_&lt;value&gt;.py</b> = one configuration point within it. In the <code>rho</code> sweep the
+task set is fixed <em>within</em> a set and only the budget changes, so a &rho;-curve is a controlled
+experiment on one task set.</p>
+
+<h4>What one instance file contains</h4>
+<pre>"""Auto-generated USRT testcase -- DO NOT EDIT BY HAND.
+Provenance: {"B": 96.6, "H": 80, "J": 24, "factor": "rho", "n_prc": 2, ... "seed": 1000}
+"""
+def testcase():
+    processors = [{'id': 0, 'frequencies': [0.35, 0.6, 0.8, 0.9, 1.0]}, ...]
+    tasks = [{'id': 0, 'e_m': 3.019, 'e_o_k': [0.649, 0.484],
+              'p_i': 10, 'u_i': 2.9499, 'theta': 0.7846}, ...]
+    B_BUDGET = 96.600000
+    return processors, tasks, B_BUDGET</pre>
+<p>Each file is standalone and runnable, and carries its own provenance in the docstring, so any
+instance can be regenerated from <code>(TestSpec, seed)</code>. <code>theta</code> is the per-task
+ACET multiplier used by the online phase; offline solvers ignore it.</p>
+<div class="callout"><strong>Generated data is gitignored.</strong> <code>tc_*/</code> directories are
+excluded by <code>.gitignore</code> because every instance is regenerable from its provenance. Ship
+the <em>code</em> and the commands, not the batches.</div>
+
+<h4>Batches currently on disk</h4>
+<table>
+<tr><th>Directory</th><th>Instances</th><th>What it is</th></tr>
+<tr><td><code>tc_sept_small/</code></td><td>4,800</td><td>full OFAT, ILP-tractable tier (n_tsk=5, k_max=2)</td></tr>
+<tr><td><code>tc_sept_paper/</code></td><td>4,800</td><td>full OFAT, paper-default tier (n_tsk=8, k_max=3)</td></tr>
+<tr><td><code>tc_unavg/</code></td><td>220</td><td>small per-instance set (5 sets), all 12 models, best-of-3 timing</td></tr>
+<tr><td><code>tc_scale/</code></td><td>80</td><td>n_tsk scaling study, 4&rarr;26</td></tr>
+<tr><td><code>tc_b2/</code></td><td>900</td><td>u_mand_factor batch with before/after mapping variants</td></tr>
+</table>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<h2 id="s5">5 &middot; Stage 2 &mdash; running solvers</h2>
+<h3>Three entry points, different jobs</h3>
+<table>
+<tr><th>Script</th><th>Scope</th><th>Use for</th></tr>
+<tr><td><code>run.py</code></td><td>ONE instance, verbose console output</td><td>debugging a single case, seeing phase-by-phase output</td></tr>
+<tr><td><code>run_models.py</code></td><td>A whole batch &rarr; <code>results.csv</code></td><td>utility / feasibility at scale</td></tr>
+<tr><td><code>run_timed.py</code></td><td>A whole batch, best-of-N &rarr; <code>results_timed.csv</code></td><td><b>any runtime claim</b></td></tr>
+</table>
+
+<h4>How a batch run works</h4>
+<pre>for each row in manifest.csv:
+    path = resolve(row['file'])
+    processors, tasks, B = load_testcase(path)     # usrt/utils.py
+    for each model:
+        metrics = run_model(model, processors, tasks, B, ...)   # usrt/runner/adapters.py
+        write {**row, **metrics} -> results.csv</pre>
+<p>So solvers pick up test cases <b>sequentially, driven by <code>manifest.csv</code></b> — the
+manifest is the authoritative index, not the directory listing. Stray <code>.py</code> files left by
+an earlier, larger generation are ignored.</p>
+
+<h3>Available models</h3>
+<table>
+<tr><th><code>--models</code> value</th><th>Implementation</th><th>What it is</th><th>Gurobi</th></tr>
+<tr><td><code>ilp_v1</code></td><td><code>ILP.py</code> (repo root)</td><td>Exact: joint mapping + frequency + segments. The optimality reference.</td><td>yes</td></tr>
+<tr><td><code>ilp_v2</code></td><td><code>usrt/solvers/ilp_v2.py</code></td><td>SPS mapping + exact frequency/segments</td><td>yes</td></tr>
+<tr><td><code>ilp_v3</code></td><td><code>usrt/solvers/ilp_v3.py</code></td><td>Predicted-work SPS mapping + same ILP</td><td>yes</td></tr>
+<tr><td><code>ilp_v4</code></td><td><code>usrt/solvers/ilp_v4.py</code></td><td>heuristic v6's mapping search + same ILP</td><td>yes</td></tr>
+<tr><td><code>heuristic</code> + <code>--heur X</code></td><td><code>usrt/solvers/heuristic_X.py</code></td><td>X &isin; v3, v4, v5a, v5b, v6, v7, claudeoptimal</td><td>no</td></tr>
+<tr><td><code>greedy_sps_baseline</code></td><td><code>usrt/solvers/greedy_sps_baseline.py</code></td><td>Naive floor: SPS only, f_max pinned, greedy segments</td><td>no</td></tr>
+</table>
+
+<h4>Runner options</h4>
+<pre>run_models.py &lt;dir|manifest.csv&gt;  --models a,b,c  --heur v6  --time-limit 60
+run_timed.py  &lt;dir|manifest.csv&gt;  --models a,b,c  --heur v6  --time-limit 300 \
+                                  --repeats 3  --repeat-cutoff 20  --out results_timed.csv</pre>
+<p>Both are <b>resume-safe</b>: a completed <code>(file, model)</code> pair is skipped, so Ctrl-C and
+restart is harmless. Both refuse to append under a mismatched header (delete the results file after
+changing the schema).</p>
+
+<h4>What the adapter layer does</h4>
+<p><code>usrt/runner/adapters.py</code> normalises every solver to one metrics dict and handles:</p>
+<table>
+<tr><th>Concern</th><th>Handling</th></tr>
+<tr><td>Solver console noise</td><td>fd-level redirect (Gurobi's C log) + <code>sys.stdout</code> swap (encoding-proof)</td></tr>
+<tr><td>ILP timeout</td><td>Gurobi <code>TimeLimit</code>; returns best incumbent as <code>time_limit</code>, or <code>timeout</code> if none</td></tr>
+<tr><td>Energy-model consistency</td><td>every model's energy recomputed through <code>usrt/models.py</code>, so all are scored identically</td></tr>
+<tr><td>Heuristic validation</td><td>schedule re-checked against the budget; over-budget results recorded <b>infeasible</b>, utility discarded</td></tr>
+<tr><td>Errors</td><td>caught per (instance, model) &rarr; a <code>status=error</code> row; one bad instance never aborts a sweep</td></tr>
+</table>
+
+<div class="callout bad"><strong>Do not run two runners over the same batch at once.</strong> There is
+no file locking. Concurrent writers produced <b>4,046 duplicate and 7 malformed rows</b> in one
+campaign before it was caught. One runner per batch directory.</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<h2 id="s6">6 &middot; Where results are stored</h2>
+<p>Beside the manifest that produced them: <code>&lt;out&gt;/&lt;sweep&gt;/results.csv</code>. Every
+manifest column is copied onto every result row, so results are self-describing and need no join.</p>
+<h4><code>manifest.csv</code> &mdash; 24 columns</h4>
+<pre>file, sweep, set, factor, value,
+n_prc, n_tsk, n_frq, u_mand_factor, u_opt_factor, rho, xi,
+U_M, U_O, B, H, J, e_mand_fmax, e_full_fmax, e_mand_min,
+feasible, donate_ok, seed, redraws</pre>
+<h4><code>results.csv</code> &mdash; those 24 + 9 metrics</h4>
+<pre>model, status, model_feasible, utility, energy, util_per_energy, runtime, gap, error</pre>
+<h4><code>results_timed.csv</code> &mdash; those 33 + 5 timing columns</h4>
+<pre>runtime_best, runtime_worst, repeats, censored, nondeterministic</pre>
+<table>
+<tr><th>Column</th><th>Meaning</th></tr>
+<tr><td><code>feasible</code></td><td><b>instance</b> property from the generator: can the mandatory part be packed at all</td></tr>
+<tr><td><code>model_feasible</code></td><td><b>this model's</b> verdict. <code>feasible=1, model_feasible=0</code> = solvable instance, this solver failed.
+    Set to 0 on three distinct grounds, told apart by <code>error</code>: the mandatory part does not pack (empty <code>error</code>, checked before the solver runs);
+    <code>over budget: E=&hellip;</code> (C3); or <code>C2: committed schedule misses a deadline</code> &mdash; a DBF re-check of the schedule the solver actually
+    returned, added 13 Sep 2026. The last one has never fired on a real run (0 in 6300), but it is what makes the column trustworthy rather than merely plausible</td></tr>
+<tr><td><code>utility</code></td><td>total optional utility &mdash; the objective. <b>Empty when infeasible</b> (discarded, not recorded)</td></tr>
+<tr><td><code>censored</code></td><td>1 = hit the time limit; the runtime is a LOWER BOUND. Exclude from runtime statistics</td></tr>
+<tr><td><code>nondeterministic</code></td><td>1 = repeats disagreed on utility. Should always be 0</td></tr>
+</table>
+<p>Derived afterwards by joining on <code>file</code>: optimality gap
+<code>(u[ilp_v1] &minus; u[model]) / u[ilp_v1]</code>; success rate = mean <code>model_feasible</code>.</p>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<h2 id="s7">7 &middot; Stage 3 &mdash; figures</h2>
+<pre>python make_figures.py        # ->  ALL_DOCS/figures/*.pdf</pre>
+<p>Produces vector PDFs sized for the two-column LaTeX report
+(<code>heuristic_v5_report.tex</code>), which already has <code>graphicx</code> &mdash; so they drop in
+with no preamble change. Single-column figures are 3.4&nbsp;in, full-width 7.0&nbsp;in.</p>
+<table>
+<tr><th>Figure</th><th>Width</th><th>Shows</th><th>Reads from</th></tr>
+<tr><td><code>fig1_gap_distribution.pdf</code></td><td>full</td><td>per-instance gap spread, box plot</td><td><code>tc_unavg</code></td></tr>
+<tr><td><code>fig2_ofat_smallmultiples.pdf</code></td><td>full</td><td>gap vs each of 6 factors</td><td><code>tc_sept_small</code></td></tr>
+<tr><td><code>fig3_v6_vs_v7.pdf</code></td><td>column</td><td>per-instance scatter</td><td><code>tc_unavg</code></td></tr>
+<tr><td><code>fig4_runtime_vs_J.pdf</code></td><td>column</td><td>cost vs size, censoring marked</td><td>both tiers</td></tr>
+<tr><td><code>fig5_feasibility.pdf</code></td><td>full</td><td>share of instances solved</td><td><code>tc_sept_small</code></td></tr>
+</table>
+<div class="gap"><strong>GAP &mdash; <code>make_figures.py</code> is hard-wired to specific batches.</strong>
+It reads the directory names <code>tc_unavg</code>, <code>tc_sept_small</code>,
+<code>tc_sept_paper</code> literally (lines 274&ndash;284) and opens <code>results.csv</code>, not
+<code>results_timed.csv</code>. Pointing it at a fresh batch, or at timed results, requires editing
+the file. It needs a <code>--input</code> / <code>--results</code> argument. See &sect;9.</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<h2 id="s8">8 &middot; Tuning knobs &mdash; which file to edit</h2>
+<div class="callout warn"><strong>&alpha; and &beta; mean two different things in this project.</strong>
+The <em>energy</em> pair lives in <code>usrt/models.py</code> and is never swept. The
+<em>utilisation</em> pair is <code>u_mand_factor</code>/<code>u_opt_factor</code> in
+<code>spec.py</code> and IS swept (and is what <code>--alpha</code>/<code>--beta</code> set on the
+command line). The paper reuses the same two letters for both; the code renames them to keep them
+apart.</div>
+
+<h3>A &mdash; Energy model constants: <code>usrt/models.py</code></h3>
+<pre>ALPHA = 0.15      # line 19
+BETA  = 1.0       # line 20
+
+E = ALPHA*(sum e / f) + BETA*f^2*(sum e)
+g(f) = ALPHA/f + BETA*f^2      energy per unit work, minimised at f* = (ALPHA/2BETA)^(1/3)
+With 0.15 / 1.0:  f* ~= 0.42, g(0.4)=0.535 vs g(1.0)=1.150  -> 2.15x cheaper below f_max</pre>
+<p>This is the <b>single source of truth</b>; all seven solver files import from here. Changing it
+changes every result but does <em>not</em> require regenerating test cases &mdash; the instance files
+do not encode the energy model.</p>
+<div class="callout bad"><strong>One coupling to know.</strong> <code>B_BUDGET = &rho; &middot;
+E_full_fmax</code> and <code>E_full_fmax = (&alpha;+&beta;)&middot;H&middot;(U_M+U_O)</code> uses the
+<em>energy</em> &alpha;+&beta;. So if you change <code>models.py</code>, every stored
+<code>B_BUDGET</code> silently stops corresponding to its intended &rho;. <b>Regenerate the batches
+after an energy-constant change.</b></div>
+
+<h3>B &mdash; Test-case generation knobs: <code>usrt/gen/spec.py</code></h3>
+<p>All defaults are fields of the <code>TestSpec</code> dataclass. Edit here to change the defaults;
+use CLI flags for one-off overrides.</p>
+<table>
+<tr><th>Field</th><th>Default</th><th>Controls</th><th>CLI flag</th></tr>
+<tr><td><code>n_prc</code></td><td>2</td><td>processors</td><td><code>--n-prc</code></td></tr>
+<tr><td><code>n_tsk</code></td><td>8</td><td>tasks</td><td><code>--n-tsk</code></td></tr>
+<tr><td><code>n_frq</code></td><td>5</td><td>DVFS levels drawn per instance</td><td><code>--n-frq</code></td></tr>
+<tr><td><code>f_min / f_max / f_step</code></td><td>0.3 / 1.0 / 0.05</td><td><b>the frequency grid</b> levels are drawn from; f_max always forced present</td><td>&mdash;</td></tr>
+<tr><td><code>base_per_min / base_per_max / per_step</code></td><td>10 / 10 / 5</td><td><b>base period</b></td><td><code>--base-per</code></td></tr>
+<tr><td><code>k_max</code></td><td>3</td><td><b>the period set</b>: base&middot;2^m, m&isin;0..k_max &rarr; {10,20,40,80}. Sets H and hence J</td><td><code>--kmax</code></td></tr>
+<tr><td><code>max_optional_seg</code></td><td>4</td><td>max optional segments per task</td><td><code>--max-seg</code></td></tr>
+<tr><td><code>u_lo / u_hi</code></td><td>1.0 / 5.0</td><td><b>utility range</b> u_i ~ U(lo,hi)</td><td>&mdash;</td></tr>
+<tr><td><code>seg_var_frac</code></td><td>0.20</td><td>segment split sd as a fraction of the mean</td><td>&mdash;</td></tr>
+<tr><td><code>u_mand_factor</code></td><td>0.5</td><td>paper &alpha;: U_M = &alpha;&middot;N_prc</td><td><code>--alpha</code></td></tr>
+<tr><td><code>u_opt_factor</code></td><td>0.5</td><td>paper &beta;: U_O = &beta;&middot;(N_prc&minus;U_M)</td><td><code>--beta</code></td></tr>
+<tr><td><code>rho</code></td><td>0.7</td><td>B = &rho;&middot;E_full_fmax</td><td><code>--rho</code></td></tr>
+<tr><td><code>xi</code></td><td>0.6</td><td>&theta; ~ U(&xi;,1) per task (online ACET)</td><td><code>--xi</code></td></tr>
+<tr><td><code>gamma</code></td><td>0.5</td><td>max per-task mandatory utilisation</td><td>&mdash;</td></tr>
+<tr><td><code>delta</code></td><td>2.0</td><td>max per-task optional:mandatory ratio</td><td>&mdash;</td></tr>
+<tr><td><code>guarantee_feasible</code></td><td>True</td><td>redraw until the mandatory part packs</td><td>&mdash;</td></tr>
+<tr><td><code>seed / max_redraws</code></td><td>0 / 200</td><td>reproducibility</td><td><code>--seed</code></td></tr>
+</table>
+
+<h3>C &mdash; Sweep grids: <code>usrt/gen/sweeps.py</code></h3>
+<p>The <b>steps of utilisation</b> and every other swept range are the <code>GRID_*</code> lists at the
+top of the file (see the table in &sect;3). Edit those to change step sizes permanently, or pass
+<code>--grid 0.2,0.4,0.6</code> for one run.</p>
+
+<h3>D &mdash; Heuristic search parameters</h3>
+<table>
+<tr><th>File</th><th>Constant</th><th>Meaning</th></tr>
+<tr><td><code>usrt/solvers/heuristic_v6.py</code></td><td><code>MAP_LS_ROUNDS=2</code>, <code>MAP_LS_MAX_MOVES=24</code></td><td>Phase 1c search budget. Caps pipeline evaluations at ~52</td></tr>
+<tr><td><code>usrt/solvers/heuristic_v7.py</code></td><td><code>GUIDED_REPAIR_MOVES=4</code>, <code>LS_ROUNDS=0</code></td><td>Phase 1R budget; local search disabled (measured not to pay)</td></tr>
+<tr><td><code>usrt/mapping/budget_refine.py</code></td><td><code>max_swaps=200</code></td><td>Phase 1b&prime; swap cap</td></tr>
+<tr><td><code>usrt/mapping/repair.py</code></td><td><code>range(100)</code></td><td>DBF repair iteration cap</td></tr>
+</table>
+
+<h3>Checklist before a fresh run</h3>
+<pre>1. usrt/models.py        ALPHA / BETA           -> if changed, REGENERATE batches
+2. usrt/gen/spec.py      periods (k_max, base_per), frequency grid (f_min/f_step),
+                         utility range (u_lo/u_hi), n_tsk, n_prc, gamma, delta
+3. usrt/gen/sweeps.py    GRID_* step sizes for each swept factor
+4. gen_testcases.py      (no edit needed -- use flags)
+5. heuristic_v6/v7       search budgets, only if tuning the heuristics themselves</pre>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<h2 id="s9">9 &middot; What is NOT built yet</h2>
+<p>Stated plainly so nothing is assumed to exist.</p>
+
+<div class="gap"><strong>1. There is no single end-to-end script.</strong> Nothing chains
+generate &rarr; run &rarr; figures. Today that is three commands plus a shell loop over the seven
+heuristic variants. <b>Proposed:</b> <code>run_all.py --out DIR --sets N [--timed]</code> that calls
+the three stages in order, with a single <code>--models</code> list and one progress line per stage.
+Roughly 60 lines; nothing blocks it.</div>
+
+<div class="gap"><strong>2. <code>run.py</code> cannot run <code>ilp_v1</code> or
+<code>ilp_v4</code>.</strong> Verified: its solver registry contains <code>ilp_v2</code>,
+<code>ilp_v3</code>, the heuristics, the baseline and <code>online</code> &mdash; but zero references
+to <code>ilp_v1</code> or <code>ilp_v4</code>. Both work fine through <code>run_models.py</code> /
+<code>run_timed.py</code>, which use <code>adapters.py</code> (whose <code>MODELS</code> tuple does
+list all four). So single-instance debugging of those two models is not possible today.
+<b>Fix:</b> two lines in <code>run.py</code>'s registry.</div>
+
+<div class="gap"><strong>3. <code>make_figures.py</code> is not parameterised.</strong> Hard-codes
+three batch directory names and the filename <code>results.csv</code>. It cannot plot a new batch, and
+cannot plot <code>results_timed.csv</code> (the timing-grade data), without editing the source.
+<b>Fix:</b> add <code>--batch</code> and <code>--results</code> arguments.</div>
+
+<div class="gap"><strong>4. The online phase has no batch runner.</strong>
+<code>usrt/solvers/online_demo.py</code> runs through <code>run.py online</code> for a single
+instance only. Generated instances already carry per-task <code>theta</code>, so online runs are
+reproducible &mdash; but there is no adapter, so the online phase has no sweep-scale evidence. The
+open design question is that its result is a distribution over the ACET realisation, not one number
+per instance.</div>
+
+<div class="gap"><strong>5. No file locking in the runners.</strong> Running two runners over one
+batch corrupts <code>results.csv</code> (observed: 4,046 duplicate + 7 malformed rows). There is a
+schema guard but no lock. <b>Fix:</b> a lockfile per batch directory, or a per-model output file.</div>
+
+<div class="gap"><strong>6. No automated test suite.</strong> Four separate defects this year were
+found only by accident, each of which a property test would have caught immediately: order-independence,
+energy &le; B on every returned schedule, DBF feasibility, and each phase being non-regressive.
+<b>Proposed:</b> ~150 lines in <code>tests/</code>.</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<h2 id="s10">10 &middot; Installation &amp; dependencies</h2>
+<h4>Verified on this machine</h4>
+<pre>Python      3.11.9          (3.10+ expected to work; f-strings and dataclasses only)
+gurobipy    12.0.3          REQUIRED for ilp_v1..v4
+matplotlib  3.10.7          REQUIRED for make_figures.py
+numpy       2.3.2           installed, not imported by repo code today
+numba       0.67.0          installed, not used today (see the C4 optimisation note)
+pandas      2.3.3           installed, not imported by repo code today</pre>
+<p><b>Only two third-party packages are actually required:</b> <code>gurobipy</code> and
+<code>matplotlib</code>. Everything else in <code>usrt/</code> is standard library. The heuristics and
+the generator run with <em>no</em> third-party packages at all &mdash; Gurobi is needed only for the
+ILP models, matplotlib only for figures.</p>
+<pre>pip install gurobipy matplotlib</pre>
+
+<h4>Gurobi licence</h4>
+<p>The ILP models need a licence. An academic named-user licence is free.</p>
+<pre>grbgetkey &lt;your-key&gt;            # installs gurobi.lic
+python -c "import gurobipy; gurobipy.Model()"   # should print the licence banner</pre>
+<p class="muted">Current licence on the development machine: LICENSEID 2853854, academic,
+valid to <b>2027-08-16</b>. A new machine needs its own key. Without it, the four ILP models fail; all
+seven heuristics and the baseline still run.</p>
+
+<h4>Running without Gurobi</h4>
+<pre>python run_models.py tc_demo --models greedy_sps_baseline
+for h in v3 v4 v5a v5b v6 v7 claudeoptimal; do
+    python run_models.py tc_demo --models heuristic --heur $h
+done</pre>
+<p>This yields relative comparisons between heuristics but no optimality gaps, since those are
+measured against <code>ilp_v1</code>.</p>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<h2 id="s11">11 &middot; Known caveats</h2>
+<table>
+<tr><th>Caveat</th><th>Detail</th></tr>
+<tr><td class="bad">SPS mapping bypass</td><td><code>quantum.py</code> places a large share of jobs by a
+    min-utilisation fallback rather than by SPS proper (capacity is never released between quanta).
+    Any claim of the form &ldquo;the SPS mapping causes X&rdquo; should be re-verified. Tracked in
+    <code>ALL_DOCS/ISSUES.md</code>.</td></tr>
+<tr><td class="bad">Stored results go stale</td><td>Results embed no code version. When a shared file
+    (<code>quantum.py</code>, <code>packers.py</code>, <code>models.py</code>) changes, every stored
+    <code>results.csv</code> silently predates it. <b>Re-run all models together after any change to
+    shared code</b>, never mix old and new rows.</td></tr>
+<tr><td class="warn">v3, v4, v5a lack Phase 6b</td><td>Their columns conflate a mapping change with a
+    missing phase, so they are not directly comparable with v5b/v6/v7.</td></tr>
+<tr><td class="warn">&delta; cap can be impossible</td><td>Satisfying it needs
+    <code>&beta; &le; 2&alpha;/(1&minus;&alpha;)</code>, so at &alpha;=0.1&ndash;0.2 the default
+    &beta;=0.5 cannot comply. Those instances carry <code>donate_ok=0</code> and the generator prints
+    a warning.</td></tr>
+<tr><td class="warn"><code>n_prc</code> sweep co-varies <code>n_tsk</code></td><td>U_M = &alpha;&middot;N_prc
+    cannot fit a fixed task count, so n_tsk scales 8&rarr;12&rarr;23. The realised value is in the
+    manifest, so it is visible rather than hidden &mdash; but that row is &ldquo;effect of cores
+    <em>with a proportionally larger task set</em>&rdquo;.</td></tr>
+<tr><td class="warn">J and n_tsk are ~98% correlated</td><td>In the default grids, J &asymp; 2.3&middot;n_tsk.
+    Use <code>--kmax</code> to vary J at fixed n_tsk if you need them separated.</td></tr>
+<tr><td class="warn">Timing needs repeats</td><td>A single measurement was observed wrong by 97&times;.
+    Use <code>run_timed.py</code> for any speed claim, and exclude <code>censored=1</code> rows from
+    runtime statistics.</td></tr>
+</table>
+
+<hr>
+<p class="muted">Companion documents: <code>Block_Diagram.html</code> (data flow and where each value
+comes from), <code>Testcases_info.html</code> (generator design in depth),
+<code>V2_Commands_Reference.html</code> (command lookup), <code>ISSUES.md</code> (open defect
+register). <br><b>Maintenance note:</b> this document is kept current as the pipeline changes &mdash;
+update it whenever an entry point, path, schema, knob or dependency changes.</p>
+</div>

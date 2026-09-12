@@ -91,7 +91,7 @@ def run_manifest(manifest_path, models=("ilp_v2", "heuristic"), time_limit=30,
                                 time_limit=time_limit, heur_variant=heur_variant,
                                 mip_gap=mip_gap)
         except Exception as e:
-            metrics = dict(model=model, status="error", feasible=0, utility="",
+            metrics = dict(model=model, status="error", model_feasible=0, utility="",
                            energy="", util_per_energy="", runtime="", gap="",
                            error=repr(e)[:200])
         w.writerow({**row, **metrics})

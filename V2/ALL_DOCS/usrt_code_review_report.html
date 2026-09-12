@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>USRT Implementation Review — Anomalies, Bugs &amp; Improvements</title>
+<title>USRT — Consolidated Issue Register (12 Sep 2026)</title>
 <style>
   :root {
     --bg: #f7f8fa;
@@ -115,517 +115,407 @@
 <body>
 
 <header>
-  <h1>USRT Implementation Review — Anomalies, Bugs, Edge Cases &amp; Improvements</h1>
-
-<style class="usrt-stale-reset">
-/* Scope-reset for the 4 Sep staleness notices.  Each notice paints its own
-   light background and dark ink inline, but descendants re-style themselves
-   from the host document -- notably code{background:var(--code-bg)}, which
-   under prefers-color-scheme:dark resolves to #24242b and rendered dark-on-
-   dark inside the notice.  Force code and inline emphasis to inherit. */
-.usrt-stale-2026-09-04 code{
-  background:rgba(0,0,0,.06)!important; color:inherit!important;
-  border:0!important; padding:.08em .34em!important; border-radius:4px!important;
-  font-size:.88em!important; text-shadow:none!important;
-  font-family:ui-monospace,SFMono-Regular,Consolas,monospace!important;
-}
-.usrt-stale-2026-09-04 b, .usrt-stale-2026-09-04 strong, .usrt-stale-2026-09-04 em,
-.usrt-stale-2026-09-04 i, .usrt-stale-2026-09-04 a{ color:inherit!important; }
-</style>
-<div class="usrt-stale-2026-09-04" style="margin:18px 0;padding:16px 18px;border:2px solid #b35900;border-left-width:7px;border-radius:9px;background:#fff4e5;color:#3d2a10;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;line-height:1.58;font-size:14.5px;"><div style="font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:10.5px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:#8a4500;margin-bottom:8px;">&#9888; BEHIND THE CODEBASE &middot; re-verified against the code 4 Sep 2026</div><p style='margin:0 0 10px'>Oldest document in <code>ALL_DOCS/</code> (12 Jun). Its framing is stale in two places &mdash; <b>&sect;A</b> (the energy constants were changed on 22 Aug, inverting its premise) and <b>C9</b> (the online phase is now fully implemented in <code>usrt/online/</code>).</p><p style='margin:0 0 10px'><b>But do not discard it.</b> Re-checked line by line on 4 Sep, these findings are <b>still live and unfixed</b>: <b>B2</b> (SPS capacity never released &mdash; the most consequential, and it was dropped from <code>audit_issues_22Aug.html</code>), <b>B5</b> (Phase&nbsp;6 aborts the whole search on one failed swap), <b>C7</b> (preemption model &mdash; the paper &sect;II says &ldquo;Preemptive&rdquo;, so DBF is correct and it is <code>Key_Notes&amp;Deductions.txt</code> that is stale), <b>C8</b> (<code>testcase.py</code> is not harmonic: 40 &#8740; 60), <b>D13</b> (repair can return PARTIAL and the v5 solvers never check).</p><p style='margin:0'>Fixed since: B6 (cp1252 crash &mdash; the CLIs force UTF-8), C10 (Phase&nbsp;3 now uses <code>min_possible_energy()</code>), and the Phase&nbsp;4 ordering.</p></div>
-
-  <p>Codebase: <code style="background:rgba(255,255,255,.15);color:#fff">C:\homogenous\V2</code> (root legacy solvers + modular <code style="background:rgba(255,255,255,.15);color:#fff">usrt/</code> package)</p>
-  <p>Reference: <em>"Utility aware Energy Constrained Real-Time Scheduling"</em> (Segmented_Workload_Scheduling_Shared_v2.pdf)</p>
-  <p>Review date: 2026-06-12 &nbsp;•&nbsp; Verified by source inspection + live run of <code style="background:rgba(255,255,255,.15);color:#fff">heuristic_v5b</code> on <code style="background:rgba(255,255,255,.15);color:#fff">testcase.py</code></p>
+  <h1>USRT &mdash; Consolidated Issue Register</h1>
+  <p>Single source of truth for bugs, gaps and open questions across the V2 codebase.</p>
+  <p>Verified against the live tree on <strong>12 September 2026</strong> &middot; supersedes
+     <code>audit_issues_22Aug.html</code>, <code>15Aug_Online_Audit.html</code> and the
+     12 Jun review that previously lived at this filename.</p>
 </header>
 
 <main>
 
+<section class="card" style="border-left:5px solid var(--accent)">
+  <h2 id="which" style="margin-top:.2rem">Which document should you use?</h2>
+  <p><strong>These two, and nothing else:</strong></p>
+  <table>
+    <tr><th>File</th><th>Role</th><th>When to use it</th></tr>
+    <tr><td><code>ALL_DOCS/ISSUES.md</code></td>
+        <td><strong>Working register</strong> &mdash; append findings as they are confirmed</td>
+        <td>Day to day. It is the file that gets edited.</td></tr>
+    <tr><td><code>ALL_DOCS/usrt_code_review_report.html</code> (this file)</td>
+        <td><strong>Readable snapshot</strong>, dated</td>
+        <td>To read the whole picture at once, or to hand to someone else.</td></tr>
+  </table>
+  <p class="muted">They are deliberately redundant: the register is cheap to append to and hard to
+  read whole; the snapshot is the reverse. Re-generate the snapshot when it drifts.</p>
+
+  <h3>Why the other three are retired</h3>
+  <table>
+    <tr><th>Document</th><th>Was right about</th><th>Was wrong or stale</th></tr>
+    <tr><td><code>usrt_code_review_report.html</code><br><span class="muted">12 Jun &mdash; the version this replaces</span></td>
+        <td>B2 (SPS capacity), B5 (swap abort), D13 (repair PARTIAL) &mdash; all real, all survived scrutiny</td>
+        <td>&sect;A inverted: it argued <code>&alpha;=1.0, &beta;=0.5</code> kills DVFS; the constants changed on 22 Aug, so the premise is gone. C9 (online unimplemented) is done.</td></tr>
+    <tr><td><code>audit_issues_22Aug.html</code></td>
+        <td>The experiment-validity items (B1&ndash;B3) and the generator items</td>
+        <td><strong>Silently dropped B2</strong> &mdash; the most consequential bug in the tree at the time &mdash; on the incorrect assumption it had been fixed. Predates v7 and ILP v3/v4.</td></tr>
+    <tr><td><code>15Aug_Online_Audit.html</code></td>
+        <td>The online DP is correct, and &ldquo;frequency inert at B=400&rdquo; is a <em>regime effect, not a bug</em> &mdash; still the right call</td>
+        <td>Predates Phase 6b, and predates the ONLINE-FREQ violation found on 12 Sep, which it did not look for.</td></tr>
+  </table>
+  <div class="evidence"><strong>Short answer.</strong> None of the three was <em>correct</em> on its
+  own. Each was accurate at its date and each missed something the others caught &mdash; which is
+  exactly why they are consolidated here.</div>
+</section>
+
 <nav class="toc">
   <strong>Contents</strong>
   <ul>
-    <li><a href="#secA">A. Fundamental model anomaly — energy constants disable DVFS</a></li>
-    <li><a href="#secB">B. Genuine bugs (6)</a></li>
-    <li><a href="#secC">C. Paper ↔ implementation ↔ notes contradictions (4)</a></li>
-    <li><a href="#secD">D. Edge cases &amp; hygiene issues (5)</a></li>
-    <li><a href="#secE">E. Suggested improvements (6)</a></li>
-    <li><a href="#secF">F. What was verified as correct</a></li>
-    <li><a href="#secG">G. Priority summary table</a></li>
+    <li><a href="#live">1. Live issues</a> &mdash; 1 critical &middot; 0 high &middot; 4 medium &middot; 4 low/latent</li>
+    <li><a href="#gaps">2. Feature gaps</a> (not defects)</li>
+    <li><a href="#fixed">3. Fixed &mdash; closed ledger</a></li>
+    <li><a href="#notdefect">4. Examined, not defects</a></li>
+    <li><a href="#unverified">5. Unverified carry-overs</a></li>
   </ul>
 </nav>
 
-<!-- ════════════════════════════ SECTION A ════════════════════════════ -->
-<h2 id="secA">A. Fundamental Anomaly — Energy Constants Invert the DVFS Premise</h2>
-<div class="usrt-stale-2026-09-04" style="margin:10px 0;padding:10px 13px;border-left:5px solid #b3261e;background:#fdecea;color:#4a1512;border-radius:0 7px 7px 0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:13.5px;line-height:1.55;"><span style="font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:10px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#8c1d18;display:block;margin-bottom:5px;">NOT IN CODEBASE &middot; 4 Sep 2026</span><b>Premise inverted since 22 Aug.</b> The constants are now <b>&alpha;=0.15, &beta;=1.0</b>, so f* &asymp; 0.42 and frequency scaling <i>does</i> save energy. The anomaly this section describes was resolved by changing the constants, not the code.</div>
-
-
-<section class="card">
-  <span class="badge crit">Critical</span>
-  <span class="loc">usrt/models.py:10-11</span> &nbsp; <span class="loc">ILP.py:51-52</span>
-  <h3>The chosen α = 1.0, β = 0.5 make f<sub>max</sub> the energy-optimal frequency — so frequency scaling can never save energy</h3>
-
-  <p>The paper's energy model (Eq. 2) is implemented faithfully:</p>
-  <div class="formula">
-    E(i, k, z) = α · (Σe<sub>i,q</sub> / f<sub>z</sub>) + β · f<sub>z</sub>² · Σe<sub>i,q</sub>
-    &nbsp;&nbsp;⟹&nbsp;&nbsp; energy per unit work: g(f) = α/f + β·f²
-  </div>
-  <p>The minimum of g(f) is at the <strong>critical frequency</strong> f* = (α / 2β)<sup>⅓</sup>.
-  With α = 1.0, β = 0.5: &nbsp; f* = (1.0 / 1.0)<sup>⅓</sup> = <strong>1.0 = f<sub>max</sub> exactly</strong>.
-  For every f &lt; 1, g′(f) &lt; 0 — energy strictly <em>decreases</em> as frequency <em>increases</em>.</p>
-
-  <div class="evidence"><strong>Verified numerically:</strong>
-  <pre>f=0.3: energy per unit work = 3.3783
-f=0.5: energy per unit work = 2.1250
-f=0.7: energy per unit work = 1.6736
-f=0.9: energy per unit work = 1.5161
-f=1.0: energy per unit work = 1.5000   ← global minimum
-critical frequency (α/2β)^(1/3) = 1.0</pre></div>
-
-  <p><strong>Cascading consequences — large parts of the published algorithm are dead code:</strong></p>
-  <table>
-    <tr><th>Paper element</th><th>Code location</th><th>Status under α=1, β=0.5</th></tr>
-    <tr>
-      <td>Heuristic step 4 — "reduce freq first … until timing/energy constraints are satisfied"</td>
-      <td><span class="loc">usrt/phases/aggressive.py</span> (Phase 4)</td>
-      <td>Structural no-op. The code itself prints <em>"No reductions (α=1.0, β=0.5 → min energy at f_max → no-op)"</em>.</td>
-    </tr>
-    <tr>
-      <td>Ch1 — "time slack available but energy not → decrease frequency of J*"</td>
-      <td>Phase 5 logic, all solvers</td>
-      <td>Never beneficial — decreasing frequency costs energy, never frees it.</td>
-    </tr>
-    <tr>
-      <td>Ch2 — "(time slack avail, energy budget not) incrementally dec freq of others"</td>
-      <td><span class="loc">usrt/phases/greedy.py:89-125</span> (Case ii.B)</td>
-      <td>Dead code: <code>esaved</code> is always ≤ 0, so the <code>continue</code> on line 103 always fires.</td>
-    </tr>
-    <tr>
-      <td>Online options 3 &amp; 4 (Section VI) — trade Δt ↔ Δe via frequency</td>
-      <td>(not implemented — see C.9)</td>
-      <td>Would be meaningless under these constants anyway.</td>
-    </tr>
-  </table>
-
-  <p>The net effect: the entire problem degenerates into <strong>binary segment selection (knapsack) at f<sub>max</sub></strong> under timing (per-processor DBF) and one global energy cap.
-  <span class="loc">usrt/solvers/heuristic_claudeoptimal.py:10-14</span> states this explicitly as its "key insight."
-  This means the v1–v5 experiments <em>never exercise the frequency-assignment dimension</em> that distinguishes USRT from plain reward-based scheduling.</p>
-
-  <div class="fix"><strong>Fix:</strong> choose constants whose critical frequency lies <em>inside</em> the frequency range, e.g.
-  α = 0.15, β = 1.0 ⟹ f* = (0.15/2)<sup>⅓</sup> ≈ 0.42 — then DVFS decisions become real trade-offs and
-  Phase 4 / Case ii.B / Ch2 paths come alive. Re-run all solver comparisons afterwards; the v1–v5 ranking will likely change.
-  If the constants are intentional, the paper's Section V narrative (freq-decrease cases) must be rewritten to match what is actually evaluated.</div>
-</section>
-
-<!-- ════════════════════════════ SECTION B ════════════════════════════ -->
-<h2 id="secB">B. Genuine Bugs</h2>
+<h2 id="live">1. Live issues</h2>
+<p class="muted">Every entry was re-checked against the tree on 12 Sep 2026. &ldquo;Evidence&rdquo;
+means a measurement taken that day, not a claim carried from an earlier document.</p>
 
 <section class="card">
   <span class="badge crit">Critical</span>
-  <span class="loc">usrt/state.py:185-206</span> &nbsp; <span class="loc">usrt/phases/aggressive.py:55-72</span>
-  <h3>B1. <code>ScheduleState.try_dec_freq</code> has no energy guard — heuristic_v1 can violate the energy budget (constraint C3)</h3>
-  <p><code>try_dec_freq</code> checks <em>timing only</em>, then unconditionally executes
-  <code>self.slack_energy -= delta_e</code>. Under the default constants, decreasing frequency
-  <em>increases</em> energy (delta_e &gt; 0), so energy slack silently goes negative.</p>
-  <pre><span class="cm"># usrt/state.py — try_dec_freq (abridged)</span>
-delta_e  = _energy(cum_ik, new_fz) - _energy(cum_ik, old_fz)   <span class="bad"># &gt; 0 under default α,β</span>
-<span class="cm"># timing windows are checked here …</span>
-<span class="bad"># … but there is NO check:  if delta_e &gt; self.slack_energy: return False</span>
-self.freq_idx[(i, j)] = z_cur - 1
-self.slack_energy -= delta_e        <span class="bad"># can go negative → budget B violated</span></pre>
-  <p>It is invoked in a loop by <code>aggressive_freq_scaling_state</code> (used by <strong>heuristic_v1</strong>):
-  <code>while state.try_dec_freq(i, j): …</code> — which drives every job toward f<sub>min</sub>
-  subject only to timing, wasting energy and potentially exceeding budget <em>B</em> before Phase 3 even starts.</p>
-  <p>Contrast with the dict-based variant <span class="loc">usrt/phases/aggressive.py:43-44</span>, which correctly requires
-  <code>E_new &lt; E_cur</code> before applying a reduction.</p>
-  <div class="fix"><strong>Fix:</strong> in <code>try_dec_freq</code>, add both
-  (1) an energy-improvement test (<code>delta_e &lt; 0</code>) or at minimum
-  (2) a budget guard <code>if delta_e &gt; self.slack_energy + 1e-9: return False</code> —
-  mirroring the guard that <code>try_inc_seg</code>/<code>try_inc_freq</code> already have.</div>
-</section>
-
-<section class="card">
-  <span class="badge crit">Critical</span>
-  <span class="loc">usrt/mapping/quantum.py:71-99, 127-131</span>
-  <h3>B2. Quantum SPS capacity accounting never releases completed jobs — Phase 1 degenerates for most of the hyper-period</h3>
-<div class="usrt-stale-2026-09-04" style="margin:10px 0;padding:10px 13px;border-left:5px solid #1b5e20;background:#e9f5ea;color:#14351a;border-radius:0 7px 7px 0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:13.5px;line-height:1.55;"><span style="font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:10px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#1b5e20;display:block;margin-bottom:5px;">STILL LIVE &middot; 4 Sep 2026</span><b>Still unfixed as of 4 Sep 2026</b>, and re-confirmed with the same numbers (22/30 jobs bypass SPS on <code>testcase.py</code>). This item was <i>omitted</i> from the 22 Aug consolidated audit, so it has been invisible since. The fix proposed here &mdash; time-windowed capacity, releasing <code>e_m/p_i</code> when a job&rsquo;s deadline passes &mdash; is still the right one.</div>
-
-  <p><code>proc_util[px] += e_m / p_i</code> is accumulated for <em>every job ever assigned</em> and is
-  <strong>never decremented when a job's deadline passes</strong>. A task therefore contributes
-  <code>N_job × (e_m/p_i)</code> to the running total instead of its true utilization <code>e_m/p_i</code>.
-  Capacity (<code>1.0 − proc_util[x]</code>) is exhausted early and every later quantum appears overloaded.</p>
-
-  <div class="evidence"><strong>Confirmed by live run</strong> (<code>python run.py testcase.py heuristic_v5b</code>):
-  <pre>  [   0,  10]   util=0.674
-  [  10,  20]   util=0.919
-  [  20,  30]   OVER(util=1.164)
-  [  30,  40]   MAND_OVERUTIL      <span class="bad">← every remaining quantum reports this</span>
-  …
-  [ 110, 120]   MAND_OVERUTIL
-
-  [!] 22 leftover/unmapped job(s). Assigning to min-util processor.   <span class="bad">← 22 of 30 jobs bypass SPS</span>
-  DBF: FEASIBLE ✓   <span class="cm">← schedule rescued only by the repair pass</span>
-
-  Processor utilisation after SPS:
-    P0: 15 jobs  util=3.1495  ← OVER 1.0     <span class="bad">← same broken metric; actual EDF schedule is feasible</span>
-    P1: 15 jobs  util=3.3469  ← OVER 1.0</pre></div>
-
-  <p>So on this testcase, "Phase 1: Quantum SPS" is effectively <em>SPS for the first ~25% of the
-  hyper-period, then a greedy min-util fallback plus DBF repair</em>. Any experimental claim about
-  the quality of the SPS mapping is not being measured. The <code>util=3.25 ← OVER 1.0</code>
-  diagnostics printed by v5a/v5b solvers use the same flawed cumulative metric and falsely alarm on
-  feasible schedules.</p>
-  <div class="fix"><strong>Fix:</strong> make capacity time-windowed: subtract a job's
-  <code>e_m/p_i</code> from <code>proc_util</code> at the quantum where its deadline passes
-  (event-based release), or evaluate utilization per quantum interval over the jobs whose windows
-  overlap it, instead of a monotone cumulative sum. Update the post-SPS diagnostic to print true
-  task-level utilization (Σ over <em>tasks</em>, not jobs).</div>
-</section>
-
-<section class="card">
-  <span class="badge high">High</span>
-  <span class="loc">usrt/phases/greedy_state.py:50-64</span>
-  <h3>B3. heuristic_v1 Phase 3 can strip a high-utility segment to admit a low-utility one — and never rolls back failed freeing moves</h3>
-  <p>Move (B) calls <code>try_dec_seg</code> on <em>any</em> overlapping job, with
-  <strong>no utility-density comparison</strong>. The paper's Ch3 explicitly restricts segment
-  removal to <em>"jobs with lower utility density"</em>. Because <code>job_order</code> visits
-  high-u jobs first, by the time a low-u job j* is processed, overlapping high-u jobs are fair
-  game for stripping — net utility can <em>decrease</em>.</p>
-  <pre><span class="cm"># (B) decrement segment of an overlapping job — no u_i guard:</span>
-for (ii, jj) in overlapping:
-    if state.seg_k[(ii, jj)] &gt; 0:
-        if state.try_dec_seg(ii, jj):   <span class="bad"># may remove a HIGHER-utility segment</span>
-            freed = True
-            break
-…
-if not state.try_inc_seg(i, j):
-    break                               <span class="bad"># freeing move NOT rolled back → utility lost for nothing</span></pre>
-  <div class="fix"><strong>Fix:</strong> (1) guard move (B) with
-  <code>u_other · Δe_other &lt; u_star · Δe_star</code> (compare marginal utilities, not just u_i);
-  (2) snapshot the freeing move and revert it if the follow-up <code>try_inc_seg</code> fails.</div>
-</section>
-
-<section class="card">
-  <span class="badge high">High</span>
-  <span class="loc">usrt/phases/greedy_leftshift.py:141-173</span>
-  <h3>B4. heuristic_v2's "last resort" step conflates paper cases Ch2 and Ch3 and has no net-utility check</h3>
-  <p>Step 3 <em>simultaneously</em> decrements the other job's frequency <strong>and</strong> removes
-  one of its segments (<code>z_o_new = z−1</code> and <code>k_o_new = k−1</code> in one move).
-  The paper treats these as separate cases: Ch2 = adjust frequency of others (utility preserved),
-  Ch3 = remove segments of <em>lower utility-density</em> jobs. The only guard here is
-  <code>u_other &lt; u_star</code>, which ignores <strong>segment sizes</strong>:</p>
-  <div class="formula">
-    Example: remove a 3.0-unit segment of a u=2.0 task (−6.0 utility) to add a 0.5-unit segment of a
-    u=2.1 task (+1.05 utility) ⟹ net <strong>−4.95</strong> — accepted by the current guard.
-  </div>
-  <p>It is also gated by a magic constant <code>E_SLACK_THRESHOLD = 1.0</code> with no justification
-  or scaling to the instance.</p>
-  <div class="fix"><strong>Fix:</strong> split into two moves matching Ch2/Ch3; accept only if
-  <code>u_star·e_seg_star − u_other·e_seg_other &gt; 0</code> (net marginal utility positive);
-  derive the slack threshold from instance scale (e.g., fraction of B) or remove the gate.</div>
+  <span class="loc">usrt/online/controller.py:273, 299, 314 &middot; root cause usrt/online/dp.py:111</span>
+  <h3>ONLINE-FREQ &mdash; the online phase revises the frequency of a job that has already started</h3>
+  <p>Paper &sect;II: <em>once a job starts executing it cannot execute with a different frequency.</em>
+  The online DP chain is ordered by EDF (<code>(deadline, release, task, job)</code>), and
+  <code>on_completion</code> re-plans every job at chain position <code>&gt; c</code>, writing a new
+  <code>freq_idx</code> at three sites.</p>
+  <p>Under <strong>non</strong>-preemptive execution, &ldquo;later in the chain&rdquo; implies
+  &ldquo;not yet started&rdquo;, and those writes are safe. Under <strong>preemptive</strong> EDF it
+  does not: a long-period job can start, be preempted by a shorter-period release, and still sit
+  downstream in deadline order &mdash; so it becomes eligible for revision after it has already run.</p>
+  <div class="evidence"><strong>Evidence.</strong> Verified live 12 Sep 2026 with a reproducer
+  (<code>ALL_DOCS/repro_online_freq_inflight.py</code>): violation observed in <strong>3 of 4</strong>
+  configurations.</div>
+  <div class="fix"><strong>Impact.</strong> Any online result where a preempted job&rsquo;s frequency
+  was revised is inadmissible under &sect;II, and both its reported energy and its DBF check are
+  computed at the wrong frequency. This <em>invalidates</em> affected online numbers rather than
+  merely degrading them.</div>
 </section>
 
 <section class="card">
   <span class="badge med">Medium</span>
-  <span class="loc">usrt/phases/swap.py:119-126</span>
-  <h3>B5. Phase 6 swap aborts the entire search when one candidate fails the timing re-check</h3>
-  <p>If the best (giver → receiver) swap fails the full <code>check_all_timing</code>, the loop
-  executes <code>break</code> — terminating the whole local search instead of blacklisting that
-  pair and trying the next-best candidate. Remaining improving swaps are silently abandoned.</p>
-  <p>Note the deeper inconsistency: <code>min_slack_for_job</code> evaluates exactly the windows
-  affected by adding execution time to the receiver, so the revert path should be
-  <em>unreachable</em>. If it ever fires, it signals a state-consistency bug elsewhere — which
-  makes silently breaking doubly wrong.</p>
-  <div class="fix"><strong>Fix:</strong> maintain a set of rejected (giver, receiver) pairs for the
-  current iteration and <code>continue</code> the search; log loudly (or assert) when the
-  "unreachable" revert triggers.</div>
+  <span class="loc">usrt/phases/freq_trade.py</span>
+  <h3>6B-INERT &mdash; Phase 6b never fires</h3>
+  <p>Phase 6b is the shadow-price frequency&harr;segment trade
+  (<code>&lambda;&middot;&Delta;E &gt; &mu;&middot;&Delta;T</code>), credited in its own docstring with
+  closing a gap that leaves the heuristic <strong>40&ndash;58% below the exact optimum once energy
+  binds</strong>. It does not fire.</p>
+  <div class="evidence"><strong>Evidence.</strong> 0 moves in 72 instances (4 Sep) and 0 in 20
+  instances (12 Sep re-check), across &rho; = 0.4&ndash;1.0. In the 4 Sep run &lambda; was positive
+  &mdash; something <em>was</em> energy-blocked &mdash; in 26 of 72 instances, and still no move was
+  made.</div>
+  <p>Three causes, traced on a live instance:</p>
+  <ul>
+    <li><strong>&mu; is a global price for a per-processor resource.</strong> With &mu;=0 the model
+    concludes &ldquo;time is free&rdquo;. In the traced case the chosen donor freed exactly the energy
+    the target needed and spent exactly the window slack the target needed &mdash; on the same core.
+    Net: zero segments added.</li>
+    <li><strong>Atomicity.</strong> <code>&lambda;&middot;&Delta;E &gt; &mu;&middot;&Delta;T</code> is
+    a marginal, continuous criterion, but segments are indivisible. One downshift must free an
+    entire shortfall or it yields nothing. Phase 5&rsquo;s case ii.B handles this correctly by
+    stacking donors until <code>gained &ge; need</code>; 6b makes exactly one downshift per round.</li>
+    <li><strong>It gives up immediately</strong> &mdash; <code>break</code> on the first
+    non-improving round rather than trying the next-best candidate.</li>
+  </ul>
+  <div class="fix"><strong>Not a regression risk.</strong> 6b keeps a best-so-far and restores it, so
+  it provably cannot return a worse schedule. The cost is that a documented gap is recorded as closed
+  when it is not. The 40&ndash;58% figure predates the <code>spec.py</code> rewrite and has never been
+  re-measured against the current generator.</div>
 </section>
 
 <section class="card">
   <span class="badge med">Medium</span>
-  <span class="loc">usrt/output.py:18</span> &nbsp; <span class="loc">run.py</span>
-  <h3>B6. Every solver crashes on a default Windows console (cp1252) before doing any work</h3>
-  <pre>UnicodeEncodeError: 'charmap' codec can't encode character 'α' in position 24</pre>
-  <p><code>print_instance_summary</code> emits α, β, ←, ─ and box-drawing characters. On Windows
-  with the default cp1252 console encoding, the program dies at the banner. Reproduced during this
-  review; the workaround was <code>PYTHONIOENCODING=utf-8</code>.</p>
-  <div class="fix"><strong>Fix:</strong> add at the top of <code>run.py</code>:
-  <code>sys.stdout.reconfigure(encoding="utf-8", errors="replace")</code> (Python ≥ 3.7), or
-  replace the special characters with ASCII (<code>alpha=</code>, <code>beta=</code>, <code>-&gt;</code>).</div>
-</section>
-
-<!-- ════════════════════════════ SECTION C ════════════════════════════ -->
-<h2 id="secC">C. Paper ↔ Implementation ↔ Notes Contradictions</h2>
-
-<section class="card">
-  <span class="badge crit">Critical</span>
-  <span class="loc">Key_Notes&amp;Deductions.txt</span> vs <span class="loc">usrt/dbf/*</span> &amp; paper §II
-  <h3>C7. Preemption model conflict — DBF is not a sufficient test if optional segments are atomic</h3>
-  <p>Your notes state: <em>"Preemption is NOT allowed mid-segment. Optional segments are atomic
-  blocks — limited preemption windows only."</em> The paper states: <strong>Preemptive EDF</strong>.
-  Every feasibility check in the codebase (<code>check_all_timing</code>,
-  <code>check_dbf_proc</code>, ILP constraint C2, <code>ScheduleState</code> windows) is the
-  classical <em>fully-preemptive</em> EDF demand-bound test.</p>
-  <p>Under limited preemption (segment-atomic execution), the DBF condition is
-  <strong>necessary but not sufficient</strong>: a lower-priority job's non-preemptable block can
-  push a higher-priority job past its deadline even when all window demands fit. As written,
-  every solver (and the ILP) can certify schedules that are <em>infeasible</em> under the
-  segment-atomic model in the notes.</p>
-  <div class="fix"><strong>Decide which model is real, then:</strong> if fully preemptive — fix the
-  notes; if segment-atomic — augment the test with a blocking term
-  (DBF(t1,t2) + max non-preemptable block of jobs with deadline &gt; t2 ≤ t2−t1, i.e., the
-  non-preemptive/limited-preemptive EDF analysis), and re-validate all reported results.</div>
-</section>
-
-<section class="card">
-  <span class="badge high">High</span>
-  <span class="loc">testcase.py</span> vs paper §II (Task Model)
-  <h3>C8. Testcase violates the paper's harmonic-period assumption</h3>
-  <p>The paper assumes <strong>harmonic periods</strong> (each period divides every larger one).
-  The testcase uses periods {10, 20, 20, 40, 60, 120}: 40 ∤ 60, so the set is <em>not</em>
-  harmonic. The code survives via <code>h = lcm = 120</code>, but any analytical claim that leans
-  on harmonicity (nesting of DBF windows, quantum classification, online DP bounds) is not actually
-  covered by this instance.</p>
-  <div class="fix"><strong>Fix:</strong> either make the testcase harmonic (e.g., replace p=60 with
-  p=80 or p=40·2<sup>k</sup>), or formally relax the assumption in the paper (the implementation
-  already handles general periods through the LCM).</div>
-</section>
-
-<section class="card">
-  <span class="badge high">High</span>
-  <span class="loc">usrt/ (entire package)</span> vs paper §VI
-  <h3>C9. Section VI (Online phase) is entirely unimplemented</h3>
-<div class="usrt-stale-2026-09-04" style="margin:10px 0;padding:10px 13px;border-left:5px solid #b3261e;background:#fdecea;color:#4a1512;border-radius:0 7px 7px 0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:13.5px;line-height:1.55;"><span style="font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:10px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#8c1d18;display:block;margin-bottom:5px;">NOT IN CODEBASE &middot; 4 Sep 2026</span><b>No longer true.</b> <code>usrt/online/</code> implements the whole of paper &sect;VI: per-processor DP, the 4-option action set, a semaphore-guarded shared energy pool, density arbitration and a commit-time dynamic-DBF guarantee.</div>
-
-  <p>A grep across <code>usrt/</code> finds no code for early completion, time/energy slack
-  harvesting, the DP-based (Δt, Δe) distribution, or the two-early-completions approximation. If
-  the online algorithm is part of the paper's contribution list, this is the largest open gap:
-  there is nothing to evaluate it with.</p>
-  <div class="fix"><strong>Fix / plan:</strong> implement as a discrete-event simulator over the
-  offline schedule: sample actual execution times &lt; WCET, detect early completion, and apply the
-  right-to-left DP from §VI. The offline DBF window structures in <code>usrt/dbf/</code> can be
-  reused for the bound computation the paper asks for ("better bounds must be computed from
-  schedule").</div>
+  <span class="loc">usrt/phases/swap.py:126</span>
+  <h3>SWAP-BREAK &mdash; Phase 6 aborts the whole search on one failed candidate</h3>
+  <p>When the best candidate fails <code>check_all_timing</code>, the else-branch executes
+  <code>break</code>, ending the local search and discarding every remaining improving candidate from
+  the same scan.</p>
+  <div class="fix"><strong>The deeper point.</strong> <code>min_slack_for_job</code> evaluates exactly
+  the windows affected by adding time to the receiver, so <strong>the revert path should be
+  unreachable</strong>. If it ever fires, that signals a state-consistency bug elsewhere &mdash; which
+  makes silently breaking doubly wrong. Fix: blacklist the pair and <code>continue</code>,
+  <em>and</em> assert or log loudly on the supposedly-unreachable revert. Fixing only the
+  <code>break</code> hides a real bug.</div>
 </section>
 
 <section class="card">
   <span class="badge med">Medium</span>
-  <span class="loc">usrt/solvers/heuristic_v5a.py:98-102</span> (same in v5b, v3, v4)
-  <h3>C10. Infeasible-mandatory early exit gives up too early for general (α, β)</h3>
-  <p>Phase 3 declares the instance infeasible if mandatory-at-f<sub>max</sub> exceeds B. That is
-  only valid when f<sub>max</sub> is energy-minimal (the current, degenerate constants). With
-  corrected constants (critical frequency &lt; 1), mandatory segments at a <em>lower</em> frequency
-  are cheaper — the instance may be perfectly feasible.</p>
-  <div class="fix"><strong>Fix:</strong> before declaring infeasibility, scale mandatory segments to
-  their energy-minimal feasible frequency (subject to DBF), then test the budget. This also matches
-  the paper's step ordering (step 4 reduces frequency precisely to create energy slack).</div>
+  <span class="loc">usrt/solvers/heuristic_v3.py, v4.py, v5a.py (missing) vs v5b, v6, v7, claudeoptimal (present)</span>
+  <h3>V5AB-COMPARE &mdash; the variant ladder is not a controlled comparison</h3>
+  <p>Phase 6b is applied to <strong>4 of 7</strong> heuristic variants: present in
+  <code>v5b</code>, <code>v6</code>, <code>v7</code>, <code>claudeoptimal</code>; absent from
+  <code>v3</code>, <code>v4</code>, <code>v5a</code>.</p>
+  <div class="evidence"><strong>Evidence.</strong> 12 Sep 2026, direct grep of
+  <code>phase_freq_utility_trade</code> across all seven solvers.</div>
+  <div class="fix"><strong>Consequence.</strong> <code>v5a</code> vs <code>v5b</code> is read as
+  &ldquo;Refine 2a vs 2b&rdquo;, but it is really &ldquo;2a without 6b vs 2b with 6b&rdquo;. The
+  &ldquo;one capability per step&rdquo; reading of the ladder no longer holds. <em>Note:</em> given
+  6B-INERT above, 6b currently contributes nothing measurable, so the confound may be
+  <strong>nominal rather than actual</strong> &mdash; but the ladder should still be made honest.</div>
 </section>
-
-<!-- ════════════════════════════ SECTION D ════════════════════════════ -->
-<h2 id="secD">D. Edge Cases &amp; Hygiene</h2>
 
 <section class="card">
   <span class="badge med">Medium</span>
-  <h3>D11. Floating-point drift in incrementally-maintained slack</h3>
-  <p><span class="loc">usrt/phases/greedy.py</span> / <span class="loc">swap.py</span> maintain
-  <code>E_slack</code> by hundreds of incremental <code>±=</code> updates, each accepted with a
-  <code>1e-9</code> tolerance; <span class="loc">usrt/state.py</span> does the same for DBF window
-  slack with no re-synchronisation. Accumulated drift can both leak budget and spuriously reject
-  moves.</p>
-  <div class="fix"><strong>Fix:</strong> recompute <code>E_slack</code> (and optionally DBF) exactly
-  from scratch once per outer pass — cheap, and bounds drift to one pass.</div>
+  <span class="loc">usrt/solvers/online_demo.py</span>
+  <h3>ONLINE-DEMO &mdash; the online entry point does not run the pipeline it claims</h3>
+  <p><code>offline_schedule()</code> calls <code>quantum_sps_mapping</code> and the phases
+  <strong>directly</strong> instead of <code>heuristic_v5b.run()</code>, so it has neither the
+  Phase 3 <code>min_possible_energy</code> gate nor Phase 6b.</p>
+  <div class="evidence"><strong>Evidence.</strong> 12 Sep 2026: <code>online_demo.py</code> imports
+  <code>quantum_sps_mapping</code> and never references <code>heuristic_v5b</code>.</div>
+  <div class="fix">Harmless at B=400 where both are no-ops; divergent at tight &rho; &mdash; which is
+  exactly the regime where online results matter most.</div>
+</section>
+
+<section class="card">
+  <span class="badge low">Low / latent</span>
+  <span class="loc">18 sites &middot; heuristic_v1..v7, ilp_v2/v3/v4, adapters.py, online/controller.py, ILP.py</span>
+  <h3>FREQ-SET &mdash; <code>processors[0]['frequencies']</code> assumed for every processor</h3>
+  <p>Paper &sect;VII.A(i) generates a <strong>distinct</strong> frequency set per processor and forces
+  <code>f_max = 1.0</code> on only <em>some</em>. The code reads <code>processors[0]</code> in 18
+  places. Latent only because <code>generate.py</code> currently gives every processor the same list.</p>
+  <div class="fix"><strong>Related.</strong> <code>repair.py:44</code> and
+  <code>refine_mapping.py:75</code> use raw <code>e_m</code> as demand, i.e. they assume
+  <code>max(frequencies) == 1.0</code>. A set topping out at 0.9 makes both DBF checks optimistic.
+  Blocks paper &sect;VII.A fidelity; costs nothing today.</div>
 </section>
 
 <section class="card">
   <span class="badge low">Low</span>
-  <h3>D12. <code>int(t['p_i'])</code> silently truncates non-integer periods</h3>
-  <p><span class="loc">usrt/utils.py:67</span> and several other places cast periods with
-  <code>int()</code>. A period of 10.5 silently becomes 10, corrupting release times, deadlines,
-  the hyper-period, and the quantum.</p>
-  <div class="fix"><strong>Fix:</strong> <code>assert float(t['p_i']).is_integer()</code> at load
-  time (in <code>load_testcase</code>), or support rational periods explicitly.</div>
-</section>
-
-<section class="card">
-  <span class="badge med">Medium</span>
-  <h3>D13. Repair can return PARTIAL and the v5 solvers never check</h3>
-  <p><span class="loc">usrt/mapping/repair.py:60</span> caps repair at 100 iterations and returns
-  <code>(mapping, ok)</code>; <code>quantum_sps_mapping</code> prints "PARTIAL" but
-  <strong>still returns the broken mapping</strong>, and v5a/v5b proceed to optimise optional
-  segments on top of an infeasible mandatory mapping without ever re-checking.</p>
-  <div class="fix"><strong>Fix:</strong> propagate the feasibility flag out of
-  <code>quantum_sps_mapping</code> and hard-stop (or fall back to fewer optionals / report
-  infeasible) in the solvers when repair fails.</div>
+  <span class="loc">testcase.py</span>
+  <h3>C8-HARMONIC &mdash; the hand-written testcase is not harmonic</h3>
+  <p>Periods are <code>10, 20, 20, 40, 60, 120</code>. The paper assumes a harmonic chain, and
+  <code>40 &#8740; 60</code>, so this instance sits outside the stated model. Still true on 12 Sep.</p>
+  <div class="fix">The <em>generator</em> is correct &mdash; <code>usrt/gen/spec.py</code> builds
+  periods as <code>base &times; 2^m</code>, so every generated set is harmonic. Only the legacy
+  hand-written <code>testcase.py</code> violates it. Since that file is the default for
+  <code>run.py</code> and appears throughout the docs, any single-instance figure quoted from it is
+  off-model. Cheapest fix: change 60 to 80.</div>
 </section>
 
 <section class="card">
   <span class="badge low">Low</span>
-  <h3>D14. The "left-shift" diagnostic raises false alarms</h3>
-  <p>Phase 2 simulates <em>non-preemptive</em> EDF while the model is preemptive. On the live run
-  it printed <em>"Jobs with negative left-shift slack: 6, min −17.67"</em> for a schedule that is
-  provably DBF-feasible. A reader of the log would conclude the schedule is broken.</p>
-  <div class="fix"><strong>Fix:</strong> label the output explicitly as a non-preemptive
-  lower-bound proxy ("informational, not a feasibility verdict"), or compute slack from the DBF
-  windows instead.</div>
+  <span class="loc">usrt/solvers/heuristic_v6.py</span>
+  <h3>DEAD-CODE &mdash; unused imports in <code>heuristic_v6</code></h3>
+  <p>Three names are imported and never used: <code>compute_energy_slack</code>,
+  <code>estimate_operating_freq</code>, <code>is_energy_bound</code>.</p>
+  <div class="evidence"><strong>Evidence.</strong> AST scan, 12 Sep 2026.</div>
+  <div class="fix"><strong>Half of the original claim (22Aug F2) is false.</strong> It also said
+  <code>greedy_leftshift.py</code> and <code>greedy_state.py</code> were &ldquo;possibly
+  orphaned&rdquo;. They are not &mdash; both are imported by <code>heuristic_v1</code> and
+  <code>heuristic_v2</code>, and deleting them would break <code>run.py</code>. Ready: delete three
+  import names, nothing else.</div>
 </section>
 
 <section class="card">
-  <span class="badge med">Medium</span>
-  <h3>D15. heuristic_v1's single-pass SPS is window-blind and unrepaired</h3>
-  <p><span class="loc">usrt/mapping/single_pass.py</span> balances <code>e_m/p_i</code> over the
-  whole hyper-period with no awareness of <em>when</em> jobs execute and runs <strong>no DBF check
-  or repair</strong>. Jobs sharing the same activation window can pile onto one processor while the
-  balance metric looks perfect; infeasibility is only <em>reported</em> (not fixed) in the final
-  printout (<code>DBF feasible : False</code>).</p>
-  <div class="fix"><strong>Fix:</strong> run <code>check_dbf_mandatory</code> + <code>repair_mapping</code>
-  after the single-pass mapping, exactly as the quantum variant does.</div>
+  <span class="badge low">Low</span>
+  <span class="loc">25 sites &middot; usrt/**</span>
+  <h3>INT-PERIOD &mdash; <code>int(t['p_i'])</code> silently truncates non-integer periods</h3>
+  <p>Periods are coerced with <code>int()</code> in 25 places. A period of <code>10.7</code> becomes
+  <code>10</code> with no warning, changing the hyper-period, the job count and every deadline.
+  Harmless while all generators emit integers; a silent corruption if that ever changes.</p>
+  <div class="fix">Cheapest fix: validate once at load time in <code>load_testcase</code> and raise,
+  rather than truncating in 25 places.</div>
 </section>
 
-<!-- ════════════════════════════ SECTION E ════════════════════════════ -->
-<h2 id="secE">E. Suggested Improvements</h2>
+<h2 id="gaps">2. Feature gaps &mdash; not defects</h2>
+<p class="muted">Known-absent work. Listed so they are not rediscovered as bugs.</p>
+<table>
+  <tr><th>ID</th><th>Gap</th><th>Where</th><th>Note</th></tr>
+  <tr><td>NO-TESTS</td><td>No test suite exists at all</td><td>&mdash;</td>
+      <td>Zero test files, no <code>conftest.py</code>, no pytest config; <code>pytest</code> is not
+      installed. The only executable self-check is <code>worked_examples.verify()</code>.
+      <strong>Blocks safe work on everything else.</strong> Decision needed: golden baseline only
+      (~20 min) or golden plus invariant suite (~1 h).</td></tr>
+  <tr><td>IXB-ROUTING</td><td>Paper &sect;IX.B opportunity-cost energy routing unimplemented</td>
+      <td><code>usrt/online/density.py:45</code></td>
+      <td>Implemented instead: Approach C proportional density split, which <em>always</em> splits, so
+      two equal-density processors are each capped at half the pool <em>even in surplus</em>.
+      &sect;IX.B&rsquo;s surplus branch fixes exactly this. The DP tables already hold the &Delta;
+      values it needs &mdash; a change to <code>density.py</code> plus one call site, not a redesign.</td></tr>
+  <tr><td>HEUR1.0</td><td>Paper &sect;V.B baseline still not assembled</td>
+      <td><code>greedy_sps_baseline.py</code> &middot; <code>packers.wfd_mapping</code></td>
+      <td><strong>Both halves exist and are not joined.</strong> &sect;V.B prescribes WFD;
+      <code>wfd_mapping</code> <em>is</em> that mapping but lives only as a v7 multi-start
+      candidate, while <code>greedy_sps_baseline</code> is a runnable floor whose Phase&nbsp;1 is
+      <strong>Quantum SPS, not WFD</strong> (its own docstring says so). The runnable baseline uses
+      the wrong mapping; the right mapping is not runnable as a baseline. A <code>heur1_0.py</code>
+      joining them is a handful of lines.</td></tr>
+  <tr><td>NO-ONLINE-ADAPTER</td><td>Online phase absent from <code>run_models.py</code></td>
+      <td><code>usrt/runner/adapters.py</code></td>
+      <td>Verified 12 Sep: the string <code>online</code> does not appear in
+      <code>adapters.py</code> at all. <strong>Blocked by ONLINE-FREQ</strong> &mdash; sweeping the
+      online phase before that is fixed would mass-produce inadmissible schedules.</td></tr>
+  <tr><td>SCALAR-DT</td><td>Scalar &Delta;t DP over-plans; commit-time DBF trims it</td>
+      <td><code>usrt/online/dp.py</code></td>
+      <td>Carried from 15 Aug (4.55 utility on one event at B=400). Not re-verified.</td></tr>
+  <tr><td>AGG-STATES</td><td>Aggregate-state quantisation clips the exact frontier</td>
+      <td><code>usrt/online/value_function.py</code></td>
+      <td>Carried from 15 Aug. Not re-verified.</td></tr>
+  <tr><td>DP-REBUILD</td><td>Per-event DP rebuild dominates online runtime</td>
+      <td><code>usrt/online/controller.py</code></td>
+      <td>Performance only. Carried from 15 Aug.</td></tr>
+</table>
 
+<h2 id="fixed">3. Fixed &mdash; closed ledger</h2>
+<p class="muted">Detail removed deliberately; one line each so nothing is re-filed. Re-opening any of
+these needs fresh evidence, not the original write-up.</p>
+<table>
+  <tr><th>Original ID</th><th>Issue</th><th>Closed</th><th>How</th></tr>
+  <tr><td>Jun &sect;A</td><td>Energy constants make <code>f_max</code> energy-optimal, so DVFS is dead code</td>
+      <td>22 Aug</td><td>Constants changed to <code>&alpha;=0.15, &beta;=1.0</code>;
+      <code>f*&asymp;0.42</code> now sits inside the frequency range. Verified in
+      <code>models.py:19-20</code>.</td></tr>
+  <tr><td>Jun B2</td><td><strong>Quantum SPS capacity never released</strong> &mdash; 20&ndash;75% of jobs bypassed SPS</td>
+      <td>5 Sep</td><td>Job-share metric <code>e_m/h</code>. Fallback <strong>35.8% &rarr; 0%</strong>
+      across 900 instances; <code>sum(proc_util) == U_M</code> exactly. Also fixed two further copies
+      of the same defect in <code>packers.py</code> (ffd/bfd) and <code>repair.py</code>.</td></tr>
+  <tr><td>UTIL-METRIC</td><td>&ldquo;Utilisation&rdquo; summed over jobs, not tasks &mdash; every <code>OVER 1.0</code> warning spurious</td>
+      <td>5 Sep</td><td>Landed with B2 in one change, as required. 9 display sites plus
+      <code>repair.py:92</code>.</td></tr>
+  <tr><td>REPAIR-PARTIAL</td><td><strong>A failed mapping repair was never surfaced to the caller</strong>
+      &mdash; and repair itself oscillated, fixing only 32.4% of what it could</td>
+      <td>12&ndash;13 Sep</td><td>Three parts. <b>(a)</b> <code>repair_mapping</code> rewritten as a
+      two-tier best-improvement search against a monotone total-DBF-excess objective (tier 1
+      single-job moves, tier 2 atomic pairwise swaps): fix rate <strong>32.4% &rarr; 96.2%</strong>
+      over 820 needs-repair instances, <strong>0 regressions</strong> per-instance, and brute force
+      confirms all 31 residuals are genuinely feasible (0 falsely called infeasible); 2.70&nbsp;ms/call.
+      <b>(b)</b> <code>output.verify_schedule()</code> re-checks the <em>final</em> schedule against C2
+      and C3 from both print paths, covering every solver with zero call-site changes &mdash; guards the
+      direct <code>python run.py</code> workflow. <b>(c)</b> every heuristic <code>run()</code> now
+      returns <code>(seg_k, freq_idx, utility, energy, <b>mapping</b>)</code> &mdash; 15 returns across 9
+      solvers &mdash; so <code>adapters._schedule_feasible</code> can DBF-check the schedule the solver
+      actually <em>committed</em>, not the raw starting mapping <code>_mandatory_feasible</code> guesses
+      at. Verified both ways: <strong>0 guard firings in 6300 real runs</strong> (7 solvers &times; 900
+      instances, so no published number moves), and in a sabotage control <strong>0 of 440</strong>
+      provably-deadline-missing schedules scored as a success, <strong>40 of them caught only by the new
+      check</strong>. Earlier concern that past results held false positives was tested and refuted:
+      <strong>480 runs, 191 reported feasible, 0 false positives</strong>.</td></tr>
+  <tr><td>Jun B6</td><td>Every solver crashed on a cp1252 Windows console</td><td>&mdash;</td>
+      <td>CLIs force UTF-8.</td></tr>
+  <tr><td>Jun C9</td><td>Paper &sect;VI online phase entirely unimplemented</td><td>&mdash;</td>
+      <td><code>usrt/online/</code> is implemented and its worked examples reproduce the design doc.</td></tr>
+  <tr><td>Jun C10</td><td>Infeasible-mandatory early exit gave up too early</td><td>&mdash;</td>
+      <td>Phase 3 now uses <code>min_possible_energy()</code> &mdash; cheapest frequency, ignoring
+      timing &mdash; which is the correct necessary condition.</td></tr>
+  <tr><td>Jun &mdash;</td><td>Phase 4 scaled in arbitrary task-index order</td><td>&mdash;</td>
+      <td>Now ranks candidates by energy saved per unit of time cost, descending.</td></tr>
+  <tr><td>Jun &mdash;</td><td>Left-shift deadline ties broken by dict insertion order (2.0 vs 12.0 on one instance)</td>
+      <td>&mdash;</td><td>Now sorts by <code>(deadline, release, job-id)</code>.</td></tr>
+  <tr><td>RUN-FEAS</td><td>Runner error path clobbered the manifest&rsquo;s <code>feasible</code> column</td>
+      <td>12 Sep</td><td>One line at <code>runner.py:94</code>: <code>feasible=0</code> &rarr;
+      <code>model_feasible=0</code>. Verified with a two-row manifest containing a deliberately
+      broken instance &mdash; the manifest flag survives and the error row carries
+      <code>model_feasible=0</code>. Scanned all 44 <code>results*.csv</code> (115,750 rows,
+      <strong>0 with <code>status=error</code></strong>): no stored data was ever corrupted.</td></tr>
+  <tr><td>owner decision</td><td><code>heuristic_v1</code>/<code>v2</code> descoped &mdash;
+      &ldquo;too basic to keep considering&rdquo;</td><td>12 Sep</td>
+      <td>Closed as moot in the same stroke: HEUR-V1-RET, STATE-ENERGY-GUARD, and the V1-STRIP /
+      V2-CH23 / FP-DRIFT / V1-WINDOW-BLIND rows below. Code is untouched and still importable
+      directly &mdash; only the runner contract and the register status changed. If the files
+      (<code>solvers/heuristic_v1.py</code>, <code>v2.py</code>, <code>phases/greedy_state.py</code>,
+      <code>phases/greedy_leftshift.py</code>, <code>state.py</code>,
+      <code>mapping/single_pass.py</code>) are later deleted, DEAD-CODE's F2 half resolves with
+      them.</td></tr>
+  <tr><td>22Aug A1</td><td><code>ILP.py</code> hard-coded the wrong energy constants</td><td>&mdash;</td>
+      <td>Imports from <code>usrt.models</code>.</td></tr>
+  <tr><td>22Aug A2</td><td><code>testcases/</code> tree (18,500 files) from the superseded generator</td>
+      <td>&mdash;</td><td>Deleted.</td></tr>
+  <tr><td>22Aug A3</td><td>Gurobi licence expiring</td><td>&mdash;</td>
+      <td>Renewed to 2027-08-16 (LICENSEID 2853854).</td></tr>
+  <tr><td>22Aug F1</td><td><code>summary-1-Aug</code> &sect;4 described superseded Phase 3/4/5 logic</td>
+      <td>4 Sep</td><td>&sect;4 rewritten against the code: Phases 1, 1M, 1R, 1L, 2&ndash;6b all match
+      the tree, and DPS/SPS is explained rather than assumed. <em>Partial:</em> &sect;5&rsquo;s version
+      matrix still stops at v6.</td></tr>
+</table>
+
+<h2 id="notdefect">4. Examined, not defects</h2>
+<p class="muted">Each was investigated and dismissed with evidence. Recorded so the investigation is
+not repeated.</p>
+<table>
+  <tr><th>Claim</th><th>Source</th><th>Why it is not a defect</th></tr>
+  <tr><td>Phase 5 sorts by <code>u_i</code>, paper &sect;V.5 says &ldquo;utility density&rdquo;</td>
+      <td>GREEDY-ORDER</td>
+      <td><strong><code>u_i</code> is the correct key.</strong> Phase 5 decides one marginal segment:
+      gain is <code>u_i&middot;w</code>, cost is <code>w&middot;g(f)</code> energy or <code>w/f</code>
+      time, so utility-per-energy is <code>u_i/g(f)</code> and utility-per-time is
+      <code>u_i&middot;f</code> &mdash; <strong><code>w</code> cancels in both</strong>. Measured over
+      16 instances: <code>u_i</code> 91.271, density 91.278, <code>u_i/g(f)</code> 90.957,
+      <code>u_i&middot;f</code> 91.271 &mdash; a 0.35% spread, and <code>u_i</code> is identical to
+      <code>u_i&middot;f</code> in all 16 runs. Utility density answers Phase 1b&rsquo;s
+      <em>mapping</em> question instead.</td></tr>
+  <tr><td>Preemption model conflict &mdash; DBF over-certifies if segments are atomic</td>
+      <td>Jun C7 (&ldquo;Critical&rdquo;)</td>
+      <td><strong>Decided, on two independent arguments.</strong> (1) Paper &sect;II says
+      <em>Preemptive</em>. (2) Quantitatively, the blocking term implied by segment-atomic execution
+      reaches <strong>245% of the shortest period</strong> in <code>dry_run_tc</code> (largest
+      segment 8.580 at <code>f_min=0.35</code> &rarr; 24.514 against <code>min p = 10</code>), so the
+      atomic reading would make nearly every generated instance infeasible. DBF is the correct test
+      and the code is right. It is <code>Key_Notes&amp;Deductions.txt</code> that is stale
+      (&ldquo;Preemption is NOT allowed mid-segment&rdquo;). <strong>Action: fix the note, not the
+      code.</strong></td></tr>
+  <tr><td>Frequency is inert &mdash; DVFS looks unimplemented online</td>
+      <td>15 Aug</td>
+      <td>A <strong>regime effect, not a bug</strong>. At B=400 energy is nowhere near binding, so
+      there is no headroom up (already at <code>f_max</code>) and no incentive down. The lever wakes
+      up at tight budgets, where the DP demonstrably fires the paper&rsquo;s Option 3/4 conversions.</td></tr>
+  <tr><td>Utility does not depend on frequency</td><td>15 Aug</td>
+      <td>By design &mdash; paper Eq. 8 has no <code>f</code> term. Frequency is purely a
+      time&harr;energy exchange rate. This is what makes donating energy cost a donor
+      <em>zero</em> utility.</td></tr>
+  <tr><td><code>n_prc</code> sweep co-varies <code>n_tsk</code></td><td>22Aug C2</td>
+      <td>Deliberate and documented in <code>_tasks_for_cores</code>: <code>U_M = &alpha;&middot;N_prc</code>
+      grows with the core count, so a task set must grow with the system or every task is pinned at
+      the per-task cap <code>&gamma;</code>.</td></tr>
+  <tr><td>Orphaned phase modules <code>greedy_leftshift.py</code>, <code>greedy_state.py</code></td>
+      <td>22Aug F2 (half)</td>
+      <td>Not orphaned at the time &mdash; both are imported by <code>heuristic_v1</code> and
+      <code>heuristic_v2</code>. Those two solvers were <strong>descoped by owner decision on
+      12 Sep 2026</strong> (&ldquo;too basic to keep considering&rdquo;), so the modules are now
+      orphaned in scope terms and would become literally so if the solvers are deleted &mdash; see
+      the fixed ledger below. <em>The other half of F2 &mdash; three unused imports in
+      <code>heuristic_v6</code> &mdash; is live; see DEAD-CODE above.</em></td></tr>
+</table>
+
+<h2 id="unverified">5. Unverified carry-overs</h2>
+<p class="muted">Claims inherited from earlier documents that have <strong>not</strong> been
+re-checked. Do not plan against these until they are confirmed.</p>
+<table>
+  <tr><th>ID</th><th>Claim</th><th>Source</th></tr>
+  <tr><td>DELTA-CAP</td><td>&delta; cap arithmetically impossible when <code>&beta; &gt; 2&alpha;/(1&minus;&alpha;)</code></td><td>22Aug C1</td></tr>
+  <tr><td>DBF-COMPILE</td><td>DBF hot spot is compilable &mdash; 56&times; speedup available, bit-identical</td><td>22Aug C4</td></tr>
+  <tr><td>PAPER-TYPO</td><td>Paper &sect;VII.A.2(d)(i) says &ldquo;mandatory&rdquo; where &ldquo;optional&rdquo; is meant</td><td>22Aug E3</td></tr>
+</table>
+<p class="muted">V1-STRIP, V2-CH23, FP-DRIFT and V1-WINDOW-BLIND were removed from this table on
+12 Sep 2026 &mdash; all four are internal to <code>heuristic_v1</code>/<code>v2</code>, which the
+owner has descoped. See the fixed ledger above.</p>
+
+<h2>Sequencing</h2>
 <section class="card">
-  <ol>
-    <li style="margin-bottom:.7rem"><strong>Fix the energy constants and re-benchmark everything (ties to A).</strong>
-      With f* inside the frequency range, Phase 4, Case ii.B and the Ch2 paths activate, and the
-      relative ranking of v1–v5/claudeoptimal will likely change. Today's comparisons only measure
-      segment-knapsack quality.</li>
-    <li style="margin-bottom:.7rem"><strong>Unify on the incremental <code>ScheduleState</code> for Phases 5–6.</strong>
-      <code>check_all_timing</code> is recomputed from scratch inside triple-nested loops —
-      O(passes × jobs² × windows) — while an incremental DBF structure already exists in
-      <span class="loc">usrt/state.py</span> but is only used by heuristic_v1. This is the main
-      scalability ceiling for larger task sets.</li>
-    <li style="margin-bottom:.7rem"><strong>Generalise Phase 6 beyond 1-for-1 swaps.</strong>
-      claudeoptimal's double-giver is a step; a cleaner formulation is ratio-greedy knapsack —
-      rank segments by utility per unit of the <em>binding</em> resource (slack of the tightest DBF
-      window, or energy) with regret-based repair, since under the current constants the problem
-      <em>is</em> a multi-dimensional knapsack.</li>
-    <li style="margin-bottom:.7rem"><strong>Cut the doublet cost in Refine Mapping.</strong>
-      <span class="loc">usrt/mapping/refine_mapping.py</span> builds and sorts all O(n²) job pairs
-      per call. Restrict doublets to (max-UD processor × others) and keep processor UDs in a heap;
-      same result, much cheaper on large instances.</li>
-    <li style="margin-bottom:.7rem"><strong>Prune DBF windows.</strong>
-      All (t1, t2) ∈ A<sub>x</sub>×D<sub>x</sub> pairs are enumerated. Standard pruning — skip
-      windows wider than the busy-period bound and dominated windows — typically reduces constraint
-      counts 5–10×, which also directly shrinks the ILP v2 model.</li>
-    <li style="margin-bottom:.7rem"><strong>Add an independent final validator.</strong>
-      A separate module (no shared state with the solvers) that re-checks DBF + energy from scratch
-      on whatever any solver returns. It would have caught B1 and B3 immediately, and gives every
-      experiment a trustworthy pass/fail stamp.</li>
-  </ol>
-</section>
-
-<!-- ════════════════════════════ SECTION F ════════════════════════════ -->
-<h2 id="secF">F. What Was Verified as Correct</h2>
-
-<section class="card">
-  <div class="ok-note">
-    <strong>✓ ILP v2</strong> (<span class="loc">usrt/solvers/ilp_v2.py</span>) is a faithful
-    transcription of paper §IV: C1 (one (k,z) per job, Eq. 11), C2 (per-processor DBF over
-    A<sub>x</sub>×D<sub>x</sub> windows, Eqs. 12–13), C3 (global energy ≤ B), and the objective
-    matches Eq. 8 (u<sub>i</sub> × optional execution at f<sub>max</sub>).
-  </div>
-  <div class="ok-note">
-    <strong>✓ Energy / effective-time formulas</strong> (<span class="loc">usrt/models.py</span>)
-    match paper Eqs. 1–2 exactly (the issue in §A is the <em>constants</em>, not the formula).
-  </div>
-  <div class="ok-note">
-    <strong>✓ Utility model</strong> — <code>u_i · (cum[i][k] − cum[i][0])</code> matches Eq. 8's
-    e<sub>i,q</sub>-at-f<sub>max</sub> convention (utility independent of executed frequency).
-  </div>
-  <div class="ok-note">
-    <strong>✓ DBF window enumeration</strong> (t1 ∈ arrivals, t2 ∈ deadlines, jobs fully contained)
-    is the standard processor-demand criterion — correct for <em>fully preemptive</em> EDF (see C7
-    for the caveat).
-  </div>
-  <div class="ok-note">
-    <strong>✓ Refine Mapping 2a/2b</strong> (<span class="loc">usrt/mapping/refine_mapping.py</span>)
-    matches §V.A Steps 1/2a/2b. Two deliberate, documented deviations are sensible: the
-    mandatory-utilisation guard, and the strict max-UD-decrease rule in 2b (anti-cycling).
-    Verified live: UD spread 1.4522 → 0.1236 in 6 swaps with DBF preserved.
-  </div>
-  <div class="ok-note">
-    <strong>✓ Phase 5 Case (i) shortcut</strong> — using <code>min_slack_for_job ≥ add_time</code>
-    without a full DBF re-check is provably sufficient (adding demand to a job only affects windows
-    containing it), and the windows enumerated are exactly those.
-  </div>
-</section>
-
-<!-- ════════════════════════════ SECTION G ════════════════════════════ -->
-<h2 id="secG">G. Priority Summary</h2>
-
-<section class="card">
-  <table>
-    <tr><th>#</th><th>Severity</th><th>Issue</th><th>Where</th><th>Impact</th></tr>
-    <tr><td>A</td><td><span class="badge crit">Critical</span></td>
-        <td>α=1, β=0.5 ⟹ f* = f<sub>max</sub>; DVFS never saves energy</td>
-        <td>models.py, ILP.py</td>
-        <td>Half the published algorithm is dead code; experiments don't test frequency decisions</td></tr>
-    <tr><td>B1</td><td><span class="badge crit">Critical</span></td>
-        <td><code>try_dec_freq</code> lacks energy guard</td>
-        <td>state.py:185</td>
-        <td>heuristic_v1 can exceed energy budget (violates C3)</td></tr>
-    <tr><td>B2</td><td><span class="badge crit">Critical</span></td>
-        <td>Quantum SPS never releases capacity</td>
-        <td>quantum.py</td>
-        <td>22/30 jobs bypass SPS on the testcase; Phase 1 quality unmeasured</td></tr>
-    <tr><td>C7</td><td><span class="badge crit">Critical</span></td>
-        <td>Preemption model conflict (notes vs paper vs DBF)</td>
-        <td>all feasibility checks</td>
-        <td>If segments are atomic, DBF over-certifies feasibility everywhere</td></tr>
-    <tr><td>B3</td><td><span class="badge high">High</span></td>
-        <td>Unguarded segment stripping + no rollback</td>
-        <td>greedy_state.py</td>
-        <td>heuristic_v1 can lose net utility</td></tr>
-    <tr><td>B4</td><td><span class="badge high">High</span></td>
-        <td>Ch2/Ch3 conflated, no net-utility check</td>
-        <td>greedy_leftshift.py:141</td>
-        <td>heuristic_v2 can lose net utility</td></tr>
-    <tr><td>C8</td><td><span class="badge high">High</span></td>
-        <td>Non-harmonic testcase periods (40, 60)</td>
-        <td>testcase.py</td>
-        <td>Instance outside the paper's stated model</td></tr>
-    <tr><td>C9</td><td><span class="badge high">High</span></td>
-        <td>Online phase (§VI) unimplemented</td>
-        <td>—</td>
-        <td>Contribution gap: nothing to evaluate</td></tr>
-    <tr><td>B5</td><td><span class="badge med">Medium</span></td>
-        <td>Swap search breaks on first failed candidate</td>
-        <td>swap.py:119</td>
-        <td>Improving swaps abandoned; hides state bugs</td></tr>
-    <tr><td>B6</td><td><span class="badge med">Medium</span></td>
-        <td>cp1252 Unicode crash on Windows</td>
-        <td>output.py:18</td>
-        <td>All solvers crash at banner on default console</td></tr>
-    <tr><td>C10</td><td><span class="badge med">Medium</span></td>
-        <td>Infeasible-mandatory exit before trying lower freq</td>
-        <td>heuristic_v5*.py</td>
-        <td>False infeasibility under corrected constants</td></tr>
-    <tr><td>D11</td><td><span class="badge med">Medium</span></td>
-        <td>Incremental slack float drift, no re-sync</td>
-        <td>greedy.py / swap.py / state.py</td>
-        <td>Budget leak / spurious rejections over long runs</td></tr>
-    <tr><td>D13</td><td><span class="badge med">Medium</span></td>
-        <td>PARTIAL repair result ignored by solvers</td>
-        <td>quantum.py / repair.py</td>
-        <td>Optimising on infeasible mandatory mapping</td></tr>
-    <tr><td>D15</td><td><span class="badge med">Medium</span></td>
-        <td>single-pass SPS window-blind, no repair</td>
-        <td>single_pass.py</td>
-        <td>heuristic_v1 may start from infeasible mapping</td></tr>
-    <tr><td>D12</td><td><span class="badge low">Low</span></td>
-        <td>Silent <code>int()</code> truncation of periods</td>
-        <td>utils.py</td>
-        <td>Corrupt timing on non-integer periods</td></tr>
-    <tr><td>D14</td><td><span class="badge low">Low</span></td>
-        <td>Misleading non-preemptive left-shift alarm</td>
-        <td>left_shift.py / v5 logs</td>
-        <td>False "negative slack" warnings on feasible schedules</td></tr>
-  </table>
+  <p><strong>Independent &mdash; land any time:</strong> RUN-FEAS (one line, ready), FREQ-SET,
+  ONLINE-DEMO, INT-PERIOD, C8-HARMONIC.</p>
+  <p><strong>Need a decision, not a keystroke:</strong> NO-TESTS (golden only vs golden plus
+  invariants). HEUR-V1-RET is decided (v1/v2 descoped, 12 Sep) and no longer needs one.
+  REPAIR-PARTIAL is closed outright &mdash; algorithm, stdout guard and the <code>run()</code>
+  contract all landed 12&ndash;13 Sep; see the fixed ledger.</p>
+  <p><strong>Fix the bug behind the bug:</strong> SWAP-BREAK &mdash; change the <code>break</code>
+  <em>and</em> assert on the supposedly-unreachable revert.</p>
+  <p><strong>Highest value:</strong> ONLINE-FREQ. It is the only Critical item, it invalidates results
+  rather than degrading them, and it is the only one of these that changes what can be claimed in
+  the paper.</p>
+  <div class="evidence"><strong>Re-baselining.</strong> B2 landed on 5 Sep and moved every published
+  number. <code>tc_b2/u_mand_factor/</code> holds the 900-instance before/after for three models, but
+  <code>ALL_DOCS/</code> has <strong>not</strong> been re-baselined against it. Anything quoting
+  mapping quality, SPS-vs-alternative, or per-model utility predates 5 Sep and is stale &mdash;
+  <code>22Aug_better_mapping_SPS.html</code> most of all, since its <code>sps</code> candidates ran
+  through the broken metric <em>and</em> its <code>wfd</code>/<code>ffd</code>/<code>bfd</code>
+  candidates ran through the <code>packers.py</code> copy of the same bug.</div>
 </section>
 
 <footer>
-  Generated from a source-level review of <code>C:\homogenous\V2</code> against
-  <em>Segmented_Workload_Scheduling_Shared_v2.pdf</em> · 2026-06-12
+  USRT V2 &mdash; consolidated issue register &middot; verified against the live tree 12 September 2026 &middot;
+  working copy: <code>ALL_DOCS/ISSUES.md</code>
 </footer>
 
 </main>

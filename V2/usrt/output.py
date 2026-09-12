@@ -86,8 +86,63 @@ def print_schedule(seg_k, freq_idx, freq_set, cum, tasks, N_tsk, N_job,
     print(f"  Total energy  : {tot_e:.4f}  "
           f"(budget={B_BUDGET}  slack={B_BUDGET - tot_e:.4f})")
     print(f"  Total utility : {tot_u:.6f}")
+    verify_schedule(seg_k, freq_idx, freq_set, cum, tasks, N_tsk, N_job,
+                    mapping, B_BUDGET)
     print(_S)
     return tot_e, tot_u
+
+
+def verify_schedule(seg_k, freq_idx, freq_set, cum, tasks, N_tsk, N_job,
+                    mapping, B_BUDGET) -> bool:
+    """
+    Independently re-check the FINAL schedule against C2 (DBF timing) and
+    C3 (energy budget), and shout loudly if either is violated.
+
+    Why this exists.  `quantum_sps_mapping` calls `repair_mapping` internally
+    and, when repair fails, prints `PARTIAL` but **returns the mapping
+    anyway** -- the failure flag is discarded and never reaches the caller.
+    Phases 2-6b only DBF-check their own *incremental* moves; none verifies
+    that the mandatory-only starting point was feasible at all.  So a solver
+    could run to completion on a deadline-violating mapping and print
+    `SOLUTION (FINAL)` with nothing indicating it was invalid.
+    On the runner-driven path `adapters._schedule_feasible` checks the same
+    thing programmatically (it is handed the mapping by `run()`), so the two
+    are deliberate duplicates: that one sets `model_feasible`, this one warns a
+    human reading the printout.  Neither depends on the other.
+
+    Every solver routes its final schedule through `print_schedule`, so this
+    is the single choke point covering all of them.  Checking the *final*
+    schedule rather than the initial mapping is strictly stronger: it also
+    catches any phase that commits an infeasible move.
+
+    Returns True iff the schedule satisfies both constraints.
+    """
+    from .dbf.check import check_all_timing
+    from .utils import build_proc_jobs, build_job_times
+
+    periods = [int(t['p_i']) for t in tasks]
+    h = max((N_job[i] * periods[i] for i in range(N_tsk)), default=0)
+    job_r, job_d = build_job_times(tasks, h)
+    proc_jobs, _ = build_proc_jobs(mapping)
+    n_prc = (max(mapping.values()) + 1) if mapping else 0
+
+    timing_ok = check_all_timing(proc_jobs, job_r, job_d, seg_k, freq_idx,
+                                 freq_set, cum, n_prc)
+    tot = sum(energy_val(cum[i][seg_k[(i, j)]], freq_set[freq_idx[(i, j)]])
+              for i in range(N_tsk) for j in range(N_job[i]))
+    energy_ok = (B_BUDGET is None) or (tot <= B_BUDGET + 1e-6)
+
+    if not (timing_ok and energy_ok):
+        bad = []
+        if not timing_ok: bad.append("C2 TIMING (a deadline is missed)")
+        if not energy_ok: bad.append(f"C3 ENERGY ({tot:.4f} > B={B_BUDGET})")
+        print(_S)
+        print("  *** INFEASIBLE SCHEDULE - DO NOT USE THESE NUMBERS ***")
+        print(f"  Violates: {' and '.join(bad)}")
+        print("  Not a valid solution. Most likely cause: Phase 1's")
+        print("  repair_mapping could not fix the SPS mapping (look for")
+        print("  'Repair: PARTIAL' above).  See ISSUES.md -> REPAIR-PARTIAL.")
+    return timing_ok and energy_ok
 
 
 def print_schedule_with_ls(seg_k, freq_idx, freq_set, cum, tasks, N_tsk, N_job,
@@ -124,5 +179,7 @@ def print_schedule_with_ls(seg_k, freq_idx, freq_set, cum, tasks, N_tsk, N_job,
     print(f"  Total energy  : {tot_e:.4f}  "
           f"(budget={B_BUDGET}  slack={B_BUDGET - tot_e:.4f})")
     print(f"  Total utility : {tot_u:.6f}")
+    verify_schedule(seg_k, freq_idx, freq_set, cum, tasks, N_tsk, N_job,
+                    mapping, B_BUDGET)
     print(_S)
     return tot_e, tot_u

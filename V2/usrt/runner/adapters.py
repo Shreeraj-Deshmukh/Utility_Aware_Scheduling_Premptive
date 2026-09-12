@@ -16,7 +16,13 @@ Each adapter returns:
   runtime  : wall-clock seconds
   gap      : MIP optimality gap (ILP only)
 
-Design choices that keep this non-invasive (no edits to the solver files):
+Every heuristic `run()` returns (seg_k, freq_idx, utility, energy, mapping).
+The trailing `mapping` exists for this file: a schedule is only meaningful
+relative to the assignment it was built on, so without it no consumer could
+DBF-check what a solver handed back, and `model_feasible` rested entirely on a
+pre-filter of the raw starting mapping.  See `_schedule_feasible`.
+
+Design choices that keep the rest of this non-invasive:
   * Gurobi's per-model verbose log + the solvers' own print()s are silenced at
     the file-descriptor level (captures the C-level Gurobi log too).
   * Gurobi's computeIIS()/write() (called by both ILPs on infeasible instances)
@@ -214,6 +220,30 @@ def _mandatory_feasible(processors, tasks):
                             freq_set, cum, len(processors))
 
 
+def _schedule_feasible(processors, tasks, mapping, seg_k, freq_idx,
+                       cum, freq_set):
+    """
+    DBF-check the schedule the solver actually COMMITTED, not the one we
+    guessed it would start from.
+
+    `_mandatory_feasible` above re-derives its own raw SPS mapping and checks
+    only that.  That is a pre-filter, and it is blind twice over: v5a/v5b/v6/v7
+    refine or replace that mapping, and phases 2-6b then mutate seg_k/freq_idx
+    on top of it.  This checks the end state -- the mapping the solver returns
+    together with the segment and frequency choices it made -- so an infeasible
+    move committed anywhere in the pipeline cannot be scored as a success.
+
+    Needs `mapping`, which is why run() was widened to hand it back.
+    """
+    N_tsk   = len(tasks)
+    periods = [int(t['p_i']) for t in tasks]
+    h       = lcm_list(periods)
+    job_r, job_d = build_job_times(tasks, h)
+    proc_jobs, _ = build_proc_jobs(mapping)
+    return check_all_timing(proc_jobs, job_r, job_d, seg_k, freq_idx,
+                            freq_set, cum, len(processors))
+
+
 def run_baseline(processors, tasks, B, time_limit=None):
     """greedy_SPS_Baseline: SPS mapping, f_max fixed, greedy segments."""
     if not _mandatory_feasible(processors, tasks):
@@ -221,15 +251,22 @@ def run_baseline(processors, tasks, B, time_limit=None):
                     model_feasible=0, utility="", energy="", util_per_energy="",
                     runtime=0.0, gap="", error="")
     from usrt.solvers import greedy_sps_baseline as _gsb
+    cum, freq_set = _cum_freq(processors, tasks)
     t0 = time.perf_counter()
     with _suppress():
-        seg_k, freq_idx, tot_u, tot_e = _gsb.run(processors, tasks, B)
+        seg_k, freq_idx, tot_u, tot_e, mapping = _gsb.run(processors, tasks, B)
     rt = time.perf_counter() - t0
     if tot_e > B + 1e-6:
         return dict(model="greedy_sps_baseline", status="infeasible",
                     model_feasible=0, utility="", energy=round(tot_e, 6),
                     util_per_energy="", runtime=round(rt, 4), gap="",
                     error=f"over budget: E={tot_e:.4f} > B={B:.4f}")
+    if not _schedule_feasible(processors, tasks, mapping, seg_k, freq_idx,
+                              cum, freq_set):
+        return dict(model="greedy_sps_baseline", status="infeasible",
+                    model_feasible=0, utility="", energy=round(tot_e, 6),
+                    util_per_energy="", runtime=round(rt, 4), gap="",
+                    error="C2: committed schedule misses a deadline")
     upe = tot_u / tot_e if tot_e > 1e-12 else ""
     return dict(model="greedy_sps_baseline", status="solved", model_feasible=1,
                 utility=round(tot_u, 6), energy=round(tot_e, 6),
@@ -244,9 +281,10 @@ def run_heuristic(processors, tasks, B, variant="v5b", time_limit=None):
                     utility="", energy="", util_per_energy="", runtime=0.0,
                     gap="", error="")
     mod = importlib.import_module(f"usrt.solvers.heuristic_{variant}")
+    cum, freq_set = _cum_freq(processors, tasks)
     t0 = time.perf_counter()
     with _suppress():
-        seg_k, freq_idx, tot_u, tot_e = mod.run(processors, tasks, B)
+        seg_k, freq_idx, tot_u, tot_e, mapping = mod.run(processors, tasks, B)
     rt = time.perf_counter() - t0
 
     # VALIDATE the returned schedule against the energy budget.  The heuristics
@@ -259,6 +297,16 @@ def run_heuristic(processors, tasks, B, variant="v5b", time_limit=None):
                     model_feasible=0, utility="", energy=round(tot_e, 6),
                     util_per_energy="", runtime=round(rt, 4), gap="",
                     error=f"over budget: E={tot_e:.4f} > B={B:.4f}")
+
+    # VALIDATE the returned schedule against C2 as well.  The energy check
+    # above only covers C3; `_mandatory_feasible` at the top only covers the
+    # raw starting mapping.  Neither sees the schedule that was committed.
+    if not _schedule_feasible(processors, tasks, mapping, seg_k, freq_idx,
+                              cum, freq_set):
+        return dict(model=f"heuristic_{variant}", status="infeasible",
+                    model_feasible=0, utility="", energy=round(tot_e, 6),
+                    util_per_energy="", runtime=round(rt, 4), gap="",
+                    error="C2: committed schedule misses a deadline")
 
     upe = tot_u / tot_e if tot_e > 1e-12 else ""
     return dict(model=f"heuristic_{variant}", status="solved", model_feasible=1,

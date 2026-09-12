@@ -27,6 +27,14 @@ _S2 = "-" * 76
 
 
 def run(processors, tasks, B_BUDGET):
+    """
+    Returns (seg_k, freq_idx, utility, energy, mapping).
+
+    `mapping` is part of the contract, not a convenience: a schedule is only
+    meaningful relative to the job->processor assignment it was built on, so
+    without it a caller cannot DBF-check what it was handed.  See
+    usrt/runner/adapters._schedule_feasible and ISSUES.md -> REPAIR-PARTIAL.
+    """
     N_tsk    = len(tasks)
     N_prc    = len(processors)
     freq_set = processors[0]['frequencies']
@@ -137,4 +145,4 @@ def run(processors, tasks, B_BUDGET):
         seg_state, freq_state, freq_set, cum, tasks, N_tsk, N_job,
         mapping, B_BUDGET, label="HEURISTIC v2 SOLUTION")
 
-    return seg_state, freq_state, tot_u, tot_e
+    return seg_state, freq_state, tot_u, tot_e, mapping
