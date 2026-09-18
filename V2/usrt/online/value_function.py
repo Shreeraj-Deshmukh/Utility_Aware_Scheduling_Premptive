@@ -38,7 +38,10 @@ for each value level, so any surplus freed by this job beyond D's need is
 genuinely unusable by this sub-chain.
 """
 
-_TOL = 1e-9
+from bisect import bisect_right
+
+_TOL     = 1e-9
+_NEG_INF = float("-inf")
 
 
 class Entry:
@@ -65,30 +68,60 @@ def prune(entries, tol=_TOL):
     """
     Return the Pareto-non-dominated subset of `entries`.
 
-    Sorted by (req_t asc, req_e asc, value desc) so duplicates / dominated
-    points are easy to drop.  O(n^2) — fine for the small per-job frontiers
-    that arise here (segments x frequencies, then Pareto-bounded).
+    Entry B dominates A iff req_t_B <= req_t_A, req_e_B <= req_e_A and
+    value_B >= value_A (each within `tol`).
+
+    Visiting in (req_t asc, req_e asc, value desc) order makes the req_t half
+    of that test automatic — every already-visited entry has req_t <= mine —
+    so what is left is the 2-D question "does any visited entry with
+    req_e <= mine carry value >= mine?".  A Fenwick tree over rank-compressed
+    req_e answers it as a prefix maximum in O(log n), giving an O(n log n)
+    sweep in place of the original all-pairs O(n^2) scan.
+
+    The old scan made a full DP build intractable on realistic instances — one
+    level composes |actions| x |downstream frontier| candidates, and squaring
+    that ran into hundreds of millions of comparisons per level (ISSUES.md ->
+    I6).  Output is the same Pareto frontier, in the same order.
+
+    The reverse sweep the O(n^2) version needed (dropping an already-kept
+    entry that a later one dominates) is unreachable under this ordering: a
+    later entry can only dominate an earlier one if all three fields tie, and
+    such an entry is itself dropped as dominated.
     """
     if not entries:
         return []
 
+    # Rank-compress req_e (1-based: index 0 is the Fenwick tree's null slot).
+    coords = sorted({e.req_e for e in entries})
+    rank   = {v: i + 1 for i, v in enumerate(coords)}
+    size   = len(coords)
+    tree   = [_NEG_INF] * (size + 1)
+
+    def _update(i, val):
+        """Record `val` at rank i, keeping a running maximum."""
+        while i <= size:
+            if tree[i] < val:
+                tree[i] = val
+            i += i & (-i)
+
+    def _prefix_max(i):
+        """Best value among ranks 1..i."""
+        best = _NEG_INF
+        while i > 0:
+            if tree[i] > best:
+                best = tree[i]
+            i -= i & (-i)
+        return best
+
     ordered = sorted(entries, key=lambda e: (e.req_t, e.req_e, -e.value))
     kept = []
     for e in ordered:
-        dominated = False
-        for k in kept:
-            if (k.req_t <= e.req_t + tol and
-                k.req_e <= e.req_e + tol and
-                k.value >= e.value - tol):
-                dominated = True
-                break
-        if not dominated:
-            # Drop any previously-kept entry that THIS one now dominates
-            kept = [k for k in kept
-                    if not (e.req_t <= k.req_t + tol and
-                            e.req_e <= k.req_e + tol and
-                            e.value >= k.value - tol)]
-            kept.append(e)
+        # Ranks 1..idx are exactly the req_e values <= e.req_e + tol.
+        idx = bisect_right(coords, e.req_e + tol)
+        if idx > 0 and _prefix_max(idx) >= e.value - tol:
+            continue                      # dominated by an already-kept entry
+        kept.append(e)
+        _update(rank[e.req_e], e.value)
     return kept
 
 

@@ -169,18 +169,28 @@ class OnlineSimulator:
         Distribute one windfall and assert the banked utility equals the DP
         table value for that processor's downstream chain.  Returns
         (added_utility, dp_value, ok).
+
+        A true, non-mutating peek: pool.level() is a plain read (no refund/
+        undo needed — ISSUES.md -> I3), and dp_value is computed from a fresh
+        build scoped exactly like the real on_completion call (same
+        freeze_before/completed as ONLINE-FREQ), not the stale resting
+        self.ctrl.dps[x].  Nothing here touches controller state.
         """
         x = self.ctrl.proc_jobs_map[(i, j)]
         c = self.ctrl.pos_of[(i, j)]
-        # Arbitrated energy budget the controller would grant.  Probe the pool
-        # through its atomic API, then undo so on_completion redoes it cleanly.
-        pool_now = self.ctrl.pool.refund(de)          # atomic += de
-        densities = self.ctrl._densities(self.ctrl.job_r[(i, j)])
+        pool_now  = self.ctrl.pool.level() + max(0.0, de)
+        # NOTE: unlike the real on_completion, (i, j) is not yet recorded as
+        # completed here, so it still counts toward its own processor's
+        # density.  That can only inflate this processor's share, making
+        # dp_value a slightly more generous ceiling — never an unsafe one.
+        densities = self.ctrl._densities()
         from .density import arbitrate_energy
-        caps = arbitrate_energy(pool_now, densities, self.config.arbitration)
+        caps = arbitrate_energy(pool_now, densities, self.config.arbitration,
+                                demand=self.ctrl._addable_demand())
         de_budget = min(pool_now, max(0.0, caps.get(x, 0.0)))
-        dp_value = self.ctrl.dps[x].best_value(c + 1, dt, de_budget)
-        self.ctrl.pool.try_spend(de)                  # atomic -= de (undo the probe)
+        dp_now = self.ctrl._build_dp(x, freeze_before=self.ctrl.job_r[(i, j)],
+                                     completed=self.ctrl.eff_override)
+        dp_value = dp_now.best_value(c + 1, dt, de_budget)
         added, _ = self.ctrl.on_completion(i, j, dt, de)
         # NOTE: distribute()'s dp_value is an optimistic ceiling; the committed
         # `added` may be less if the per-processor DBF trims a shared-window

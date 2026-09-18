@@ -117,9 +117,16 @@
 <header>
   <h1>USRT &mdash; Consolidated Issue Register</h1>
   <p>Single source of truth for bugs, gaps and open questions across the V2 codebase.</p>
-  <p>Verified against the live tree on <strong>12 September 2026</strong> &middot; supersedes
+  <p>Verified against the live tree on <strong>12 September 2026</strong>, updated
+     <strong>19 September 2026</strong> &middot; supersedes
      <code>audit_issues_22Aug.html</code>, <code>15Aug_Online_Audit.html</code> and the
      12 Jun review that previously lived at this filename.</p>
+  <p style="margin-top:.7rem;padding:.6rem .9rem;background:rgba(255,255,255,.14);border-radius:7px;">
+     <strong>19 Sep:</strong> ONLINE-FREQ <strong>fixed</strong> &mdash; no Critical items remain.
+     A previously-unfiled blocker, <strong>DP-PRUNE</strong>, was found and fixed in the same pass:
+     the online phase did not <em>terminate</em> on a realistic instance, so it had never actually
+     been run end-to-end. It now completes in <strong>7.4&nbsp;s</strong>, which unblocks
+     NO-ONLINE-ADAPTER.</p>
 </header>
 
 <main>
@@ -160,7 +167,7 @@
 <nav class="toc">
   <strong>Contents</strong>
   <ul>
-    <li><a href="#live">1. Live issues</a> &mdash; 1 critical &middot; 0 high &middot; 4 medium &middot; 4 low/latent</li>
+    <li><a href="#live">1. Live issues</a> &mdash; 0 critical &middot; 0 high &middot; 4 medium &middot; 4 low/latent</li>
     <li><a href="#gaps">2. Feature gaps</a> (not defects)</li>
     <li><a href="#fixed">3. Fixed &mdash; closed ledger</a></li>
     <li><a href="#notdefect">4. Examined, not defects</a></li>
@@ -172,25 +179,73 @@
 <p class="muted">Every entry was re-checked against the tree on 12 Sep 2026. &ldquo;Evidence&rdquo;
 means a measurement taken that day, not a claim carried from an earlier document.</p>
 
-<section class="card">
-  <span class="badge crit">Critical</span>
-  <span class="loc">usrt/online/controller.py:273, 299, 314 &middot; root cause usrt/online/dp.py:111</span>
-  <h3>ONLINE-FREQ &mdash; the online phase revises the frequency of a job that has already started</h3>
+<section class="card" style="border-left:5px solid var(--low)">
+  <span class="badge low">Fixed 19 Sep</span>
+  <span class="loc">usrt/online/{actions,dp,controller}.py</span>
+  <h3>ONLINE-FREQ &mdash; the online phase revised the frequency of a job that had already started</h3>
   <p>Paper &sect;II: <em>once a job starts executing it cannot execute with a different frequency.</em>
   The online DP chain is ordered by EDF (<code>(deadline, release, task, job)</code>), and
-  <code>on_completion</code> re-plans every job at chain position <code>&gt; c</code>, writing a new
-  <code>freq_idx</code> at three sites.</p>
-  <p>Under <strong>non</strong>-preemptive execution, &ldquo;later in the chain&rdquo; implies
-  &ldquo;not yet started&rdquo;, and those writes are safe. Under <strong>preemptive</strong> EDF it
-  does not: a long-period job can start, be preempted by a shorter-period release, and still sit
-  downstream in deadline order &mdash; so it becomes eligible for revision after it has already run.</p>
-  <div class="evidence"><strong>Evidence.</strong> Verified live 12 Sep 2026 with a reproducer
-  (<code>ALL_DOCS/repro_online_freq_inflight.py</code>): violation observed in <strong>3 of 4</strong>
-  configurations.</div>
-  <div class="fix"><strong>Impact.</strong> Any online result where a preempted job&rsquo;s frequency
-  was revised is inadmissible under &sect;II, and both its reported energy and its DBF check are
-  computed at the wrong frequency. This <em>invalidates</em> affected online numbers rather than
-  merely degrading them.</div>
+  <code>on_completion</code> re-planned every job at chain position <code>&gt; c</code>, writing a new
+  <code>freq_idx</code>. Under <strong>non</strong>-preemptive execution &ldquo;later in the
+  chain&rdquo; implies &ldquo;not yet started&rdquo;; under <strong>preemptive</strong> EDF it does
+  not &mdash; a long-period job can start, be preempted by a shorter-period release, and still sit
+  downstream in deadline order, so it became eligible for revision after it had already run.</p>
+
+  <div class="evidence"><strong>The fix, and why it needed no clock.</strong> The register posed
+  this as a trade: track start times (correct, but the online phase carries no notion of &ldquo;now&rdquo;)
+  versus restrict the chain to <code>r &ge; t_event</code> (cheap, but conservative and lossy). It is
+  not a trade. On one processor with no migration, the completing job <code>c</code> is ready and
+  higher-EDF-priority for the whole of <code>[r_c, finish_c)</code>, so a later-deadline job
+  <code>d</code> cannot hold the CPU anywhere in that window; the only way <code>d</code> ran before
+  <code>c</code> finished is in the gap <em>before <code>c</code> was released</em>. Hence
+  <strong><code>d</code> has provably not started &hArr; <code>job_r[d] &ge; job_r[c]</code></strong>
+  &mdash; a comparison of two static release times. Exact, not conservative.</div>
+
+  <p>Two gates now scope each event's DP build: a job released before the completer has its
+  <strong>frequency frozen</strong> (<code>k</code> may still grow &mdash; only the frequency write
+  was ever unsound), and a job whose own completion has already fired is
+  <strong>excluded outright</strong> (it is resolved history; you cannot retroactively lengthen a job
+  whose actual <code>(dt, de)</code> is already banked). The second gate also resolves the long-noted
+  mismatch between the simulator's release-ordered events and the DP's deadline-ordered chain.</p>
+
+  <div class="fix"><strong>Evidence.</strong> Reproducer clean in <strong>4 of 4</strong>
+  configurations (was: violation in 3 of 4). Worked examples still reproduce every design-doc table
+  cell-for-cell. The gate is load-bearing &mdash; <strong>931 of 1862</strong>
+  <code>build_job_actions</code> calls take the excluded path on <code>testcase.py</code> &mdash; but
+  an A/B against the ungated behaviour returns <strong>identical numbers</strong> (online added
+  30.2829 either way). <em>Stated precisely:</em> the admissibility hole was real and is closed; on
+  this instance it was never exercised in a way that moved a committed number. That cannot be
+  generalised to the sweep without running it.</div>
+</section>
+
+<section class="card" style="border-left:5px solid var(--low)">
+  <span class="badge low">Fixed 19 Sep</span>
+  <span class="loc">usrt/online/value_function.py &middot; prune() / compose()</span>
+  <h3>DP-PRUNE &mdash; the online DP did not terminate on a realistic instance</h3>
+  <p><strong>Not previously filed here.</strong> It surfaced only because ONLINE-FREQ prompted the
+  first end-to-end run of the online phase on a real test case rather than a toy one.</p>
+  <p><code>compose()</code> built the full <code>|actions| &times; |downstream frontier|</code>
+  cross-product and then ran <code>prune()</code> &mdash; an all-pairs O(n&sup2;) scan &mdash; over
+  the <em>whole</em> thing, checking it against <code>max_frontier</code> only <em>afterwards</em>. The
+  cap that exists to bound this never got the chance. On <code>testcase.py</code> (8 frequency levels,
+  up to 6 optional segments) that is &asymp;14,336 candidates per level &rArr; &asymp;2&times;10<sup>8</sup>
+  comparisons per level, &asymp;28 levels per processor, on every build &mdash; and a build happens at
+  construction <em>and</em> once per event.</p>
+  <div class="evidence"><strong>Evidence.</strong> <code>run.py testcase.py online</code> never
+  completed &mdash; killed at 180 s having printed nothing past <code>Offline schedule built</code>,
+  i.e. still inside the <em>first</em> <code>OnlineController.__init__</code>, before event one.
+  Confirmed pre-existing, not introduced by the ONLINE-FREQ work: <code>git stash</code> and re-run on
+  the untouched tree <strong>hangs at the identical point</strong>. This is
+  <code>AGG-STATES</code> / Part-II <code>I6</code> landing for real, after being filed as
+  low-severity and unverified.</div>
+  <div class="fix"><strong>Fix.</strong> <code>prune()</code> is now an exact O(n log n) Pareto sweep:
+  visiting in <code>(req_t asc, req_e asc, value desc)</code> order makes the <code>req_t</code> half
+  of the domination test automatic, leaving a prefix-maximum query over rank-compressed
+  <code>req_e</code>, served by a Fenwick tree. Aggregating <em>before</em> pruning would have been a
+  3-line alternative but would bucket candidates even when the exact frontier would have fitted, so it
+  was rejected &mdash; the sweep returns the same frontier, trading nothing.
+  <strong>Never completes &rarr; 7.4 s.</strong> <code>value_function.py</code> is imported only inside
+  <code>usrt/online/</code>, so no offline solver is affected.</div>
 </section>
 
 <section class="card">
@@ -345,17 +400,30 @@ means a measurement taken that day, not a claim carried from an earlier document
   <tr><td>NO-ONLINE-ADAPTER</td><td>Online phase absent from <code>run_models.py</code></td>
       <td><code>usrt/runner/adapters.py</code></td>
       <td>Verified 12 Sep: the string <code>online</code> does not appear in
-      <code>adapters.py</code> at all. <strong>Blocked by ONLINE-FREQ</strong> &mdash; sweeping the
-      online phase before that is fixed would mass-produce inadmissible schedules.</td></tr>
+      <code>adapters.py</code> at all. <strong>UNBLOCKED 19 Sep</strong> &mdash; it was gated by
+      ONLINE-FREQ (admissibility) and, as it turned out, by DP-PRUNE as well: the online phase did not
+      terminate on a real instance, so a sweep could never have finished either way. Both are fixed.
+      <strong>This is now the highest-value open item</strong> &mdash; it is what turns &ldquo;the
+      online phase runs&rdquo; into &ldquo;the online phase has curves in the paper&rdquo;.</td></tr>
   <tr><td>SCALAR-DT</td><td>Scalar &Delta;t DP over-plans; commit-time DBF trims it</td>
       <td><code>usrt/online/dp.py</code></td>
-      <td>Carried from 15 Aug (4.55 utility on one event at B=400). Not re-verified.</td></tr>
+      <td><strong>Re-measured 19 Sep, and it is large.</strong> On <code>testcase.py</code> the DP
+      promised <strong>72.2568</strong> utility and <strong>30.2829</strong> survived the trim &mdash;
+      <strong>41.97 lost, &asymp;58% of what was planned</strong>, over 4 events (worst single event:
+      <code>T4,j0</code>, planned 1 &rarr; kept 0, &minus;28.57). The 15 Aug figure was 4.55 on one
+      event. Not a defect &mdash; the trim is what keeps the schedule feasible &mdash; but it means any
+      swept online number is a <em>floor</em>, and the per-window vector state (Part-II I1 option b) is
+      a real optimisation rather than a theoretical one.</td></tr>
   <tr><td>AGG-STATES</td><td>Aggregate-state quantisation clips the exact frontier</td>
       <td><code>usrt/online/value_function.py</code></td>
-      <td>Carried from 15 Aug. Not re-verified.</td></tr>
+      <td><strong>Half of it landed as DP-PRUNE (fixed 19 Sep)</strong> &mdash; the O(n&sup2;) prune it
+      warned about was not merely slow, it was fatal. The <em>quantisation</em> half is still
+      unverified, and now bites less often: with the O(n log n) sweep the exact frontier is affordable,
+      so <code>max_frontier</code> engages more rarely.</td></tr>
   <tr><td>DP-REBUILD</td><td>Per-event DP rebuild dominates online runtime</td>
       <td><code>usrt/online/controller.py</code></td>
-      <td>Performance only. Carried from 15 Aug.</td></tr>
+      <td>Performance only. Carried from 15 Aug &mdash; still true, but now on a 7.4 s run rather than
+      a non-terminating one.</td></tr>
 </table>
 
 <h2 id="fixed">3. Fixed &mdash; closed ledger</h2>
@@ -501,9 +569,13 @@ owner has descoped. See the fixed ledger above.</p>
   contract all landed 12&ndash;13 Sep; see the fixed ledger.</p>
   <p><strong>Fix the bug behind the bug:</strong> SWAP-BREAK &mdash; change the <code>break</code>
   <em>and</em> assert on the supposedly-unreachable revert.</p>
-  <p><strong>Highest value:</strong> ONLINE-FREQ. It is the only Critical item, it invalidates results
-  rather than degrading them, and it is the only one of these that changes what can be claimed in
-  the paper.</p>
+  <p><strong>Landed 19 Sep:</strong> ONLINE-FREQ (was the only Critical item) and DP-PRUNE, which was
+  never filed and turned out to be the larger practical blocker &mdash; there were no online results to
+  invalidate because the online phase could not finish running.</p>
+  <p><strong>Highest value now:</strong> NO-ONLINE-ADAPTER, which is no longer blocked by anything.
+  Read it together with SCALAR-DT: the commit-time trim is discarding &asymp;58% of planned online
+  utility, so whatever the sweep reports is a floor on what the online phase can achieve, not its
+  ceiling &mdash; worth knowing before those curves go in the paper.</p>
   <div class="evidence"><strong>Re-baselining.</strong> B2 landed on 5 Sep and moved every published
   number. <code>tc_b2/u_mand_factor/</code> holds the 900-instance before/after for three models, but
   <code>ALL_DOCS/</code> has <strong>not</strong> been re-baselined against it. Anything quoting

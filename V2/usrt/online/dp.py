@@ -26,7 +26,9 @@ from .actions     import build_job_actions
 from .value_function import base_level, compose, query
 
 # Static per-slot metadata for one job in a processor's EDF chain.
-JobSlot = namedtuple("JobSlot", ["pos", "i", "j", "k_off", "z_off", "time_cap"])
+# freeze_z / locked: see ONLINE-FREQ in actions.py and build_processor_dp below.
+JobSlot = namedtuple("JobSlot", ["pos", "i", "j", "k_off", "z_off", "time_cap",
+                                "freeze_z", "locked"])
 
 # One reconstructed online decision.
 PlannedAction = namedtuple(
@@ -113,7 +115,7 @@ def _edf_order(jobs_x, job_r, job_d):
 
 def build_processor_dp(x, proc_jobs, seg_k, freq_idx, job_r, job_d,
                        cum, N_seg, freq_set, tasks, time_caps=None,
-                       max_frontier=None):
+                       max_frontier=None, freeze_before=None, completed=None):
     """
     Construct the ProcessorDP for processor x from an offline schedule.
 
@@ -122,6 +124,21 @@ def build_processor_dp(x, proc_jobs, seg_k, freq_idx, job_r, job_d,
     it is computed with min_slack_for_job at the offline-committed state.
     `max_frontier` optionally caps each level's Pareto frontier (aggregate
     states) — required when DVFS is active or the exact frontier can explode.
+
+    `freeze_before` / `completed` (ISSUES.md -> ONLINE-FREQ): scope this build
+    to one specific completion event under preemptive EDF.
+      freeze_before : the release time of the job whose completion triggered
+          this build.  Any other job in `proc_jobs[x]` released strictly
+          before it cannot have started later than it (while that job is
+          ready it is always the higher-EDF-priority one, so nothing with a
+          later release and lower priority can run ahead of it) — such a job
+          may already be running/preempted, so its frequency is frozen
+          (segment count may still grow).  None disables this gate (used for
+          the initial, event-less build).
+      completed : mapping/set of jobs whose OWN completion has already fired
+          (e.g. the controller's eff_override) — these are resolved history,
+          excluded entirely (locked to their current k/z).  None disables
+          this gate.
 
     Returns a ProcessorDP (with V_levels precomputed for every suffix).
     """
@@ -136,7 +153,10 @@ def build_processor_dp(x, proc_jobs, seg_k, freq_idx, job_r, job_d,
         else:
             cap = min_slack_for_job(i, j, x, proc_jobs, job_r, job_d,
                                     seg_k, freq_idx, freq_set, cum)
-        slots.append(JobSlot(pos, i, j, k_off, z_off, cap))
+        locked   = completed is not None and (i, j) in completed
+        freeze_z = (not locked and freeze_before is not None and
+                   job_r[(i, j)] < freeze_before)
+        slots.append(JobSlot(pos, i, j, k_off, z_off, cap, freeze_z, locked))
 
     # Right-to-left DP.
     N = len(slots)
@@ -146,7 +166,8 @@ def build_processor_dp(x, proc_jobs, seg_k, freq_idx, job_r, job_d,
         slot = slots[s]
         acts = build_job_actions(
             slot.i, slot.k_off, slot.z_off, cum, N_seg[slot.i],
-            freq_set, tasks[slot.i]['u_i'], slot.time_cap)
+            freq_set, tasks[slot.i]['u_i'], slot.time_cap,
+            freeze_z=slot.freeze_z, locked=slot.locked)
         V_levels[s] = compose(acts, V_levels[s + 1], max_frontier=max_frontier)
 
     return ProcessorDP(x, slots, V_levels, cum, freq_set, tasks)

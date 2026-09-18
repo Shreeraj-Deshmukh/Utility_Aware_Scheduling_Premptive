@@ -105,18 +105,24 @@ class OnlineController:
         self.applied = []   # history of JobDecision
 
     # ── construction helpers ────────────────────────────────────────────────
-    def _build_dp(self, x):
+    def _build_dp(self, x, freeze_before=None, completed=None):
         # Structural per-job time cap = deadline interval (a job cannot occupy
         # more than its own window).  The real limiter on additions is the
         # observed time windfall (the DP's dt budget) plus the dynamic-DBF
         # gate at commit time — NOT the offline-exhausted static slack.
+        #
+        # freeze_before / completed (ISSUES.md -> ONLINE-FREQ): scope this
+        # build to one specific completion event under preemptive EDF — see
+        # build_processor_dp.  Left at their defaults (None) this is a plain,
+        # unscoped rebuild (used at construction and after every commit).
         time_caps = {(i, j): float(self.job_d[(i, j)] - self.job_r[(i, j)])
                      for (i, j) in self.proc_jobs[x]}
         return build_processor_dp(
             x, self.proc_jobs, self.seg_k, self.freq_idx,
             self.job_r, self.job_d, self.cum, self.N_seg,
             self.freq_set, self.tasks, time_caps=time_caps,
-            max_frontier=self.max_frontier)
+            max_frontier=self.max_frontier,
+            freeze_before=freeze_before, completed=completed)
 
     # ── metrics ──────────────────────────────────────────────────────────────
     def _eff(self, i, j):
@@ -171,13 +177,137 @@ class OnlineController:
         return True
 
     # ── densities / arbitration ──────────────────────────────────────────────
-    def _densities(self, t):
+    def _densities(self):
+        """
+        rho_x for every processor, counting only jobs whose own completion has
+        not yet fired.  Takes no time argument: what matters is whether a job's
+        fate is already decided, not when it was released (ISSUES.md -> I2).
+        """
         return {
             x: future_utility_density(
-                x, t, self.proc_jobs, self.tasks, self.cum, self.N_seg,
-                self.seg_k, self.job_r, self.periods)
+                x, self.proc_jobs, self.tasks, self.cum, self.N_seg,
+                self.seg_k, self.periods, completed=self.eff_override)
             for x in range(self.N_prc)
         }
+
+    def _opportunity_cost(self, x, c):
+        """
+        §IX.B's opp-cost: what `c` units of energy would be worth to the BEST
+        other processor right now, read live off its DP table rather than from
+        any tuned constant.
+
+        A non-completing processor has no time windfall of its own — time slack
+        is perishable and processor-local, so its dt budget is 0.  Its value for
+        energy alone is therefore whatever it can buy with no extra time, which
+        is usually nothing: if it has no room to run a longer job, energy is
+        worth nothing to it *at this instant*.
+
+        That asymmetry is the point.  Energy is accumulative and does not
+        expire; time slack does.  Withholding energy from a processor that has a
+        time opportunity NOW, to reserve it for one that cannot use it until
+        later, strands a perishable resource to protect a durable one — the
+        reserving processor can draw from the pool when its own windfall
+        arrives, and the pool will have been replenished by then.  Reservation
+        only earns its keep when two processors want the same energy at the same
+        time, which is the paper's own "what if two early completions?".
+
+        Uses each other processor's resting DP: its baselines only change on its
+        own events, so it is current; only its event scoping is one event stale,
+        which is immaterial for a marginal estimate.
+        """
+        best = 0.0
+        for y in range(self.N_prc):
+            if y == x or y not in self.dps:
+                continue
+            v = self.dps[y].best_value(0, 0.0, c)
+            if v > best:
+                best = v
+        return best
+
+    def _window_residuals(self, x):
+        """
+        Spare capacity of every DBF window on processor x, against the DYNAMIC
+        schedule — completed jobs charged their ACTUAL time, everyone else
+        their committed worst case.  Same window set and same demand sum as
+        `_timing_ok_dynamic`; this returns how much room is left rather than
+        just whether any is.
+        """
+        jobs = self.proc_jobs[x]
+        if not jobs:
+            return []
+        Ax = sorted({self.job_r[ij] for ij in jobs})
+        Dx = sorted({self.job_d[ij] for ij in jobs})
+        out = []
+        for t1 in Ax:
+            for t2 in Dx:
+                if t1 >= t2:
+                    continue
+                demand = 0.0
+                for (i, j) in jobs:
+                    if self.job_r[(i, j)] >= t1 and self.job_d[(i, j)] <= t2:
+                        demand += self._eff(i, j)
+                out.append((t1, t2, (t2 - t1) - demand))
+        return out
+
+    def _addable_demand(self):
+        """
+        D for the §IX.B surplus test: the energy cost of the optional segments
+        that could ACTUALLY still be run — not of every segment that merely
+        remains unexecuted.
+
+        The distinction is the whole test.  Counting every unexecuted segment
+        makes D enormous (326.6 against a pool of 1.94 at the first event on
+        testcase.py), so the arbiter reports "scarce" whenever it matters and
+        rations energy nobody is competing for — the run ended with 113.93
+        units unspent while processors were being capped, costing 5.55 utility.
+        Counting instead against the *static* slack is the opposite
+        degeneracy: Phase 5 has already eaten it, so D collapses to ~0 and the
+        arbiter never rations at all.  Either way the branch stops responding
+        to the instance, which is a hardcoded policy wearing a formula's
+        clothes.
+
+        So time-feasibility is judged against the DYNAMIC DBF, which is where
+        online slack actually lives: a job may grow only into the room its own
+        binding window still has, once early completions are credited.  D then
+        rises and falls with the schedule, and surplus/scarcity is decided by
+        the instance rather than by us.
+
+        Per-job slacks are not additive — two jobs sharing a window cannot both
+        take all of it — so summing them overstates D, which biases towards
+        declaring scarcity.  That is the safe direction: rationing is skipped
+        only when the pool covers even this pessimistic figure.
+        """
+        D = 0.0
+        for x in range(self.N_prc):
+            windows = self._window_residuals(x)
+            for (i, j) in self.proc_jobs[x]:
+                if (i, j) in self.eff_override:
+                    continue                      # resolved history
+                k = self.seg_k[(i, j)]
+                if k >= self.N_seg[i]:
+                    continue                      # nothing left to add
+                r, d = self.job_r[(i, j)], self.job_d[(i, j)]
+                slack = float("inf")
+                for (t1, t2, residual) in windows:
+                    if t1 <= r and d <= t2 and residual < slack:
+                        slack = residual
+                if slack == float("inf"):
+                    slack = 0.0
+                if slack <= _TOL:
+                    continue
+                fz   = self.freq_set[self.freq_idx[(i, j)]]
+                base = self.cum[i][k]
+                # Largest whole segment count whose ADDED effective time fits.
+                best = k
+                for kk in range(k + 1, self.N_seg[i] + 1):
+                    if (self.cum[i][kk] - base) / fz <= slack + _TOL:
+                        best = kk
+                    else:
+                        break
+                if best > k:
+                    D += (energy_val(self.cum[i][best], fz) -
+                          energy_val(base, fz))
+        return D
 
     # ── the online event ──────────────────────────────────────────────────────
     def on_completion(self, i, j, observed_dt, observed_de):
@@ -201,14 +331,39 @@ class OnlineController:
         #    utility density.  We read a LIVE snapshot of the pool level under
         #    the lock; the value is advisory (another processor may spend before
         #    we commit) — the hard guarantee is the atomic try_spend in step 4.
-        t = self.job_r[(i, j)]
+        #    Step 1 has already recorded (i, j) as completed, so it is correctly
+        #    excluded from its own processor's density.
+        #    Routing follows §IX.B and is observed end to end, with no tuned
+        #    constant anywhere: under surplus (pool >= D) nobody is capped;
+        #    under scarcity this processor may still take the pool if its own
+        #    marginal value beats what the same energy is worth to the best
+        #    other processor right now.  Only when someone else genuinely wants
+        #    the same energy do we fall back to splitting it by density.
         pool_now  = self.pool.level()
-        densities = self._densities(t)
-        caps      = arbitrate_energy(pool_now, densities, self.arbitration)
+        densities = self._densities()
+        caps      = arbitrate_energy(pool_now, densities, self.arbitration,
+                                     demand=self._addable_demand())
         de_budget = min(pool_now, max(0.0, caps.get(x, 0.0)))
+        if de_budget < pool_now - _TOL:
+            opp  = self._opportunity_cost(x, pool_now)
+            mine = self.dps[x].best_value(c + 1, observed_dt, pool_now)
+            if mine > opp + _TOL:
+                de_budget = pool_now
 
-        # 3) DP lookup + reconstruction for the downstream chain jobs[c+1:].
-        dp_value, planned = self.dps[x].distribute(c + 1, observed_dt, de_budget)
+        # 3) DP lookup + reconstruction for the downstream chain jobs[c+1:],
+        #    scoped to THIS event (ISSUES.md -> ONLINE-FREQ).  Under
+        #    preemptive EDF, a later-deadline ("downstream") job has provably
+        #    NOT started unless it was released before (i, j) — while (i, j)
+        #    is ready it is always the higher-EDF-priority job, so nothing
+        #    lower-priority can run ahead of it.  Freeze such a job's
+        #    frequency (segments may still grow).  A job whose OWN completion
+        #    has already fired (self.eff_override) is resolved history —
+        #    exclude it entirely.  Built fresh from job_r / eff_override every
+        #    event (not cached chain-position state), so it is correct
+        #    regardless of call order.
+        dp_now = self._build_dp(x, freeze_before=self.job_r[(i, j)],
+                                completed=self.eff_override)
+        dp_value, planned = dp_now.distribute(c + 1, observed_dt, de_budget)
 
         # 4) hard-verify (per-processor dynamic DBF + atomic pool spend), trimming
         #    if necessary.  All energy is deducted through pool.try_spend inside.
@@ -227,8 +382,14 @@ class OnlineController:
             self.trim_loss   += gap
             self.trims.append(((i, j), len(planned), len(committed), gap))
 
-        # 5) rebuild this processor's DP so later completions stay exact.
-        self.dps[x] = self._build_dp(x)
+        # 5) keep the resting self.dps[x] reasonably current for introspection
+        #    (nothing in the live decision path reads it — step 3 always
+        #    rebuilds its own fresh, correctly-scoped table).  Reuse dp_now
+        #    rather than paying for a second full O(N*(A*F)^2) rebuild: it is
+        #    already right for this event, and the only remaining staleness
+        #    (not yet reflecting THIS event's own commit) matches how it
+        #    always looked one event ago, which nothing depends on.
+        self.dps[x] = dp_now
         for slot in self.dps[x].slots:
             self.pos_of[(slot.i, slot.j)] = slot.pos
 

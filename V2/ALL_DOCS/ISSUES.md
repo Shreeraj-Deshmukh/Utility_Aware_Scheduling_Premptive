@@ -370,6 +370,14 @@ f_max=1.0 on only *some*. The code reads `processors[0]` everywhere. Latent only
 ---
 
 ### ONLINE-DEMO — the online entry point does not run the pipeline it claims
+**FIXED 2026-09-19.** `offline_schedule()` now calls `heuristic_v5b.run()` with its stdout
+captured, instead of re-deriving a partial phase list; `run()` also applies Phase 3's
+`min_possible_energy` gate up front, so an instance that is infeasible at any frequency is
+reported as such rather than handed to the online simulator (which would have shown a negative
+pool from its first line and read like a bug). No number moves on `testcase.py` — at B=400 the
+Phase 3 gate and Phase 6b are both no-ops, exactly as predicted — so the divergence this closes
+is at tight ρ, which is where online results matter.
+
 | field | value |
 |---|---|
 | Status      | open |
@@ -388,21 +396,55 @@ tight ρ.
 ### IXB-ROUTING — paper §IX.B opportunity-cost energy routing not implemented
 | field | value |
 |---|---|
-| Status      | open (feature) |
-| Confidence  | verified absent 2026-09-04 |
-| Layer       | — |
-| Location    | would replace/extend `usrt/online/density.py:45` |
+| Status      | **needs-decision 2026-09-19** — surplus branch implemented, but `D` needs a definition |
+| Confidence  | verified absent 2026-09-04; **quantified 2026-09-19** |
+| Layer       | B — valid output, wrong quality |
+| Location    | `usrt/online/density.py` — `arbitrate_energy`, `total_addable_energy` |
 
 **Mechanism.** Implemented instead: Approach C proportional density split. It **always** splits,
-so with two equal-density processors each is capped at half the pool *even in surplus*
-(`controller.py:208` `de_budget = min(pool_now, caps[x])`). §IX.B's surplus branch
-(`opp-cost = 0` when `E_rem ≥ D`) degenerates to plain greedy and fixes exactly this.
+so with two equal-density processors each is capped at half the pool *even in surplus*.
+§IX.B's surplus branch (`opp-cost = 0` when `E_rem ≥ D`) degenerates to plain greedy and fixes
+exactly this.
 
-**Evidence.** Already recorded as a weakness in `15Aug_Online_Audit.html` §5, "proportional
-density arbitration can under-serve immediate high-value work".
+**Evidence — measured 2026-09-19 on `testcase.py`**, same offline schedule, three rules:
 
-**Note.** The DP tables already contain the Δ values §IX.B needs — this is a change to
-`density.py` plus one call site, not a redesign.
+| arbitration | online added | unspent pool |
+|---|---|---|
+| proportional (Approach C, current) | 27.8676 | 113.9300 |
+| strict (highest-ρ takes all) | 22.7313 | 114.6166 |
+| **no cap (§IX.B surplus branch)** | **33.4196** | 105.9523 |
+
+The pool is never contended on this instance — 100+ units spare throughout — yet Approach C
+rations it anyway, costing **5.55 utility** and stranding **8 more energy units**. This is no
+longer a theoretical weakness.
+
+**What landed.** `arbitrate_energy` takes `demand` and returns an uncapped split when
+`pool >= demand`; `total_addable_energy` computes `D`; `controller._addable_demand` feeds it.
+Nothing is tuned — both quantities are observed, per §IX.B's own requirement.
+
+**Open question — `D` needs a definition, and it decides the answer.** §IX.B says `D` is the
+demand of all still-addable **time-feasible** segments. That qualifier carries the whole weight,
+and the two natural readings are degenerate opposites:
+
+- **Ignore time feasibility** (what is coded now): `D` counts every remaining optional segment, so
+  it is enormous early — `D = 326.6` against `pool = 1.94` at event 1. Surplus fires at only
+  **18 of 57 events**, all of them late, once `D` has collapsed and there is nothing left to add.
+  Result: no change from Approach C, 27.8676.
+- **Use static DBF slack**: Phase 5 has already eaten the static slack, so `min_slack_for_job ≈ 0`
+  and `D ≈ 0` — surplus *always* fires, which is exactly the "no cap" row, 33.4196.
+
+Neither is the paper's intent. The honest difficulty is that online slack is *created by the very
+early-completion events being arbitrated*, so "time-feasible" has to be judged against the dynamic
+DBF, not the static schedule.
+
+**Also note:** this interacts with the I2 fix that landed the same day (density now counts every
+unresolved job rather than only jobs released after the completer). I2 is more accurate in
+isolation, but under always-ration it makes the needless rationing *tighter* — it moved this
+instance **30.2829 → 27.8676**. The two must be judged together, not separately.
+
+**Recommended next step.** B=400 is a slack budget, so this instance cannot say whether rationing
+ever earns its keep — the case for it is tight-ρ starvation, which cannot occur here. Re-run the
+three rules at ρ = 0.4–0.6 before choosing. Cheap now that the online phase completes in 7.4 s.
 
 ---
 
@@ -427,7 +469,7 @@ suite (~1 h, pays off across every later fix)?
 ### ONLINE-FREQ — online revises the frequency of a job that has already started
 | field | value |
 |---|---|
-| Status      | open |
+| Status      | **fixed 2026-09-19** — repro clean in 4 of 4 configurations |
 | Confidence  | verified live 2026-09-12 — repro, violation in 3 of 4 configurations |
 | Layer       | **A** — violates a rule of the problem |
 | Costs us    | every online result where a preempted job's frequency was revised: the schedule is inadmissible under §II, and both its reported energy and its DBF check are computed at the wrong frequency |
@@ -491,13 +533,47 @@ than the paper-wording argument it previously rested on.
    motivation (switch overhead/reliability) and would need the energy model to account for the
    switch. Not recommended.
 
-**Open question.** Option 1 is correct but needs a start-time notion the online phase does not
-currently carry; option 2 is a two-line change that costs utility. Which, and is the utility cost
-worth measuring first?
+**Open question — answered 2026-09-19: neither, because option 2's *test* delivers option 1's
+*semantics*.** The two were posed as a trade (correct-but-needs-a-clock vs cheap-but-lossy). They
+are not a trade. Under preemptive EDF on one processor with no migration, for the completing job
+`c` and any downstream job `d` (later deadline ⇒ strictly lower priority): `c` is ready and
+higher-priority for the whole of `[r_c, finish_c)`, so `d` cannot hold the CPU anywhere in that
+window. The only way `d` ran before `c` finished is in the gap *before `c` was released*, which
+requires `r_d < r_c`. So
 
-**Note — adjacent, same root.** `simulator.py:88` iterates events in **release** order while the DP
-chain is in **deadline** order, so `jobs[c+1:]` can include jobs the simulator has *already
-processed as complete*. Whatever fix lands should reconcile the two orderings, not just one.
+> **`d` has provably not started ⟺ `job_r[d] >= job_r[c]`**
+
+— a comparison of two static release times, needing no clock, no scheduler and no start-time
+tracking. It is *exact*, not conservative, so option 2's cheapness carries option 1's precision and
+the feared utility cost does not exist.
+
+**What landed.**
+- `actions.build_job_actions` takes `freeze_z` (collapse the `z` loop to `z_off`; `k` still free)
+  and `locked` (return only the baseline action).
+- `dp.JobSlot` carries both flags; `dp.build_processor_dp` takes `freeze_before` (the completing
+  job's release) and `completed` (the controller's `eff_override`) and sets them per slot.
+- `controller.on_completion` builds its DP **scoped to that one event** —
+  `_build_dp(x, freeze_before=job_r[(i,j)], completed=self.eff_override)` — instead of reusing the
+  unscoped resting table. Re-derived every event from static release times, so it is correct
+  regardless of the caller's event order.
+
+**Evidence (2026-09-19).** Repro clean at `Z_OFF` ∈ {0,1,2,3} (was: violation at 0,1,2). Worked
+examples still reproduce every design-doc table cell-for-cell. On `testcase.py` the gate is
+load-bearing — **931 of 1862** `build_job_actions` calls take the `locked` path — but an A/B
+against the ungated behaviour gives **identical** numbers (online added 30.2829 both ways). So the
+admissibility hole was real and is closed; on *this* instance it was never exercised in a way that
+moved a committed number. That cannot be generalised to the sweep without running it.
+
+`freeze_z` fired **0** times, as predicted: in the release-ordered simulator anything the release
+rule catches has already completed, so `locked` catches it first. The branch stays as the
+principled general rule for when the calling pattern changes.
+
+**Note — adjacent, same root — RESOLVED by the same fix.** `simulator.py:88` iterates events in
+**release** order while the DP chain is in **deadline** order, so `jobs[c+1:]` can include jobs the
+simulator has *already processed as complete*. The `completed`/`locked` gate is exactly the
+reconciliation: such jobs are now excluded outright (no `k`, no `z`), which is the stricter and
+correct treatment — you cannot retroactively lengthen a job whose actual `(dt, de)` is already
+banked. This is what the 931 `locked` calls above are.
 
 ---
 
@@ -616,9 +692,11 @@ if it has closed by other means, 6b may not be worth fixing at all.
 `run_models.py` cannot dispatch it. `usrt/solvers/online_demo.py` is reachable only through
 `run.py`, one instance at a time.
 
-**Note.** Wiring it up is blocked in practice by **ONLINE-FREQ** — sweeping the online phase before
-that is fixed would mass-produce inadmissible schedules. Fix the admissibility bug first, then the
-adapter.
+**Note — UNBLOCKED 2026-09-19.** This was blocked in practice by **ONLINE-FREQ** (sweeping before
+that was fixed would mass-produce inadmissible schedules) and, it turned out, by **DP-PRUNE** as
+well — the online phase did not terminate on a realistic instance at all, so a sweep was never
+going to finish. Both are now fixed: `run.py testcase.py online` completes in **7.4 s** and the
+schedule is admissible under §II. The adapter is the next keystroke, not a blocked item.
 
 ---
 
@@ -745,6 +823,49 @@ moment the solvers are deleted. Until then, deleting them still breaks `run.py`.
 
 ---
 
+### DP-PRUNE — the online DP does not terminate on a realistic instance
+| field | value |
+|---|---|
+| Status      | **fixed 2026-09-19** |
+| Confidence  | verified live 2026-09-19 — A/B against the untouched tree |
+| Layer       | — (performance, but it gated every online result) |
+| Costs us    | *everything online*: the phase could not be run at all on a real test case, so no online numbers existed to be right or wrong |
+| Location    | `usrt/online/value_function.py` — `prune()`, called from `compose()` |
+
+**Mechanism.** `compose()` builds the full `|actions| × |downstream frontier|` cross-product, then
+ran `prune()` — an all-pairs O(n²) scan — over the *whole* thing, and only *afterwards* checked it
+against `max_frontier`. So the cap that exists to bound this never got the chance: the expensive
+step had already run at full size. On `testcase.py` (8 frequency levels, up to 6 optional segments)
+the cross-product is ≈14 336 candidates per level ⇒ ≈2·10⁸ comparisons per level, ≈28 levels per
+processor, on every build — and a build happens at construction *and* once per event.
+
+**Evidence.** `python run.py testcase.py online` never completed: killed at 180 s, having printed
+nothing past `Offline schedule built` — i.e. still inside the **first** `OnlineController.__init__`,
+before event one. Confirmed pre-existing, not introduced by the ONLINE-FREQ work: `git stash`,
+re-run on the untouched tree, **hangs at the identical point**. This is the register's own
+`AGG-STATES` / Part-II `I6` ("prune is O(n²) and the frontier is unbounded") landing for real — it
+was filed as low-severity and unverified because nobody had yet run the online phase on anything
+but toy inputs.
+
+**What landed.** `prune()` is now an exact O(n log n) Pareto sweep. Visiting in
+`(req_t asc, req_e asc, value desc)` order makes the `req_t` half of the domination test automatic
+(every visited entry already has `req_t <=` mine), leaving a 2-D query — "has any visited entry
+with `req_e <=` mine a `value >=` mine?" — answered as a prefix maximum by a Fenwick tree over
+rank-compressed `req_e`. The O(n²) version's reverse sweep is unreachable under this ordering (a
+later entry can only dominate an earlier one if all three fields tie, and such an entry is itself
+dropped as dominated), so it is gone.
+
+**Deliberately *not* the cheap fix.** Aggregating before pruning is a 3-line change, but it would
+bucket the candidates whenever the cross-product is large — *including* the common case where the
+true frontier would have fitted under `max_frontier` anyway, losing exactness for no reason. The
+sweep gives the same frontier as the O(n²) scan, so nothing is traded.
+
+**Result.** Never completes → **7.4 s**. Worked examples still reproduce every design-doc table
+cell-for-cell (the strictest available check, and it runs `max_frontier=None`, i.e. the fully exact
+path). `value_function.py` is imported only inside `usrt/online/`, so no offline solver is touched.
+
+---
+
 # Closed — examined, not defects
 
 | ID | Claim | Why it was closed |
@@ -787,9 +908,9 @@ verified were promoted above and removed from this table.
 |---|---|---|
 | DELTA-CAP | δ cap arithmetically impossible when β > 2α/(1−α) | 22Aug C1 |
 | DBF-COMPILE | DBF hot spot is compilable — 56× available, bit-identical | 22Aug C4 |
-| SCALAR-DT | scalar Δt over-plans; commit DBF trims (4.55 utility, one event, B=400) | 22Aug D2 / 15Aug |
-| AGG-STATES | aggregate-state quantisation clips the exact frontier | 22Aug D3 / 15Aug |
-| DP-REBUILD | per-event DP rebuild dominates online runtime (performance only) | 22Aug D4 / 15Aug |
+| ~~SCALAR-DT~~ | **no longer a carry-over — measured 2026-09-19, and it is large.** On `testcase.py` the DP promised **72.2568** utility and only **30.2829** survived the commit-time DBF trim: **41.97 lost, ≈58% of what was planned**, over 4 events (worst single event: `T4,j0`, planned 1 → kept 0, −28.57). The 15 Aug figure was 4.55 on one event. Not a defect — the trim is what keeps the schedule feasible — but the scalar-Δt proxy is leaving far more on the table than the toy cases implied, which makes the per-window vector state (Part-II I1 option b) a real optimisation rather than a theoretical one. Promote to a live item when online quality is next on the agenda. | 22Aug D2 / 15Aug, re-measured 19 Sep |
+| ~~AGG-STATES~~ | **partly landed as DP-PRUNE (fixed 2026-09-19)** — the O(n²) prune it warned about was not merely slow, it made the online phase non-terminating on a real instance. The *quantisation* half of the claim (aggregate states clipping the exact frontier) is still unverified: with the sweep in place the exact frontier is now affordable, so `max_frontier` bites less often than it did. | 22Aug D3 / 15Aug |
+| DP-REBUILD | per-event DP rebuild dominates online runtime (performance only) | 22Aug D4 / 15Aug — still true, but now on a 7.4 s run rather than a non-terminating one |
 | LEFTSHIFT-ALARM | the left-shift diagnostic raises false alarms | June D14 |
 | PAPER-TYPO | paper §VII.A.2(d)(i) says "mandatory" where "optional" is meant | 22Aug E3 |
 
@@ -802,9 +923,16 @@ moot under *Closed* rather than carried as debt.
 # Sequencing notes
 
 ```
-ONLINE-FREQ ──blocks── NO-ONLINE-ADAPTER   sweeping online before the
-                                            admissibility bug is fixed would
-                                            mass-produce invalid schedules
+ONLINE-FREQ ──blocked── NO-ONLINE-ADAPTER   BOTH CLEARED 2026-09-19.
+DP-PRUNE    ──blocked──                     ONLINE-FREQ was the admissibility
+                                            gate; DP-PRUNE was the one nobody
+                                            had found -- online did not
+                                            terminate on a real instance at
+                                            all, so the sweep could never have
+                                            finished either way. Online now
+                                            runs end-to-end in 7.4 s and is
+                                            admissible under §II, so the
+                                            adapter is unblocked.
 
 HEUR-V1-RET DESCOPED 2026-09-12 (owner decision) -- closed V1-STRIP, V2-CH23,
 FP-DRIFT, V1-WINDOW-BLIND and STATE-ENERGY-GUARD as moot in the same stroke
@@ -832,9 +960,16 @@ C8-HARMONIC                                  isolated, but moves every number
                                              with a doc re-baseline
 ```
 
-**Highest value: ONLINE-FREQ.** It is the only Layer-A item with a confirmed violation, it
-*invalidates* results rather than degrading them, and it is the only open item that changes what
-can be claimed in the paper.
+**~~Highest value: ONLINE-FREQ.~~ LANDED 2026-09-19**, together with DP-PRUNE, which was the
+larger practical blocker and was not on any list: the online phase did not terminate on a real
+instance, so there were no online results to invalidate in the first place. Both are now fixed and
+`run.py testcase.py online` produces an admissible schedule in 7.4 s.
+
+**Highest value now: NO-ONLINE-ADAPTER.** It is what converts "the online phase runs" into "the
+online phase has curves in the paper", and it is no longer blocked by anything. The open question
+it raises is not technical but experimental — see SCALAR-DT, re-measured 19 Sep: the commit-time
+trim is discarding ≈58% of planned online utility, so whatever the sweep reports is a floor on what
+the online phase could achieve, not its ceiling.
 
 **Sequencing question — answered.** B2 moved every published number, and the plan taken was to
 re-measure at the point B2 landed rather than batch it: `tc_b2/u_mand_factor/` holds the

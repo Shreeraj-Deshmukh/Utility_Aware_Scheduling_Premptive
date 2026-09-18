@@ -35,7 +35,7 @@ from .emit       import emit_testcase, ManifestWriter
 
 
 # ── grids for the simulation parameters ──────────────────────────────────────
-GRID_N_PRC   = [2, 4, 8, 16]                        # paper VII.A.2(a)
+GRID_N_PRC   = [2, 4, 8, 16]                        # paper 
 GRID_N_TSK   = [4, 6, 8, 10, 12]                    # ILP-tractable tier
 GRID_N_TSK_BIG = [5, 10, 15, 20, 25, 30, 35, 40, 45]  # heuristic-only tier
 GRID_U_MAND  = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
@@ -44,7 +44,6 @@ GRID_RHO     = [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
 GRID_XI      = [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
 # Number of discrete DVFS levels.  The paper FIXES this at 5; sweeping it asks
 # how much the heuristics depend on a fine frequency grid.  n_frq=2 is the
-# coarse-DVFS extreme (f_max plus one other level).
 GRID_N_FRQ   = [2, 3, 5, 8, 12]
 
 FACTORS = {

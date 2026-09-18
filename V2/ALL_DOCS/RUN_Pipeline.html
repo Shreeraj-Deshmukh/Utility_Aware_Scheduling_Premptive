@@ -327,8 +327,19 @@ E_full_fmax</code> and <code>E_full_fmax = (&alpha;+&beta;)&middot;H&middot;(U_M
 after an energy-constant change.</b></div>
 
 <h3>B &mdash; Test-case generation knobs: <code>usrt/gen/spec.py</code></h3>
-<p>All defaults are fields of the <code>TestSpec</code> dataclass. Edit here to change the defaults;
-use CLI flags for one-off overrides.</p>
+<p>All defaults are fields of the <code>TestSpec</code> dataclass.</p>
+<div class="callout bad"><strong>Editing <code>spec.py</code> does NOT change most of these when you
+generate with <code>gen_testcases.py</code>.</strong> The CLI declares its <em>own</em> defaults and
+always passes them into <code>TestSpec</code> (<code>gen_testcases.py</code> lines 79&ndash;97), so they
+override whatever <code>spec.py</code> says &mdash; even when you give no flag. This applies to
+<code>n_prc, n_tsk, u_mand_factor, u_opt_factor, rho, xi, n_frq, max_optional_seg, k_max,
+base_per_min, base_per_max</code>. For those, <b>set the value with the CLI flag</b> (or change the
+<code>default=</code> in <code>gen_testcases.py</code>). Only the fields with no flag &mdash;
+<code>f_min, f_max, f_step, per_step, u_lo, u_hi, seg_var_frac, gamma, delta,
+guarantee_feasible, max_redraws</code> &mdash; are actually read from <code>spec.py</code>.
+Also note <code>--base-per</code> sets <code>base_per_min</code> and <code>base_per_max</code> to the
+same value, so a random base period (and hence <code>per_step</code>) cannot be reached from the
+CLI.</div>
 <table>
 <tr><th>Field</th><th>Default</th><th>Controls</th><th>CLI flag</th></tr>
 <tr><td><code>n_prc</code></td><td>2</td><td>processors</td><td><code>--n-prc</code></td></tr>
@@ -361,7 +372,7 @@ top of the file (see the table in &sect;3). Edit those to change step sizes perm
 <tr><td><code>usrt/solvers/heuristic_v6.py</code></td><td><code>MAP_LS_ROUNDS=2</code>, <code>MAP_LS_MAX_MOVES=24</code></td><td>Phase 1c search budget. Caps pipeline evaluations at ~52</td></tr>
 <tr><td><code>usrt/solvers/heuristic_v7.py</code></td><td><code>GUIDED_REPAIR_MOVES=4</code>, <code>LS_ROUNDS=0</code></td><td>Phase 1R budget; local search disabled (measured not to pay)</td></tr>
 <tr><td><code>usrt/mapping/budget_refine.py</code></td><td><code>max_swaps=200</code></td><td>Phase 1b&prime; swap cap</td></tr>
-<tr><td><code>usrt/mapping/repair.py</code></td><td><code>range(100)</code></td><td>DBF repair iteration cap</td></tr>
+<tr><td><code>usrt/mapping/repair.py</code></td><td><code>max_iters=100</code> (argument of <code>repair_mapping</code>)</td><td>DBF repair iteration cap; stops early when a move cannot help</td></tr>
 </table>
 
 <h3>Checklist before a fresh run</h3>
