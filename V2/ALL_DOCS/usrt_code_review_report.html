@@ -171,7 +171,7 @@
 <nav class="toc">
   <strong>Contents</strong>
   <ul>
-    <li><a href="#live">1. Live issues</a> &mdash; 0 critical &middot; 0 high &middot; 2 medium &middot; 4 low/latent<br><span class="muted">(30 Sep: 6B-INERT closed by decision &mdash; re-measured, kept as-is; ONLINE-DEMO fixed 19 Sep)</span></li>
+    <li><a href="#live">1. Live issues</a> &mdash; 0 critical &middot; 0 high &middot; 1 medium &middot; 4 low/latent<br><span class="muted">(1 Oct: SWAP-BREAK fixed &middot; 30 Sep: 6B-INERT closed by decision &mdash; re-measured, kept as-is &middot; ONLINE-DEMO fixed 19 Sep)</span></li>
     <li><a href="#gaps">2. Feature gaps</a> (not defects)</li>
     <li><a href="#fixed">3. Fixed &mdash; closed ledger</a></li>
     <li><a href="#notdefect">4. Examined, not defects</a></li>
@@ -291,19 +291,42 @@ means a measurement taken that day, not a claim carried from an earlier document
   figure predated the <code>spec.py</code> rewrite and was never re-measured.</div>
 </section>
 
-<section class="card">
-  <span class="badge med">Medium</span>
-  <span class="loc">usrt/phases/swap.py:126</span>
-  <h3>SWAP-BREAK &mdash; Phase 6 aborts the whole search on one failed candidate</h3>
-  <p>When the best candidate fails <code>check_all_timing</code>, the else-branch executes
-  <code>break</code>, ending the local search and discarding every remaining improving candidate from
-  the same scan.</p>
-  <div class="fix"><strong>The deeper point.</strong> <code>min_slack_for_job</code> evaluates exactly
-  the windows affected by adding time to the receiver, so <strong>the revert path should be
-  unreachable</strong>. If it ever fires, that signals a state-consistency bug elsewhere &mdash; which
-  makes silently breaking doubly wrong. Fix: blacklist the pair and <code>continue</code>,
-  <em>and</em> assert or log loudly on the supposedly-unreachable revert. Fixing only the
-  <code>break</code> hides a real bug.</div>
+<section class="card" style="border-left:5px solid var(--low)">
+  <span class="badge low">Fixed 1 Oct</span>
+  <span class="loc">usrt/phases/swap.py</span>
+  <h3>SWAP-BREAK &mdash; Phase 6 aborted the whole search on one failed candidate</h3>
+  <p>When the best candidate failed <code>check_all_timing</code> at EXECUTE, the else-branch
+  reverted both jobs and ran <code>break</code> &mdash; ending the entire local search, discarding
+  every remaining ranked candidate from that scan <em>and</em> all later iterations.</p>
+  <div class="evidence"><strong>The path is unreachable by construction.</strong> Adding a segment
+  to the receiver raises DBF demand in exactly the windows containing its <code>[r, d]</code>
+  interval, and <code>min_slack_for_job</code> scans exactly that set &mdash; measured with the giver
+  <em>already</em> tentatively removed, i.e. in the very state that holds at EXECUTE. The giver only
+  removes work, which can only lower demand. The pre-check is therefore <strong>exact, not
+  conservative</strong>. Measured: <strong>0 reverts in 19 committed swaps</strong> over 54
+  instances.</div>
+  <p><strong>Why it was written that way.</strong> The old log line read <em>"cross-window timing
+  violation"</em> &mdash; the author believed the pre-check covered only some windows, so a failure
+  meant "state I don't understand, stop". The safety net is reasonable; the <code>break</code> is the
+  wrong reflex, and the belief behind it is false.</p>
+  <div class="fix"><strong>Fix (option C).</strong> <code>break</code> &rarr; <strong>blacklist the
+  pair and <code>continue</code></strong>. The blacklist is <em>not</em> optional &mdash; the search
+  is deterministic and the revert restores the exact prior state, so a bare <code>continue</code>
+  would re-select the same pair forever; it is cleared after each successful swap since the fill pass
+  moves <code>seg_k</code>. A new <code>_first_violation()</code> reports <em>where</em>
+  (<code>check_all_timing</code> returns only a bool). It then <strong>raises
+  <code>AssertionError</code> after the search completes</strong> &mdash; raising rather than
+  logging because <code>adapters._suppress()</code> redirects stdout at the fd level during sweeps,
+  so a log line is invisible exactly where it matters, while an exception surfaces as a
+  <code>status=error</code> row; raising <em>after</em> the loop means no utility is sacrificed to
+  the diagnostic.</div>
+  <div class="evidence"><strong>Verification.</strong> Paired before/after over <strong>288
+  rows</strong> (4 solvers &times; 72 instances): <strong>byte-identical</strong> on status,
+  feasibility, utility, energy and error &mdash; total utility 17194.396288 both sides, 0 error rows.
+  Plus <strong>fault injection</strong>, since the path never runs naturally: forcing 1 and 3 bogus
+  failures confirms it terminates (no infinite loop &mdash; the real risk of
+  <code>break</code>&rarr;<code>continue</code>), keeps searching, and raises with usable
+  diagnostics; the 0-injection control raises nothing.</div>
 </section>
 
 <section class="card">

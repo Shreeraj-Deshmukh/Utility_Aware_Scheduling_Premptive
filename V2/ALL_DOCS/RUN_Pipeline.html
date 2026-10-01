@@ -253,6 +253,61 @@ run_timed.py  &lt;dir|manifest.csv&gt;  --models a,b,c  --heur v6  --time-limit 
 restart is harmless. Both refuse to append under a mismatched header (delete the results file after
 changing the schema).</p>
 
+<h4 id="theta-grid">Putting &theta; on an axis: <code>--acet-ratio</code> and <code>--out</code></h4>
+<p>By default the online phase uses the <b>per-task <code>theta</code> baked into each test-case
+file</b> (drawn from <code>U(xi, 1)</code> at generation). That is the realistic case, but it gives
+<em>one fixed realisation per instance</em> &mdash; so &theta; cannot be varied without regenerating,
+and instances are not comparable across &theta;.</p>
+<p><code>--acet-ratio T</code> overrides that: <b>every job</b> completes in <code>T &times;</code> its
+WCET. The same instances can then be replayed at &theta; = 1.0, 0.9, &hellip; 0.5, and any change in
+the result is caused by &theta; alone. <code>online_mean_theta</code> reports the override that
+actually ran, so the CSV always says which &theta; produced the row.</p>
+<div class="callout warn"><strong>Each &theta; needs its own results file.</strong> Replaying the same
+instances writes the same <code>(file, model)</code> keys, which the resume logic would skip and which
+would collide in one <code>results.csv</code>. Use <code>--out</code> to give each &theta; column its
+own file next to the manifest.</div>
+<h4>The full model &times; &theta; grid, as plain commands</h4>
+<pre># one fixed instance set -- no OFAT factor varies, only theta
+python gen_testcases.py rho --sets 5 --n-prc 2 --n-tsk 5 --kmax 2 --max-seg 5 \
+       --grid 0.5 --out tc_online
+
+# replay it at each theta; one results file per column
+foreach ($t in '1.0','0.9','0.8','0.7','0.6','0.5') {
+    $out = "results_t$t.csv"
+    python run_models.py tc_online --models ilp_v1,ilp_v2,ilp_v3,ilp_v4 `
+           --online --acet-ratio $t --out $out --time-limit 60
+    python run_models.py tc_online --models greedy_sps_baseline `
+           --online --acet-ratio $t --out $out
+    foreach ($h in 'v3','v4','v5a','v5b','v6','v7','claudeoptimal') {
+        python run_models.py tc_online --models heuristic --heur $h `
+               --online --acet-ratio $t --out $out
+    }
+}</pre>
+<pre># bash equivalent
+for T in 1.0 0.9 0.8 0.7 0.6 0.5; do
+  OUT="results_t${T}.csv"
+  python run_models.py tc_online --models ilp_v1,ilp_v2,ilp_v3,ilp_v4 --online --acet-ratio $T --out $OUT --time-limit 60
+  python run_models.py tc_online --models greedy_sps_baseline          --online --acet-ratio $T --out $OUT
+  for h in v3 v4 v5a v5b v6 v7 claudeoptimal; do
+    python run_models.py tc_online --models heuristic --heur $h --online --acet-ratio $T --out $OUT
+  done
+done</pre>
+<p>Output: <code>tc_online/rho/results_t1.0.csv</code> &hellip; <code>results_t0.5.csv</code>, each a
+full set of solver rows carrying the online columns for that &theta;.</p>
+<div class="callout ok"><strong><code>&theta;=1.0</code> is the control and must read exactly
+<code>online_added = 0</code>.</strong> With every job running to its WCET nothing is freed, so the
+online phase has nothing to spend. A non-zero value there would mean it is spending energy that was
+never released. Measured on the 5-instance set: 0.00 for all twelve models.</div>
+<div class="callout warn"><strong><code>online_added</code> alone ranks schedules backwards.</strong>
+A weak offline schedule leaves more slack, so it has more to harvest. On the same set,
+<code>heuristic_v3</code> (offline 31.75) gains <b>18.29</b> at &theta;=0.5 while
+<code>ilp_v1</code> (offline 40.30, the optimum) gains only <b>10.91</b> &mdash; the exact solver
+looks worst by that column. Read it beside the offline utility, or compare
+<code>offline + online_added</code>, before concluding anything about model quality.</div>
+<p><code>heuristic_v1</code> and <code>v2</code> cannot appear in such a grid: they do not return the
+<code>mapping</code> that the online phase needs in order to DBF-check the schedule it was handed.
+<code>v3</code> onwards are fine.</p>
+
 <h4 id="online">The <code>--online</code> modifier</h4>
 <div class="note"><p><strong>The online phase is not a model &mdash; it is a phase that runs on top
 of one.</strong> It never competes with the solvers; it takes whatever schedule one of them

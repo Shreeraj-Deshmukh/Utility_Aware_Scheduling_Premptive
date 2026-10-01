@@ -167,6 +167,16 @@ ONLINE_COLS = ["online_utility", "online_added", "online_feasible",
                "online_mean_theta", "online_runtime"]
 
 
+# Fixed-theta override for the online phase.  None = use each test case's own
+# per-task theta (one realisation per instance).  A float = apply that ratio to
+# EVERY job, which is what makes theta usable as an experiment axis: the same
+# instances can be replayed at theta = 0.5, 0.6, ... 1.0 and any change in the
+# result is attributable to theta alone.  Set by run_model; a property of the
+# run, not of any one solver, which is why it lives here and is not threaded
+# through _with_online's eight call sites.
+ACET_OVERRIDE = None
+
+
 def online_blank():
     """Empty online columns, so the CSV header stays stable on every row."""
     return {c: "" for c in ONLINE_COLS}
@@ -190,10 +200,13 @@ def _mean_theta(tasks):
 def _online_metrics(processors, tasks, B, seg_k, freq_idx, mapping):
     """Run the online phase over one committed schedule; return its columns."""
     from usrt.online.simulator import OnlineSimulator, SimConfig
+    cfg = (SimConfig(verbose=False) if ACET_OVERRIDE is None
+           else SimConfig(verbose=False, acet_ratio=float(ACET_OVERRIDE),
+                          use_task_theta=False))
     t0 = time.perf_counter()
     with _suppress():
         sim = OnlineSimulator(processors, tasks, B, dict(seg_k), dict(freq_idx),
-                              dict(mapping), config=SimConfig(verbose=False))
+                              dict(mapping), config=cfg)
         s = sim.run()
     rt = time.perf_counter() - t0
     # Both energies are recorded deliberately.  wcet_energy may exceed B and
@@ -208,7 +221,8 @@ def _online_metrics(processors, tasks, B, seg_k, freq_idx, mapping):
         online_realised_energy=round(s["actual_energy"], 6),
         online_trim_loss=round(s["trim_loss"], 6),
         online_trim_events=s["trim_events"],
-        online_mean_theta=_mean_theta(tasks),
+        online_mean_theta=(round(float(ACET_OVERRIDE), 4)
+                           if ACET_OVERRIDE is not None else _mean_theta(tasks)),
         online_runtime=round(rt, 4),
     )
 
@@ -438,7 +452,7 @@ def run_heuristic(processors, tasks, B, variant="v5b", time_limit=None,
 
 
 def run_model(name, processors, tasks, B, time_limit=30, heur_variant="v5b",
-              mip_gap=0.0, online=False):
+              mip_gap=0.0, online=False, acet_ratio=None):
     """
     Dispatch to the right adapter; never raise — errors become a status row.
 
@@ -447,6 +461,8 @@ def run_model(name, processors, tasks, B, time_limit=30, heur_variant="v5b",
     extra columns on the same row.  That is what keeps each online result
     paired with the offline schedule that produced it.
     """
+    global ACET_OVERRIDE
+    ACET_OVERRIDE = acet_ratio
     try:
         if name == "ilp_v1":
             return run_ilp_v1(processors, tasks, B, time_limit, mip_gap, online)

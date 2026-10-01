@@ -83,6 +83,44 @@ class OnlineSimulator:
 
     # ── event order ──────────────────────────────────────────────────────────
     def _event_order(self):
+        """
+        Completion events in release order, ties broken by (deadline, task, job).
+
+        DO NOT "tidy" THIS SORT KEY.  It looks like incidental bookkeeping and it
+        is not: it decides who spends the shared energy pool, and it is worth up
+        to 24% of the committed utility (ISSUES.md -> I4).
+
+        Why it matters.  Energy is one global pool; time slack is per-processor
+        and perishable.  Events are serialised, and the completer's processor
+        asks for energy first.  The §IX.B routing cannot arbitrate this, because
+        the processors it compares against have no windfall at that instant
+        (dt = 0), so energy buys them nothing and their marginal is ~0 — the
+        first completer therefore almost always wins.  In effect the ordering
+        IS the allocation policy, and when two processors complete at the same
+        instant, this tuple is what decides between them.
+
+        Measured over 100 tight-energy instances: every one has cross-processor
+        ties (595 groups), and permuting ONLY within tied-release groups moved
+        committed utility on 56 of them — worst order 1179.4, this order 1414.4,
+        best order 1523.9.
+
+        Why first-come-first-served is kept, as a deliberate choice (2026-10-02).
+        Not because the future is unknowable — both windfalls are observed at a
+        tie, and each processor's marginal value for the pool is queryable from
+        its DP.  Rather: every candidate rule is myopic (it optimises this
+        instant while blind to what each processor's NEXT windfall would have
+        done with the same energy, which genuinely is unknown), and no tested
+        rule beat arbitrary ordering.  The paper's own suggestion — "consider
+        the job which has more higher density in the future" — measured **8.9%
+        WORSE** (1289.2 vs 1414.4), better on 22 instances and worse on 33,
+        because density counts a processor's remaining optional utility while
+        ignoring whether it has the TIME to run any of it: the same error the
+        old I2 density filter made.  So we keep the rule that adds no unfounded
+        machinery and is deterministic and reproducible.
+
+        If you change this, re-measure the whole online phase; do not assume it
+        is a no-op.
+        """
         jobs = [(i, j) for i in range(self.ctrl.N_tsk)
                        for j in range(self.ctrl.N_job[i])]
         jobs.sort(key=lambda ij: (self.ctrl.job_r[ij], self.ctrl.job_d[ij],

@@ -105,18 +105,56 @@ class OnlineController:
         self.applied = []   # history of JobDecision
 
     # ── construction helpers ────────────────────────────────────────────────
+    def _time_caps(self, x):
+        """
+        Per-job cap on ADDED effective time: the room the job actually has in
+        its own binding DBF window, judged against the DYNAMIC schedule.
+
+        This used to be the deadline interval `d - r` — the loosest structural
+        bound there is.  The reasoning was sound at the time: the *static*
+        min_slack_for_job is ~0 because offline Phase 5 already ate every unit
+        of static slack, so capping there would admit no action at all and the
+        online phase would propose nothing.  The conclusion drawn was to cap
+        loosely and let the commit-time DBF sort it out.
+
+        But static slack was never the right measure.  The slack this phase
+        exists to spend is the DYNAMIC slack early completion creates, and that
+        is not ~0 — `_window_residuals` already measures it for the §IX.B
+        demand test.  Capping there is both tight and non-degenerate, which the
+        static cap could not be.
+
+        Measured (ISSUES.md -> I1), paired A/B, identical instances:
+          * utility the DP promised but could never deliver: 217.7 -> 1.4
+            (broad mix) and 245.3 -> 19.0 (tight energy) — `promised` and
+            `committed` now agree, so the DP's value means something and its
+            RANKING stops being distorted by differently-inflated options
+          * online wall time: -15% to -25% (fewer actions -> smaller frontiers)
+          * utility at rho = 0.25-0.5: +4.6%, the energy-constrained regime
+          * utility on a broad factor mix: -1.8%, concentrated in n_tsk, where
+            windows are tight, caps bite hardest, and online contributes least
+        The trade was taken deliberately: honest ranking plus the gain where
+        energy binds, against a small loss where it does not.
+        """
+        residuals = self._window_residuals(x)
+        caps = {}
+        for ij in self.proc_jobs[x]:
+            r, d = self.job_r[ij], self.job_d[ij]
+            cap = float(d - r)                 # structural bound, the fallback
+            for (t1, t2, residual) in residuals:
+                if t1 <= r and d <= t2 and residual < cap:
+                    cap = residual
+            # Clamp at 0.  A negative cap would reject even the (0, 0, 0)
+            # baseline action, and build_job_actions would hand the DP a job
+            # with no feasible no-op.
+            caps[ij] = cap if cap > 0.0 else 0.0
+        return caps
+
     def _build_dp(self, x, freeze_before=None, completed=None):
-        # Structural per-job time cap = deadline interval (a job cannot occupy
-        # more than its own window).  The real limiter on additions is the
-        # observed time windfall (the DP's dt budget) plus the dynamic-DBF
-        # gate at commit time — NOT the offline-exhausted static slack.
-        #
         # freeze_before / completed (ISSUES.md -> ONLINE-FREQ): scope this
         # build to one specific completion event under preemptive EDF — see
         # build_processor_dp.  Left at their defaults (None) this is a plain,
         # unscoped rebuild (used at construction and after every commit).
-        time_caps = {(i, j): float(self.job_d[(i, j)] - self.job_r[(i, j)])
-                     for (i, j) in self.proc_jobs[x]}
+        time_caps = self._time_caps(x)
         return build_processor_dp(
             x, self.proc_jobs, self.seg_k, self.freq_idx,
             self.job_r, self.job_d, self.cum, self.N_seg,

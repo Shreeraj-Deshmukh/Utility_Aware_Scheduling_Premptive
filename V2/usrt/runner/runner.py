@@ -53,7 +53,8 @@ def _load_done(results_path):
 
 def run_manifest(manifest_path, models=("ilp_v2", "heuristic"), time_limit=30,
                  heur_variant="v5b", mip_gap=0.0, resume=True, verbose=True,
-                 progress_every=25, online=False):
+                 progress_every=25, online=False, acet_ratio=None,
+                 out_name="results.csv"):
     """
     Run `models` over every instance in one manifest; append to results.csv.
 
@@ -66,7 +67,10 @@ def run_manifest(manifest_path, models=("ilp_v2", "heuristic"), time_limit=30,
         rows = list(csv.DictReader(f))
         man_cols = list(rows[0].keys()) if rows else []
 
-    results_path = os.path.join(os.path.dirname(manifest_path), "results.csv")
+    # A distinct out_name is what lets one instance set carry several runs
+    # side by side -- e.g. one results file per fixed theta, since replaying
+    # the same (file, model) pairs would otherwise collide and be skipped.
+    results_path = os.path.join(os.path.dirname(manifest_path), out_name)
     done = _load_done(results_path) if resume else set()
     metric_cols = _METRIC_COLS + (_ONLINE_COLS if online else [])
     cols = man_cols + [c for c in metric_cols if c not in man_cols]
@@ -105,7 +109,8 @@ def run_manifest(manifest_path, models=("ilp_v2", "heuristic"), time_limit=30,
             processors, tasks, B = load_testcase(tc_path)
             metrics = run_model(model, processors, tasks, B,
                                 time_limit=time_limit, heur_variant=heur_variant,
-                                mip_gap=mip_gap, online=online)
+                                mip_gap=mip_gap, online=online,
+                                acet_ratio=acet_ratio)
         except Exception as e:
             metrics = dict(model=model, status="error", model_feasible=0, utility="",
                            energy="", util_per_energy="", runtime="", gap="",

@@ -94,6 +94,8 @@
   <p>Mechanisms &amp; issues in depth, for a reader who has finished <code>online_phase_explained.html</code>.</p>
   <p>Assumes you already know: the <code>Entry</code> requirement representation, <code>compose/prune/query</code>, the per-processor <code>V_levels</code>, the controller's commit-and-trim loop.</p>
   <p>This doc adds the <em>why-it's-correct</em>, the <em>exact numbers/identities</em>, and the <em>root-cause anatomy of every issue</em>.</p>
+
+<div class="usrt-stale-2026-09-04" style="margin:18px 0;padding:16px 18px;border:2px solid #1b5e20;border-left-width:7px;border-radius:9px;background:#e9f5ea;color:#15321c;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;line-height:1.58;font-size:14.5px;"><div style="font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:10.5px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:#1b5e20;margin-bottom:8px;">&#10003; RE-VERIFIED AGAINST THE CODE &middot; 1 October 2026</div><p style='margin:0 0 10px'>Half the issue list is gone because it was <b>fixed</b>: <b>I2</b> &mdash; <code>future_utility_density</code> no longer takes a time argument at all, it filters on <code>eff_override</code>; <b>I3</b> &mdash; <code>verify_single</code> is a true non-mutating peek (<code>pool.level() + de</code>, plus its own freeze-aware DP build); <b>I6</b> &mdash; <code>prune</code> is now an exact O(n&nbsp;log&nbsp;n) Pareto sweep; <b>I8</b> &mdash; void on its premise <i>and</i> positively disproven (6 frequency changes committed online on <code>testcase.py</code>).</p><p style='margin:0 0 10px'><b>I6 deserves a note:</b> it was filed <i>Low</i>. It was not low. The O(n&sup2;) prune made the online phase <b>non-terminating</b> on a realistic instance &mdash; the phase had never once been run end-to-end outside the worked examples. It now completes in 7.4&nbsp;s.</p><p style='margin:0'><b>What is left:</b> I1 (now measured, and the largest open quality item), I4 (still true, but its proposed fix is wrong &mdash; see below), I5 and I7. Sections 6 and 7 were also corrected where they described the old prune and the old rebuild.</p></div>
 </header>
 
 <main>
@@ -107,7 +109,7 @@
   <a href="#nodouble">5. Why there is no double-spend across events</a>
   <a href="#complexity">6. Complexity: where the time actually goes</a>
   <a href="#invariants">7. Controller invariants</a>
-  <a href="#issues">8. The issues, in full depth (I1–I8)</a>
+  <a href="#issues">8. The issues, in full depth (live only)</a>
   <a href="#mentalmodels">9. Mental-model corrections after Part I</a>
   <a href="#ref">10. Quick reference (tolerances, identities)</a>
 </nav>
@@ -300,7 +302,11 @@ time_caps = {(i,j): float(job_d[(i,j)] - job_r[(i,j)]) for (i,j) in proc_jobs[x]
     <tr><th>Operation</th><th>Cost</th><th>Notes</th></tr>
     <tr><td class="mono">build_job_actions</td><td class="mono">O(A)</td><td>nested k×z loop.</td></tr>
     <tr><td class="mono">compose (one level)</td><td class="mono">O((A·F) + C²), C = A·F</td>
-        <td>Cartesian product then O(C²) prune. The prune dominates.</td></tr>
+        <td><s>Cartesian product then O(C&sup2;) prune. The prune dominates.</s>
+            <b>Corrected 1 Oct 2026:</b> the prune is now an exact O(n&nbsp;log&nbsp;n) Pareto sweep
+            (Fenwick prefix-max over rank-compressed <code>req_e</code>), so a level costs
+            O(C&nbsp;log&nbsp;C) and the <b>Cartesian product itself dominates</b> &mdash; C
+            <code>Entry</code> objects get built before anything is pruned.</td></tr>
     <tr><td class="mono">build_processor_dp</td><td class="mono">O(N · (A·F)²)</td>
         <td>One precompute answers every suffix/completion point.</td></tr>
     <tr><td class="mono">query</td><td class="mono">O(F)</td><td>linear scan of the level.</td></tr>
@@ -332,9 +338,13 @@ time_caps = {(i,j): float(job_d[(i,j)] - job_r[(i,j)]) for (i,j) in proc_jobs[x]
       <code>freq_idx</code> may move either way.</li>
     <li><strong>eff_override only for completed jobs:</strong> a key in <code>eff_override</code>
       means that job has fired its completion event; its value ≤ its committed effective time.</li>
-    <li><strong>DP freshness:</strong> <code>dps[x]</code> and <code>pos_of</code> for the touched
-      processor reflect the post-commit baselines (rebuilt at step 5). Untouched processors keep
-      their valid DPs.</li>
+    <li><strong>DP freshness &mdash; <span style="color:#a33">corrected 1 Oct 2026</span>.</strong>
+      This used to say <code>dps[x]</code> reflects the <em>post</em>-commit baselines. It does not.
+      Step 5 now reuses the event-scoped table built <em>before</em> the commit, so the resting
+      <code>dps[x]</code> is deliberately one event stale. <strong>Nothing in the decision path reads
+      it</strong> &mdash; every event builds its own scoped DP, and <code>verify_single</code> builds
+      its own too. <code>pos_of</code> is unaffected either way: chain positions depend only on the
+      static <code>(deadline, release, task, job)</code> sort, so they never change.</li>
     <li><strong>applied is append-only</strong> and equals the full committed decision history.</li>
   </ol>
   <p class="muted">If you write new code against the controller, these are the contracts to
@@ -344,86 +354,135 @@ time_caps = {(i,j): float(job_d[(i,j)] - job_r[(i,j)]) for (i,j) in proc_jobs[x]
 
 <!-- ════════════════════════════ 8 ════════════════════════════ -->
 <h2 id="issues">8. The Issues, in Full Depth</h2>
-<p class="muted">Numbered I1–I8, matching E1–E8 in Part I but expanded with root cause, the exact
-trigger, a worked failure mode, severity, and a concrete fix.</p>
+<p class="muted">Expanded from Part I's E-list with root cause, the exact trigger, a worked failure
+mode, severity, and a concrete fix.</p>
+<div class="note"><strong>Pruned 1 October 2026 &mdash; only live issues remain.</strong>
+<strong>I2</strong> (arbitration instant / density filter), <strong>I3</strong>
+(<code>verify_single</code> mutates live state), <strong>I6</strong> (O(n&sup2;) <code>prune</code>)
+and <strong>I8</strong> (Options 3/4 inert) are <strong>resolved</strong> and have been removed
+rather than left as noise. The survivors are deliberately <em>not</em> renumbered &mdash;
+<code>simulator.py</code> cites &ldquo;&sect;I1&rdquo; by name and <code>ISSUES.md</code>
+cross-references these IDs. Consult that register for anything newer than this document:
+ONLINE-FREQ, DP-PRUNE and the &sect;IX.B energy routing all postdate it.</div>
 
-<section class="card">
-  <span class="badge high">High</span>
-  <h3>I1. <code>distribute()</code>'s value can exceed the committed utility (the scalar-Δt gap)</h3>
+<section class="card" style="border-left:5px solid var(--low)">
+  <span class="badge low">Resolved 2 Oct 2026</span>
+  <h3>I1. <code>distribute()</code>'s value could exceed the committed utility (the scalar-&Delta;t gap)</h3>
   <h4>Symptom</h4>
-  <p><code>dps[x].distribute(...)</code> returns <code>total_value = V</code>, but
-  <code>_commit_with_guarantee</code> keeps a subset summing to <code>g &lt; V</code>.</p>
-  <h4>Root cause</h4>
-  <p>The DP grants the whole downstream chain a single scalar <code>dt = observed_dt</code> and a
-  loose per-job cap <code>d − r</code> (§3). When two downstream jobs <code>j₁, j₂</code> lie in a
-  common tight DBF window and the DP funds <em>both</em> (each individually fits the scalar budget),
-  their <em>combined</em> demand can exceed the window. The DP never modeled the shared window; only
-  <code>_timing_ok_dynamic</code> sees it, at commit, and the greedy trim drops the lower-gain one.</p>
-  <h4>Trigger / worked failure mode</h4>
-  <p>Two jobs of comparable utility on one processor, both released inside one near-saturated window,
-  with an energy windfall large enough to fund both. Fast path applies both → DBF fails → revert →
-  greedy keeps the higher-gain job only. <code>added &lt; total_value</code>.</p>
-  <h4>Consequence for the validator</h4>
-  <p><code>verify_single</code> asserts <code>added == dp_value</code>. In the trigger case it
-  legitimately returns <code>ok = False</code>. <strong>That is trimming, not a bug</strong> — but
-  the current assertion conflates the two. The worked examples never trigger it (single windfall,
-  sequential, non-conflicting), which is why they pass cleanly.</p>
-  <div class="fix"><strong>Fix options:</strong> (a) make <code>verify_single</code> assert
-  <code>added ≤ dp_value + tol</code> and separately report whether trimming occurred; (b) close the
-  gap itself by giving the DP a per-window time budget instead of a scalar — i.e. thread the binding
-  window slack through the recurrence (doc Issue 4's exact form), which removes the over-planning but
-  enlarges the state. (a) is cheap and honest; (b) is the real fix if the gap matters in practice.</div>
+  <p><code>dps[x].distribute(...)</code> returned <code>total_value = V</code>, but
+  <code>_commit_with_guarantee</code> kept a subset summing to <code>g &lt; V</code>. Measured at its
+  worst: the DP promised <strong>83.26</strong> and <strong>33.42</strong> survived &mdash; ~60% of
+  the plan discarded.</p>
+
+  <h4>Root cause &mdash; two causes were conflated, and only one was real</h4>
+  <p>This entry used to blame the scalar <code>dt</code>: several downstream jobs sharing one tight
+  DBF window, each fitting the scalar budget alone but not together. Instrumenting every trimmed
+  action showed otherwise. Of 15 planned actions, 8 committed and <strong>7 were dropped &mdash; all
+  7 infeasible <em>in isolation</em></strong>. Not one was a shared-window conflict. The split was:</p>
+  <ul>
+    <li><strong>(a&prime;) loose per-job cap &mdash; 100% of the loss.</strong> <code>time_cap =
+    d &minus; r</code> is the loosest structural bound that exists, so the DP priced and ranked
+    additions the DBF would reject outright.</li>
+    <li><strong>(b&prime;) scalar <code>dt</code> shared across the chain &mdash; 0% of the loss.</strong></li>
+  </ul>
+  <p>So the fix this entry originally proposed &mdash; a per-window requirement vector, the costly
+  state enlargement &mdash; targeted a cause worth <code>0.0000</code>.</p>
+
+  <div class="fix"><strong>What landed (2 Oct 2026).</strong> One method,
+  <code>controller._time_caps()</code>: the cap is now each job's real room in its binding DBF window
+  against the <em>dynamic</em> schedule, reusing <code>_window_residuals()</code> already built for the
+  &sect;IX.B demand test. The original objection to tightening (&sect;3: <em>"static
+  <code>min_slack_for_job</code> is ~0, so the DP would propose nothing"</em>) does not apply &mdash;
+  static slack was never the right measure. The slack this phase exists to spend is the
+  <em>dynamic</em> slack early completion creates, and that is not ~0. Fix (a) &mdash;
+  <code>verify_single</code> asserting <code>added &le; dp_value + tol</code> &mdash; had already
+  landed separately.</div>
+
+  <div class="evidence"><strong>Measured &mdash; paired A/B, identical instances, only the cap differs.</strong>
+  <table style="margin:.4rem 0">
+    <tr><th></th><th>broad mix (180)</th><th>tight &rho; = 0.25&ndash;0.5 (100)</th></tr>
+    <tr><td>utility promised but undeliverable</td><td>217.7 &rarr; <b>1.4</b></td><td>245.3 &rarr; <b>19.0</b></td></tr>
+    <tr><td>online wall time</td><td><b>&minus;24.6%</b></td><td><b>&minus;15.4%</b></td></tr>
+    <tr><td>committed utility</td><td>&minus;1.8%</td><td><b>+4.6%</b></td></tr>
+    <tr><td>feasible instances</td><td>168 = 168</td><td>57 = 57</td></tr>
+  </table>
+  <code>promised</code> and <code>committed</code> now agree, which matters beyond tidiness: the DP
+  <em>selects</em> by value, so differently-inflated options were distorting the ranking.</div>
+
+  <p><strong>The trade, stated plainly.</strong> This was not a pure win and was not landed as one.
+  The &minus;1.8% on the broad mix sits in <code>n_tsk</code> &mdash; tight windows, caps bite
+  hardest, and the online phase contributes least there. The +4.6% is in the energy-constrained
+  regime this work is about. It was taken for the honest ranking, the speed, and that gain.</p>
+
+  <div class="note"><strong>Before anyone "improves" this further.</strong> The loss is not the cap
+  being too tight: on the worst regressor, <strong>0 of 5</strong> decisions the old code committed
+  would have been forbidden by the new cap. It is <em>path dependence</em> &mdash; once the two arms
+  diverge at the first event they follow different trajectories, and the old over-planning plus the
+  graceful <code>k&minus;1, k&minus;2</code> degradation acted as accidental <strong>exploration</strong>.
+  The old 60% trim was never pure waste; it was the running cost of a generate-and-test strategy that
+  sometimes explored better. Any further change here should be A/B'd the same way, not reasoned about.
+  <br><br>On <code>testcase.py</code> the new caps give <strong>+96.33 instead of +33.42</strong>, in
+  <strong>2.3&nbsp;s instead of 7.4&nbsp;s</strong>. That instance has a 10&rarr;240 period spread, so
+  <code>d &minus; r</code> was pathologically loose; generated instances
+  (<code>base &times; 2<sup>m</sup></code>, kmax=3) are much milder, which is why the sweep deltas are
+  smaller than that headline.</div>
 </section>
 
-<section class="card">
-  <span class="badge med">Medium</span>
-  <h3>I2. Energy arbitration instant &amp; the <code>job_r ≥ t</code> density filter</h3>
-  <h4>Root cause</h4>
-  <p><code>on_completion</code> arbitrates at <code>t = job_r[(i,j)]</code>, the completer's
-  <em>release</em>, and <code>future_utility_density</code> sums only jobs with
-  <code>job_r ≥ t</code>. A job already released but still pending elsewhere
-  (<code>release &lt; t</code>, not yet run) is excluded from its processor's ρ.</p>
-  <h4>Why it matters</h4>
-  <p>That processor's claim on the shared pool is understated, so <code>arbitrate_energy</code> may
-  hand more energy to the completer's own processor than a globally optimal split would. It is never
-  <em>unsafe</em> (the pool cap is respected), but it is a sub-optimality precisely in the contended
-  case the arbitration exists to handle. It compounds with the doc's own caveat that proportional
-  density can mis-rank "one big job vs several medium jobs."</p>
-  <div class="fix"><strong>Fix:</strong> arbitrate at the completer's actual completion <em>time</em>
-  (not its release), and change the ρ filter to "jobs whose deadline ≥ t and that still have addable
-  work" so released-but-pending high-value jobs are counted.</div>
-</section>
-
-<section class="card">
-  <span class="badge med">Medium</span>
-  <h3>I3. <code>verify_single</code> mutates live state</h3>
-  <h4>Root cause</h4>
-  <p>It does <code>energy_pool += de … −= de</code>, then calls the <em>real</em>
-  <code>on_completion</code>, which records <code>eff_override</code>, spends the pool, and rebuilds
-  the DP. So "verify" is really "execute and check," not a pure probe.</p>
-  <h4>Why it matters</h4>
-  <p>Calling it twice on the same job, or mid-simulation, advances controller state in surprising
-  ways. The pre-nudge of the pool also means the <code>dp_value</code> it computes uses a pool that
-  is briefly inconsistent with the subsequent real call.</p>
-  <div class="fix"><strong>Fix:</strong> compute <code>dp_value</code> on a deep-copied controller
-  (or add a pure <code>peek(i,j,dt,de)</code> that runs distribute + a non-mutating feasibility
-  check), keeping <code>verify_single</code> side-effect-free.</div>
-</section>
-
-<section class="card">
-  <span class="badge med">Medium</span>
+<section class="card" style="border-left:5px solid var(--low)">
+  <span class="badge low">Closed by decision 2 Oct 2026</span>
   <h3>I4. Cross-event energy reservation is soft (the "two completions" question)</h3>
   <h4>Root cause</h4>
-  <p>Arbitration caps only what <em>this</em> event plans (<code>de_budget</code>); the hard commit
-  check uses the whole pool. Events are serialised in release order, so the first processor to
-  complete can draw the global pool down before a later, higher-density processor gets its turn.</p>
-  <h4>Why it matters</h4>
-  <p>This is the code's approximation of the paper's open "Δe is shared, what if two early
-  completions?" The reservation is advisory across events, not a true joint allocation. Outcome
-  depends on completion order, which depends on the ACET draw.</p>
-  <div class="fix"><strong>Fix:</strong> make the per-event cap a hard reservation that persists
-  until the reserved processor's window passes, or process near-simultaneous completions in a single
-  batched arbitration. Both add state; the current behaviour is a defensible first cut.</div>
+  <p>Energy is one global pool; time slack is per-processor and perishable. Events are
+  <strong>serialised</strong>, and the completer's processor asks for energy first, so whoever the
+  loop reaches first spends the pool and the next one gets the remainder. The &sect;IX.B routing
+  cannot arbitrate this: the processors it compares against have <strong>no windfall at that
+  instant</strong> (<code>dt = 0</code>), so energy buys them nothing, their marginal is ~0, and the
+  first completer almost always wins. <strong>In effect the event ordering <em>is</em> the allocation
+  policy</strong>, and at a tie the decision falls to
+  <code>_event_order</code>'s <code>(job_r, job_d, i, j)</code> &mdash; bookkeeping, not physics.</p>
+
+  <div class="evidence"><strong>Measured, 100 tight-energy instances.</strong> Every instance has
+  cross-processor ties (595 groups). Permuting <em>only within tied-release groups</em> &mdash; the
+  most conservative perturbation possible, leaving global release order intact &mdash; changed
+  committed utility on <strong>56 of 100</strong>:
+  <table style="margin:.4rem 0">
+    <tr><th>ordering</th><th>total online added</th><th>vs default</th></tr>
+    <tr><td>worst permutation seen</td><td>1179.36</td><td>&minus;16.6%</td></tr>
+    <tr><td><b>default <code>(job_r, job_d, i, j)</code></b></td><td><b>1414.35</b></td><td>&mdash;</td></tr>
+    <tr><td>best permutation seen (oracle)</td><td>1523.87</td><td>+7.7%</td></tr>
+    <tr><td><b>the paper's density tie-break</b></td><td><b>1289.18</b></td><td><b>&minus;8.9%</b></td></tr>
+  </table>
+  A <strong>24.4% spread</strong>, and the paper's own proposal &mdash; <em>"consider the job which
+  has more higher density in the future"</em> &mdash; lands <em>below</em> arbitrary ordering (better
+  on 22 instances, worse on 33). It fails for the same reason the old I2 density filter did: density
+  counts a processor's remaining optional utility while ignoring whether it has the <strong>time</strong>
+  to run any of it, so the pool can go to someone who cannot spend it.</div>
+
+  <div class="note"><strong>Where the earlier argument flips.</strong> The &ldquo;fix&rdquo; this
+  entry once proposed &mdash; a hard reservation &mdash; was withdrawn on 1 Oct because energy is
+  durable and time slack is perishable, so withholding energy from a processor with a live time
+  opportunity to serve one without is strictly worse. That reasoning assumes <em>one</em> processor
+  has a windfall. <strong>At a genuine tie both do</strong>, both hold perishable slack, and it
+  becomes a real contest &mdash; the single case where reservation would be justified. This entry
+  measures what that case is worth.</div>
+
+  <div class="fix"><strong>Decision (2 Oct 2026): keep first-come-first-served, unchanged.</strong>
+  The sort key stays <code>(job_r, job_d, i, j)</code>; no behaviour changes and no published number
+  moves. The justification is <em>not</em> &ldquo;the future is unknowable&rdquo; &mdash; at a tie
+  both windfalls are observed and each processor's marginal is queryable from its DP, so that alone
+  would not defend the choice. It is that <strong>every candidate rule is myopic</strong> (each
+  optimises the instant while blind to what a processor's <em>next</em> windfall would have done with
+  the same energy, which genuinely is unknown), and <strong>no tested rule beat arbitrary
+  ordering</strong> &mdash; the only principled one tried went 8.9% backwards. So the rule that adds
+  no unfounded machinery, and is deterministic and reproducible, is kept.
+  <p style="margin:.5rem 0 0"><strong>Recorded in the code</strong>, because the key reads as
+  incidental and is not: <code>simulator._event_order</code> now carries the measurement and a
+  do-not-tidy warning. Changing it silently shifts every online result by up to 24%.</p>
+  <p style="margin:.5rem 0 0"><strong>Still open, and genuinely so:</strong> batching truly
+  simultaneous completions into one joint allocation by live DP marginal &mdash; the paper's own
+  &ldquo;&Delta;e is shared, what if two early completions?&rdquo;. The +7.7% best-permutation figure
+  is an <em>oracle</em> over arbitrary permutations, not something any rule has been shown to reach,
+  so that upside remains unquantified.</p></div>
 </section>
 
 <section class="card">
@@ -439,25 +498,14 @@ trigger, a worked failure mode, severity, and a concrete fix.</p>
   <h4>Why it matters</h4>
   <p>Purely readability: it implies a terminal-job case that the loop already handles, sending a
   reader hunting for a scenario that cannot occur.</p>
+  <div class="evidence"><strong>Confirmed by instrumentation, 1 Oct 2026.</strong> Over a full
+  hyper-period on <code>testcase.py</code>: 57 <code>distribute()</code> calls, 15 decisions emitted
+  by the while loop, and the trailing block's guards satisfied <strong>0 times</strong> &mdash; it was
+  never even reached, let alone made to append.</div>
   <div class="fix"><strong>Fix:</strong> delete the trailing block and add one line of comment that
   the loop's last iteration (where <code>e.nxt</code> points at the base level) already emits the
   final job's decision. Add a unit test asserting <code>distribute</code> emits a decision for the
   last EDF job when it changes.</div>
-</section>
-
-<section class="card">
-  <span class="badge low">Low</span>
-  <h3>I6. <code>prune</code> is O(n²) and the frontier is unbounded</h3>
-  <h4>Root cause</h4>
-  <p>No cap on <code>F</code>. Worst case the frontier grows along the chain as products of distinct
-  reachable cost vectors. With many frequencies and segments, <code>A·F</code> per level — and the
-  O((A·F)²) prune — could blow up. The doc's "aggregate states / better bounds" (Issue 5) are not
-  applied; sparsity is merely <em>hoped</em> for, not enforced.</p>
-  <div class="fix"><strong>Fix:</strong> (a) cap the frontier by bucketing near-equal
-  <code>(req_t, req_e)</code> within an ε (the doc's "aggregate states"), trading a bounded
-  sub-optimality for a hard size limit; (b) clip <code>req_e</code> by
-  <code>E<sub>slack</sub><sup>init</sup></code> and <code>req_t</code> by the window slack so
-  unreachable points are never generated; (c) use a proper O(n log n) 2-D Pareto sweep.</div>
 </section>
 
 <section class="card">
@@ -478,26 +526,6 @@ trigger, a worked failure mode, severity, and a concrete fix.</p>
   per hyper-period with carried-over <code>energy_pool</code>.</div>
 </section>
 
-<section class="card">
-  <span class="badge low">Low</span>
-  <h3>I8. Options 3/4 are structurally present but numerically inert (α=1, β=0.5)</h3>
-<div class="usrt-stale-2026-09-04" style="margin:10px 0;padding:10px 13px;border-left:5px solid #b3261e;background:#fdecea;color:#4a1512;border-radius:0 7px 7px 0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:13.5px;line-height:1.55;"><span style="font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:10px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#8c1d18;display:block;margin-bottom:5px;">NOT IN CODEBASE &middot; 4 Sep 2026</span><b>I8 is void.</b> It was a consequence of &alpha;=1, &beta;=0.5 only. Under the current constants the conversion actions are not dominated and the DP fires them once the budget binds.</div>
-
-  <h4>Root cause</h4>
-  <p><code>build_job_actions</code> enumerates every frequency <code>z</code>, so the
-  time↔energy-conversion actions exist. But energy per unit work is minimised at f<sub>max</sub>
-  under these constants, so any <code>k = k_off</code> conversion action has <code>gain = 0</code>
-  and a non-improving <code>(req_t, req_e)</code> — it is dominated by <code>(0,0,0)</code> in
-  <code>prune</code> and never survives.</p>
-  <h4>Why it matters</h4>
-  <p>The 4-option machinery (the whole reason for signed deltas and the <code>max(0, …)</code>
-  clamp) is exercised only structurally on this instance. The online phase is, numerically, Save +
-  Spend. Tests that intend to cover conversion are not actually covering it.</p>
-  <div class="fix"><strong>Fix:</strong> add a unit test with leakage-dominated constants
-  (e.g. α=0.15, β=1.0 ⟹ f* ≈ 0.42) and assert that a conversion action survives pruning and is
-  chosen for some <code>(dt, de)</code>. No production code change needed — it already generalises.</div>
-</section>
-
 <!-- ════════════════════════════ 9 ════════════════════════════ -->
 <h2 id="mentalmodels">9. Mental-Model Corrections After Part I</h2>
 <section class="card">
@@ -514,7 +542,11 @@ trigger, a worked failure mode, severity, and a concrete fix.</p>
             a feasible subset before they become <code>JobDecision</code>s.</td></tr>
     <tr><td>Lower frequency saves energy (paper Options 3).</td>
         <td>Not under α=1, β=0.5 — f<sub>max</sub> is energy-optimal, so lowering frequency
-            <em>costs</em> energy. The conversion actions are inert (I8).</td></tr>
+            <em>costs</em> energy. The conversion actions are inert.
+            <b>Superseded:</b> under the current &alpha;=0.15, &beta;=1.0 the conversions are live
+            &mdash; 6 frequency changes were committed online on <code>testcase.py</code>, all on
+            provably-unstarted jobs. The misconception is now the row's own &ldquo;Actually&rdquo;
+            column, not the claim it was correcting.</td></tr>
     <tr><td>"Precompute once" = one static table for the whole run.</td>
         <td>One static table <em>per processor per event</em>; it is rebuilt after each commit
             (I7). Within one event it is a pure lookup.</td></tr>

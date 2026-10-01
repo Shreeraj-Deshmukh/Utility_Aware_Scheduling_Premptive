@@ -331,23 +331,50 @@ regenerate.
 ### SWAP-BREAK — Phase 6 aborts the whole search on one failed candidate
 | field | value |
 |---|---|
-| Status      | open |
-| Confidence  | verified live 2026-09-04 (present; did not fire in 13 runs) |
-| Layer       | **A** *and* **B** — see below |
-| Costs us    | silently truncates Phase 6; magnitude unmeasured |
-| Location    | `usrt/phases/swap.py:126` |
-| Blocked by  | — |
+| Status      | **fixed 2026-10-01 (option C)** |
+| Confidence  | proof + measurement + fault injection |
+| Layer       | **C** — two parts of the codebase would disagree, if it ever fired |
+| Costs us    | nothing today (path unreachable); a silently truncated search if it ever fires |
+| Location    | `usrt/phases/swap.py` |
 
-**Mechanism.** When the best candidate fails `check_all_timing`, the else-branch executes
-`break`, ending the local search and discarding every remaining improving candidate from the same
-scan.
+**Mechanism.** When the best candidate failed `check_all_timing` at EXECUTE, the else-branch
+reverted both jobs and ran `break` — ending the whole local search, discarding every remaining
+ranked candidate from that scan *and* all later iterations.
 
-**The deeper point** (June review B5): `min_slack_for_job` evaluates exactly the windows affected
-by adding time to the receiver, so **the revert path should be unreachable**. If it ever fires,
-that signals a state-consistency bug elsewhere — which makes silently breaking doubly wrong.
+**The path is unreachable by construction.** Adding a segment to the receiver raises DBF demand in
+exactly the windows containing its `[r, d]` interval, and `min_slack_for_job` (`slack.py:38-45`)
+scans exactly that set — measured at `swap.py:81` with the giver ALREADY tentatively removed
+(`:57`), i.e. in the very state that holds at EXECUTE. The giver only removes work, which can only
+lower demand. So the pre-check is **exact, not conservative**, and `check_all_timing` cannot fail.
 
-**Fix options.** Blacklist the pair and `continue` — *and* assert/log loudly on the "unreachable"
-revert rather than swallowing it. Fixing only the `break` hides a real bug.
+**Evidence.** 19 swaps committed, 19 EXECUTE-time checks, **0 reverts** over 54 instances
+(2026-09-30).
+
+**Why the bug was written.** The old log line read *"cross-window timing violation"* — the author
+believed `min_slack_for_job` covered only some windows and others could still break, so a failure
+meant "state I don't understand, stop". The net is reasonable; the `break` is the wrong reflex, and
+the belief that motivated it is false.
+
+**Fix (option C), landed 2026-10-01.**
+- `break` → **blacklist the pair and `continue`**, so one bad candidate no longer truncates the
+  search. The blacklist is **not optional**: the search is deterministic and the revert restores the
+  exact prior state, so a bare `continue` would re-select the same pair forever. Cleared after every
+  successful swap, because the fill pass moves `seg_k` and a pair that did not fit may fit later.
+  Terminates: each iteration either commits (utility up by >1e-9, bounded above) or blacklists one
+  of finitely many pairs.
+- `_first_violation()` added — `check_all_timing` returns only a bool, so it could not say *where*.
+- **Raises `AssertionError` once the search finishes**, carrying the pair and the offending
+  `(processor, t1, t2, slack)`. Raising rather than logging because `adapters._suppress()` redirects
+  stdout at the fd level during every sweep, so a log line is invisible at exactly the scale where
+  it matters; an exception surfaces as a `status=error` row in `results.csv`. Raising *after* the
+  loop rather than inside it means no utility is sacrificed to the diagnostic.
+
+**Verification.** Paired before/after over 288 rows (4 solvers × 72 instances, ρ sweep):
+**byte-identical** on status, model_feasible, utility, energy, util_per_energy and error — total
+utility 17194.396288 both sides, 0 error rows. Plus **fault injection**, since the path never
+executes naturally: forcing 1 and 3 bogus failures confirms it terminates (no infinite loop — the
+real risk of `break`→`continue`), keeps searching, and raises with usable diagnostics; the control
+run with 0 injections raises nothing.
 
 ---
 
@@ -390,6 +417,61 @@ is at tight ρ, which is where online results matter.
 greedy → swap` **directly** instead of `heuristic_v5b.run()`, so it has neither the Phase 3
 `min_possible_energy` gate nor Phase 6b. Harmless at B=400 where both are no-ops; divergent at
 tight ρ.
+
+---
+
+### EVENT-ORDER — the online event order IS the energy allocation policy
+| field | value |
+|---|---|
+| Status      | **closed by decision 2026-10-02 — keep first-come-first-served** |
+| Confidence  | measured over 100 tight-energy instances |
+| Layer       | B — valid output, order-dependent quality |
+| Costs us    | committed online utility varies by up to 24% with event order; the published number is one point in that range |
+| Location    | `usrt/online/simulator.py` — `_event_order` |
+
+**Mechanism.** Energy is one global pool; time slack is per-processor and perishable. Events are
+serialised and the completer's processor asks for energy first, so whoever the loop reaches first
+spends the pool. The SS-IX.B routing cannot arbitrate this: the processors it compares against have
+no windfall at that instant (`dt = 0`), so energy buys them nothing, their marginal is ~0, and the
+first completer almost always wins. **The event ordering is therefore the de-facto allocation
+policy**, and at a tie the decision falls to `(job_r, job_d, i, j)` — bookkeeping, not physics.
+
+**Evidence.** All 100 instances have cross-processor ties (595 groups). Permuting ONLY within
+tied-release groups — the most conservative perturbation possible, global release order left intact
+— changed committed utility on **56 of 100**:
+
+| ordering | total online added | vs default |
+|---|---|---|
+| worst permutation seen | 1179.36 | -16.6% |
+| **default `(job_r, job_d, i, j)`** | **1414.35** | — |
+| best permutation seen (oracle) | 1523.87 | +7.7% |
+| **the paper's density tie-break** | **1289.18** | **-8.9%** |
+
+A **24.4% spread**. The paper's own suggestion ("consider the job which has more higher density in
+the future") lands *below* arbitrary ordering — better on 22 instances, worse on 33 — because
+density counts a processor's remaining optional utility while ignoring whether it has the TIME to
+run any of it. Same error as the old I2 density filter.
+
+**Decision — keep FCFS.** The justification is NOT "the future is unknowable": at a tie both
+windfalls are observed and each processor's marginal is queryable from its DP, so that alone would
+not defend it. It is that **every candidate rule is myopic** (each optimises the instant, blind to
+what a processor's next windfall would have done with the same energy, which genuinely is unknown)
+and **no tested rule beat arbitrary ordering** — the only principled one tried went 8.9% backwards.
+So we keep the rule that adds no unfounded machinery and is deterministic and reproducible. No
+behaviour change; no published number moves.
+
+**Recorded in the code.** `_event_order` now carries the measurement and a do-not-tidy warning — the
+sort key reads as incidental bookkeeping and is not; changing it silently shifts every online result
+by up to 24%.
+
+**Still genuinely open.** Batching truly simultaneous completions into one joint allocation by live
+DP marginal — the paper's own "Delta-e is shared, what if two early completions?". The +7.7%
+best-permutation figure is an ORACLE over arbitrary permutations, not something any rule has been
+shown to reach, so the upside is unquantified.
+
+**For the paper.** Worth disclosing the sensitivity rather than leaving it silent: "why this order?"
+is an obvious reviewer question, and "we measured the alternatives and none beat it, including the
+density rule, which was 8.9% worse" is a far stronger answer than silence.
 
 ---
 
@@ -957,7 +1039,7 @@ verified were promoted above and removed from this table.
 |---|---|---|
 | DELTA-CAP | δ cap arithmetically impossible when β > 2α/(1−α) | 22Aug C1 |
 | DBF-COMPILE | DBF hot spot is compilable — 56× available, bit-identical | 22Aug C4 |
-| ~~SCALAR-DT~~ | **no longer a carry-over — measured 2026-09-19, and it is large.** On `testcase.py` the DP promised **72.2568** utility and only **30.2829** survived the commit-time DBF trim: **41.97 lost, ≈58% of what was planned**, over 4 events (worst single event: `T4,j0`, planned 1 → kept 0, −28.57). The 15 Aug figure was 4.55 on one event. Not a defect — the trim is what keeps the schedule feasible — but the scalar-Δt proxy is leaving far more on the table than the toy cases implied, which makes the per-window vector state (Part-II I1 option b) a real optimisation rather than a theoretical one. Promote to a live item when online quality is next on the agenda. | 22Aug D2 / 15Aug, re-measured 19 Sep |
+| ~~SCALAR-DT~~ | **FIXED 2026-10-02 -- and the 19 Sep diagnosis was wrong about the cause.** The 58% trim loss was real, but instrumenting every trimmed action showed **100% of it came from the loose per-job cap** (`time_cap = d - r` in `controller._build_dp`), **0% from the scalar dt**: of 15 planned actions, 7 were dropped and all 7 were infeasible *in isolation*, none a shared-window conflict. So the expensive fix everyone assumed was needed (per-window requirement vector, Part-II I1 option b) targeted a cause worth 0.0000. What landed instead is `controller._time_caps()` -- cap each job at its real room in its binding DBF window against the **dynamic** schedule, reusing `_window_residuals()` already built for the SS-IX.B demand test. The old objection to tightening (static `min_slack_for_job` is ~0, so the DP would propose nothing) does not apply: static slack was never the right measure, and dynamic slack is not ~0. Paired A/B on identical instances: undeliverable promised utility **217.7 -> 1.4** (broad mix) and **245.3 -> 19.0** (tight rho); online wall time **-24.6% / -15.4%**; committed utility **+4.6% at rho = 0.25-0.5** but **-1.8% on a broad factor mix**, the loss concentrated in `n_tsk`. Landed deliberately as a **trade, not a pure win**: honest ranking (the DP selects by value, so differently-inflated options distorted the choice) plus speed plus the gain where energy binds, against a small loss where it does not. **For anyone revisiting:** the loss is path dependence, not an over-tight cap -- on the worst regressor 0 of 5 previously-committed decisions would have been forbidden by the new cap; the old over-planning plus graceful `k-1, k-2` degradation was accidental *exploration*, so A/B any further change rather than reasoning about it. | 22Aug D2 / 15Aug, re-measured 19 Sep, fixed 2 Oct |
 | ~~AGG-STATES~~ | **partly landed as DP-PRUNE (fixed 2026-09-19)** — the O(n²) prune it warned about was not merely slow, it made the online phase non-terminating on a real instance. The *quantisation* half of the claim (aggregate states clipping the exact frontier) is still unverified: with the sweep in place the exact frontier is now affordable, so `max_frontier` bites less often than it did. | 22Aug D3 / 15Aug |
 | DP-REBUILD | per-event DP rebuild dominates online runtime (performance only) | 22Aug D4 / 15Aug — still true, but now on a 7.4 s run rather than a non-terminating one |
 | LEFTSHIFT-ALARM | the left-shift diagnostic raises false alarms | June D14 |

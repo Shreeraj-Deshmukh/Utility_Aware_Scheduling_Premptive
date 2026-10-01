@@ -23,9 +23,34 @@ on P0 can fund a high-utility segment on P1.
 """
 
 from ..models import energy_val, total_energy
-from ..dbf.slack import min_slack_for_job
+from ..dbf.slack import min_slack_for_job, window_slack
 from ..dbf.check import check_all_timing
 from .greedy import phase_optional_segments
+
+
+def _first_violation(proc_jobs, job_r, job_d, seg_k, freq_idx, freq_set,
+                     cum, N_prc):
+    """
+    Locate the first infeasible DBF window, as (x, t1, t2, slack).
+
+    `check_all_timing` answers only yes/no.  When the supposedly-unreachable
+    revert below fires we need to know WHERE, because that is the whole
+    diagnostic value — see SWAP-BREAK in ISSUES.md.
+    """
+    for x in range(N_prc):
+        if not proc_jobs[x]:
+            continue
+        Ax = sorted({job_r[ij] for ij in proc_jobs[x]})
+        Dx = sorted({job_d[ij] for ij in proc_jobs[x]})
+        for t1 in Ax:
+            for t2 in Dx:
+                if t1 >= t2:
+                    continue
+                sl = window_slack(x, t1, t2, proc_jobs, job_r, job_d,
+                                  seg_k, freq_idx, freq_set, cum)
+                if sl < -1e-9:
+                    return x, t1, t2, sl
+    return None
 
 
 def phase_swap_local_search(seg_k, freq_idx, freq_set, N_frq, cum, N_seg,
@@ -36,6 +61,15 @@ def phase_swap_local_search(seg_k, freq_idx, freq_set, N_frq, cum, N_seg,
     """
     E_slack = B_BUDGET - total_energy(seg_k, freq_idx, freq_set, cum, N_tsk, N_job)
     log = []; n_swaps = 0; iteration = 0
+
+    # Pairs whose execution failed the final DBF check.  This is NOT optional
+    # bookkeeping: the search is deterministic and the revert restores the exact
+    # prior state, so skipping a failed pair without remembering it would make
+    # the next iteration re-select it forever.  Cleared after every successful
+    # swap, because the fill pass changes seg_k and a pair that did not fit
+    # before may fit afterwards.
+    blacklisted = set()
+    violations  = []          # diagnostics for the unreachable path (see below)
 
     while True:
         iteration += 1
@@ -61,6 +95,8 @@ def phase_swap_local_search(seg_k, freq_idx, freq_set, N_frq, cum, N_seg,
                     for j2 in range(N_job[i2]):
                         if (i2, j2) == (i1, j1):
                             continue
+                        if (i1, j1, i2, j2) in blacklisted:
+                            continue    # this pair already failed the DBF check
                         k2 = seg_k[(i2, j2)]
                         if k2 >= N_seg[i2]:
                             continue    # receiver already maxed
@@ -101,6 +137,7 @@ def phase_swap_local_search(seg_k, freq_idx, freq_set, N_frq, cum, N_seg,
                             freq_idx, freq_set, cum, N_prc):
             E_slack  = E_slack + dE_freed - dE_cost
             n_swaps += 1
+            blacklisted.clear()        # state moved; earlier failures may now fit
             log.append(
                 f"  Swap {n_swaps} (iter {iteration}):"
                 f"  remove T{tasks[i1]['id']},j{j1} k:{k1}→{k1-1}"
@@ -117,12 +154,48 @@ def phase_swap_local_search(seg_k, freq_idx, freq_set, N_frq, cum, N_seg,
                 log.append(f"    Fill after swap {n_swaps} ({len(fill_log)} addition(s)):")
                 log.extend(fill_log)
         else:
+            # ── UNREACHABLE BY CONSTRUCTION — see ISSUES.md -> SWAP-BREAK ────
+            # Adding a segment to the receiver raises DBF demand in exactly the
+            # windows containing its [r, d] interval, and min_slack_for_job
+            # scans exactly that set — measured above at :81 with the giver
+            # ALREADY tentatively removed, i.e. in the very state that holds
+            # here.  The giver only removes work, which can only lower demand.
+            # So the pre-check at :84 is exact, not conservative, and this
+            # branch cannot be entered.  Measured: 0 firings in 19 committed
+            # swaps over 54 instances.
+            #
+            # If it DOES fire, min_slack_for_job and check_all_timing have
+            # disagreed — a state-consistency bug — and the schedule is suspect.
+            # The old code logged one line and `break`, silently truncating the
+            # whole local search (discarding every remaining ranked candidate
+            # AND all later iterations) at the exact moment something was wrong.
+            # Now: keep searching so no utility is lost to the diagnostic, and
+            # raise once the search is finished so it cannot pass unnoticed —
+            # a bare log would be invisible anyway, since adapters._suppress()
+            # redirects stdout at the fd level during every sweep.
             seg_k[(i1, j1)] = k1
             seg_k[(i2, j2)] = k2
-            log.append(
-                f"  Swap {n_swaps+1} (iter {iteration}): REVERTED"
-                f" (cross-window timing violation)"
+            where = _first_violation(proc_jobs, job_r, job_d, seg_k, freq_idx,
+                                     freq_set, cum, N_prc)
+            violations.append(
+                f"pair T{tasks[i1]['id']},j{j1} (k {k1}->{k1-1}) -> "
+                f"T{tasks[i2]['id']},j{j2} (k {k2}->{k2+1}); "
+                f"post-revert first bad window = {where}"
             )
-            break
+            log.append(
+                f"  !! Swap {n_swaps+1} (iter {iteration}): INVARIANT VIOLATION"
+                f" — pre-check passed but check_all_timing failed; "
+                f"blacklisted and continuing ({violations[-1]})"
+            )
+            blacklisted.add((i1, j1, i2, j2))
+            continue
+
+    if violations:
+        raise AssertionError(
+            "phase_swap_local_search: the DBF pre-check (min_slack_for_job) and "
+            "the full check (check_all_timing) disagreed, which should be "
+            "impossible — see ISSUES.md -> SWAP-BREAK for why. "
+            f"{len(violations)} occurrence(s): " + " | ".join(violations)
+        )
 
     return n_swaps, E_slack, log

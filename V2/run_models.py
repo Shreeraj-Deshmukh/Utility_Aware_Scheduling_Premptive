@@ -73,6 +73,13 @@ def main():
     ap.add_argument("--mip-gap", type=float, default=0.0)
     ap.add_argument("--online", action="store_true",
                     help="also run the online phase on each committed schedule")
+    ap.add_argument("--acet-ratio", type=float, default=None,
+                    help="fixed theta for EVERY job, overriding the test case's "
+                         "per-task theta; makes theta an experiment axis")
+    ap.add_argument("--out", default="results.csv",
+                    help="results filename written next to each manifest; give a "
+                         "distinct name per --acet-ratio so a theta grid does not "
+                         "collide (e.g. results_t0.7.csv)")
     ap.add_argument("--no-resume", action="store_true")
     args = ap.parse_args()
 
@@ -84,7 +91,8 @@ def main():
     for m in mans:
         run_manifest(m, models=models, time_limit=args.time_limit,
                      heur_variant=args.heur, mip_gap=args.mip_gap,
-                     resume=not args.no_resume, online=args.online)
+                     resume=not args.no_resume, online=args.online,
+                     acet_ratio=args.acet_ratio, out_name=args.out)
 
 
 if __name__ == "__main__":
