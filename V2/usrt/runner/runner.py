@@ -12,12 +12,19 @@ import glob
 import time
 
 from ..utils    import load_testcase
-from .adapters  import run_model
+from .adapters  import run_model, ONLINE_COLS, online_blank
 
 # NB: the model's feasibility is `model_feasible`, NOT `feasible` — the manifest
 # already has an instance-level `feasible` column and merging would clobber it.
 _METRIC_COLS = ["model", "status", "model_feasible", "utility", "energy",
                 "util_per_energy", "runtime", "gap", "error"]
+
+# Online is an add-on phase, not a model, so its results are extra COLUMNS on
+# the solver's own row rather than rows of their own — every online number stays
+# paired with the offline schedule it was built on, with no join.  The columns
+# are present on every row of an --online run (blank where there was no
+# admissible schedule to top up) so the header stays stable.
+_ONLINE_COLS = list(ONLINE_COLS)
 
 
 def find_manifests(path):
@@ -46,15 +53,23 @@ def _load_done(results_path):
 
 def run_manifest(manifest_path, models=("ilp_v2", "heuristic"), time_limit=30,
                  heur_variant="v5b", mip_gap=0.0, resume=True, verbose=True,
-                 progress_every=25):
-    """Run `models` over every instance in one manifest; append to results.csv."""
+                 progress_every=25, online=False):
+    """
+    Run `models` over every instance in one manifest; append to results.csv.
+
+    `online=True` additionally runs the online phase on top of each solver's
+    committed schedule and writes its numbers as extra columns on the same row.
+    It widens the schema, so an --online run and a plain one cannot share a
+    results.csv — the header guard below will say so rather than misalign rows.
+    """
     with open(manifest_path, newline="", encoding="utf-8") as f:
         rows = list(csv.DictReader(f))
         man_cols = list(rows[0].keys()) if rows else []
 
     results_path = os.path.join(os.path.dirname(manifest_path), "results.csv")
     done = _load_done(results_path) if resume else set()
-    cols = man_cols + [c for c in _METRIC_COLS if c not in man_cols]
+    metric_cols = _METRIC_COLS + (_ONLINE_COLS if online else [])
+    cols = man_cols + [c for c in metric_cols if c not in man_cols]
 
     # Guard: appending under a header with different/reordered columns would
     # silently misalign every new row (DictWriter writes in `cols` order).
@@ -78,7 +93,8 @@ def run_manifest(manifest_path, models=("ilp_v2", "heuristic"), time_limit=30,
             if (r["file"], _model_key(m, heur_variant)) not in done]
     if verbose:
         print(f"[{os.path.relpath(manifest_path)}] {len(rows)} instances x "
-              f"{len(models)} models  ->  {len(todo)} runs to do "
+              f"{len(models)} models"
+              f"{' + online' if online else ''}  ->  {len(todo)} runs to do "
               f"({len(rows)*len(models)-len(todo)} already done)")
 
     t_start = time.perf_counter()
@@ -89,11 +105,13 @@ def run_manifest(manifest_path, models=("ilp_v2", "heuristic"), time_limit=30,
             processors, tasks, B = load_testcase(tc_path)
             metrics = run_model(model, processors, tasks, B,
                                 time_limit=time_limit, heur_variant=heur_variant,
-                                mip_gap=mip_gap)
+                                mip_gap=mip_gap, online=online)
         except Exception as e:
             metrics = dict(model=model, status="error", model_feasible=0, utility="",
                            energy="", util_per_energy="", runtime="", gap="",
                            error=repr(e)[:200])
+            if online:
+                metrics.update(online_blank())
         w.writerow({**row, **metrics})
         fout.flush()
         n += 1

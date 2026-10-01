@@ -634,19 +634,24 @@ registry and no adapter.
 present in v5b, v6, v7, claudeoptimal; absent from v3, v4, v5a. (The 22 Aug figure was "3 of 6" —
 the count moved with v7, the defect did not.)
 
-**Note — the confound may be nominal.** Given 6B-INERT below, Phase 6b currently contributes
-**nothing measurable**, so v5a-vs-v5b may in practice still be a clean 2a-vs-2b comparison. That is
-luck, not design: fix 6b and the confound becomes real. Make the ladder honest either way.
+**~~Note — the confound may be nominal.~~ FALSIFIED 2026-09-30.** This entry previously hedged
+that, since 6B-INERT showed Phase 6b contributing "nothing measurable", v5a-vs-v5b might still be a
+clean 2a-vs-2b comparison in practice. The paired A/B in 6B-INERT disproves that: 6b improves
+**1.6% of instances for v5b and 3.2% for v7, by up to +6.9% utility, concentrated entirely at
+ρ = 0.4–0.5**. So the confound is **real, not nominal** — and it bites in exactly the tight-energy
+regime the ladder is most often read in. Any v5a-vs-v5b claim at tight ρ is currently measuring
+"Refine 2a without 6b vs Refine 2b with 6b" and attributing the difference to the mapping refinement
+alone.
 
 ---
 
-### 6B-INERT — Phase 6b never fires
+### 6B-INERT — Phase 6b fires rarely (NOT never — the original claim was underpowered)
 | field | value |
 |---|---|
-| Status      | open |
-| Confidence  | verified live 2026-09-04 (0/72) and re-verified 2026-09-12 (0/20) |
-| Layer       | **B** — valid output, the phase simply does no work |
-| Costs us    | a documented 40–58% gap is recorded as closed when it is not |
+| Status      | **closed by decision 2026-09-30 — keep 6b as-is, correct the docs** |
+| Confidence  | **re-measured 2026-09-30 over 608 paired A/B comparisons** (supersedes the 0/72 and 0/20 counts, which were too small to detect the real rate) |
+| Layer       | **B** — valid output, the phase does work rarely |
+| Costs us    | nothing in utility (it never loses); 3–11% of solver runtime |
 | Location    | `usrt/phases/freq_trade.py` |
 | Shares root | V5AB-COMPARE |
 
@@ -665,16 +670,60 @@ downshifts a job when `λ·ΔE > μ·ΔT`. Three things stop it:
 3. **It gives up immediately** — `break` on the first non-improving round rather than trying the
    next-best candidate.
 
-**Evidence.** 0 moves in 72 instances (2026-09-04, ρ=0.4–1.0, 8/12 tasks, 2/4 procs) and 0 in 20
-instances (2026-09-12 re-check). In the 72-instance run `λ > 0` — something *was* energy-blocked —
-in 26 cases, and still no move was made.
+**Evidence — superseded. "Never fires" was never supported by the data.** The original counts
+(0 moves in 72 instances on 2026-09-04; 0 in 20 on 2026-09-12) were read as inertness. They are
+not: at the rate measured below, seeing zero in 72 has probability 0.984^72 ≈ **31%**, and zero in
+20 ≈ **72%**. Both together are ~23% likely *even with 6b behaving exactly as it does*. The samples
+could not have detected a 1-in-60 event. A 54-instance exit audit on 2026-09-19 repeated the same
+error.
 
-**Not a regression risk.** 6b keeps a best-so-far and restores it, so it provably cannot return a
-worse schedule; inert is its designed worst case.
+**Evidence — 2026-09-30, paired A/B on identical instances (6b swapped for a no-op, nothing else
+changed).** 608 comparisons, tight-energy grid ρ = 0.25–0.5 unless noted:
 
-**Open question.** The 40–58% figure in `freq_trade.py`'s own docstring predates the `spec.py`
-rewrite and has never been re-measured against the current generator. Re-measure the gap first —
-if it has closed by other means, 6b may not be worth fixing at all.
+| solver | improved | overhead |
+|---|---|---|
+| `heuristic_v5b` | 2 / 125 (1.6%) | +5.2% |
+| `heuristic_v7` | 4 / 125 (3.2%) | +11.1% |
+| `heuristic_v6` | 2 / 125 (1.6%) | +5.9% |
+| `heuristic_claudeoptimal` | 1 / 125 (0.8%) | +3.1% |
+| `heuristic_v5b`, full ρ = 0.2–1.0 | 1 / 108 (0.9%) | +0.5% |
+
+**0 regressions in all 608**, as the best-so-far restore guarantees.
+
+Size of the wins, and where they land:
+
+```
+v5b:  +2.0213 (+4.68%)  rho_0.4     v7:  +2.8811 (+6.89%)  rho_0.4
+      +1.9064 (+4.67%)  rho_0.4          +1.2423 (+2.14%)  rho_0.5
+                                         +0.4746 (+0.91%)  rho_0.5
+                                         +0.4669 (+1.24%)  rho_0.4
+```
+
+**Every win is at ρ = 0.4–0.5.** So the docstring's "matters once energy binds" is directionally
+right; only its frequency and magnitude were overstated. Deleting 6b would forfeit a several-percent
+gain precisely in the energy-constrained regime the paper is about, to save ~5% runtime — which is
+why the decision was to keep it.
+
+**Caveat when reading `n_moves`.** v6 and v7 call the pipeline repeatedly inside mapping search /
+multi-start, so accepted-move counts are inflated by candidate evaluations that are later discarded
+(v6: 112 accepted moves → 2 instances actually improved). Only "instances improved" is meaningful.
+
+**Why it is rare — measured exit points** (54 instances, 2026-09-19): **74% exit at
+`freq_trade.py:114` with `λ = 0`, before evaluating a single candidate**; 19% find no feasible
+profitable downshift; only **7%** ever run a round. The root cause is structural and was not in the
+original three: **6b's entry condition is exactly what Phase 5 is built to destroy.** `λ > 0`
+requires a segment that is time-feasible but energy-blocked (`freq_trade.py:85`), and Phase 5's
+case ii.B (`greedy.py:102`) has the identical predicate and hunts those to extinction with
+multi-donor stacking immediately beforehand. The three causes below are all real but *secondary* —
+each only operates inside a round, and a round starts 7% of the time.
+
+**Decision 2026-09-30 — keep as-is (option B).** It never loses, it wins a few percent exactly where
+the heuristic is weakest against the ILP, and the runtime cost is modest. Options C (fold shadow
+pricing into ii.B and delete 6b) and D (repair 6b: per-processor μ, multi-donor stacking, `continue`
+not `break`, run before Phase 5) remain open if the hit rate is ever worth chasing.
+
+**Docstring corrected 2026-09-30:** the 40–58% figure predated the `spec.py` rewrite and was never
+re-measured; `freq_trade.py` no longer claims to close it.
 
 ---
 

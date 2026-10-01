@@ -42,7 +42,7 @@
 <p class="sub">How a result is produced from nothing: which files generate test cases, where they land,
 how solvers consume them, where results are written, and how figures are drawn. Written so a reader
 with no prior exposure to this tree can reproduce the experiments on a fresh machine.</p>
-<p class="muted"><b>Last verified against the live tree: 13 September 2026.</b> Every path, flag and
+<p class="muted"><b>Last verified against the live tree: 13 September 2026; online phase added 19 September 2026.</b> Every path, flag and
 constant below was read from the code, not from memory.</p>
 
 <h2 id="toc">Contents</h2>
@@ -55,6 +55,7 @@ constant below was read from the code, not from memory.</p>
 <li><a href="#s6">Where results are stored</a></li>
 <li><a href="#s7">Stage 3 &mdash; figures</a></li>
 <li><a href="#s8">Tuning knobs: which file to edit</a></li>
+<li><a href="#online">The --online modifier</a></li>
 <li><a href="#s9">What is NOT built yet</a></li>
 <li><a href="#s10">Installation &amp; dependencies</a></li>
 <li><a href="#s11">Known caveats</a></li>
@@ -75,7 +76,20 @@ done
 
 # 3. INSPECT   -- results land beside each manifest
 #    tc_demo/rho/manifest.csv      (what was generated)
-#    tc_demo/rho/results.csv       (what each solver achieved)</pre>
+#    tc_demo/rho/results.csv       (what each solver achieved)
+
+# 2b. RUN WITH THE ONLINE PHASE -- same command, one extra flag.
+#     Online is a phase ON TOP OF each solver, not a solver, so it adds
+#     COLUMNS to that solver's row (online_added, online_utility, ...).
+#     Use a SEPARATE --out batch: --online widens the schema, so its
+#     results.csv cannot be shared with a plain run's.
+python gen_testcases.py xi  --sets 100 --out tc_online
+python run_models.py tc_online --models ilp_v1,ilp_v4 --time-limit 60 --online
+python run_models.py tc_online --models heuristic --heur v5b --online
+python run_models.py tc_online --models greedy_sps_baseline --online</pre>
+<p><code>xi</code> and <code>rho</code> are the two sweeps worth running with <code>--online</code>
+first: <code>xi</code> sets how much early completion there is to exploit, and <code>rho</code> sets
+how much the energy budget binds. Both are where the online phase actually moves.</p>
 <p>PowerShell equivalent for the loop:</p>
 <pre>foreach ($h in 'v3','v4','v5a','v5b','v6','v7','claudeoptimal') {
     python run_models.py tc_demo --models heuristic --heur $h
@@ -232,12 +246,44 @@ an earlier, larger generation are ignored.</p>
 </table>
 
 <h4>Runner options</h4>
-<pre>run_models.py &lt;dir|manifest.csv&gt;  --models a,b,c  --heur v6  --time-limit 60
+<pre>run_models.py &lt;dir|manifest.csv&gt;  --models a,b,c  --heur v6  --time-limit 60  [--online]
 run_timed.py  &lt;dir|manifest.csv&gt;  --models a,b,c  --heur v6  --time-limit 300 \
                                   --repeats 3  --repeat-cutoff 20  --out results_timed.csv</pre>
 <p>Both are <b>resume-safe</b>: a completed <code>(file, model)</code> pair is skipped, so Ctrl-C and
 restart is harmless. Both refuse to append under a mismatched header (delete the results file after
 changing the schema).</p>
+
+<h4 id="online">The <code>--online</code> modifier</h4>
+<div class="note"><p><strong>The online phase is not a model &mdash; it is a phase that runs on top
+of one.</strong> It never competes with the solvers; it takes whatever schedule one of them
+committed and spends the slack that early completion frees. So it is a <em>flag</em>, not a
+<code>--models</code> value, and its numbers are extra <strong>columns on that solver's own
+row</strong> rather than rows of their own. Every online result therefore stays paired with the
+offline schedule that produced it, and no join is ever needed.</p></div>
+
+<pre># the same command, with or without the online phase
+python run_models.py tc_demo --models ilp_v1,ilp_v4,heuristic,greedy_sps_baseline --heur v5b
+python run_models.py tc_demo --models ilp_v1,ilp_v4,heuristic,greedy_sps_baseline --heur v5b --online</pre>
+
+<p><b>Where the ACETs come from.</b> Nothing is simulated ad hoc: <code>gen/generate.py</code> draws
+<code>theta ~ U(xi, 1)</code> <em>per task</em> and bakes it into the instance file, and the online
+simulator prefers that over any of its own knobs. The realisation is therefore reproducible data
+carried by the test case, which makes <code>xi</code> the OFAT factor that drives the online phase
+&mdash; it is already in the sweep table above, and already a manifest column.</p>
+
+<div class="note"><p><strong>One realisation per instance is the right design.</strong> A single
+online run is one draw from a distribution, which sounds like it needs repeating. It does not:
+<code>--sets N</code> already gives N independently seeded instances per configuration, so the
+replicate dimension carries the stochastic variation exactly as it does for every other factor.
+Repeating realisations <em>within</em> an instance multiplies runtime by R and buys no extra
+statistical power at the configuration level.</p></div>
+
+<p><b>Cost.</b> Negligible next to the solvers. Measured over a 56-run pilot at J &asymp; 20 jobs:
+online mean <b>0.10&nbsp;s</b>, median 0.03&nbsp;s, max 0.40&nbsp;s per instance &mdash; against
+<code>ilp_v1</code> at 15&nbsp;s mean. It costs most on the weakest schedules
+(<code>greedy_sps_baseline</code>, 0.31&nbsp;s) because those leave the most optional work still
+addable, and almost nothing on an ILP schedule that already took everything. <code>--online</code>
+is not what makes a campaign long; <code>ilp_v1</code> is.</p>
 
 <h4>What the adapter layer does</h4>
 <p><code>usrt/runner/adapters.py</code> normalises every solver to one metrics dict and handles:</p>
@@ -265,6 +311,14 @@ U_M, U_O, B, H, J, e_mand_fmax, e_full_fmax, e_mand_min,
 feasible, donate_ok, seed, redraws</pre>
 <h4><code>results.csv</code> &mdash; those 24 + 9 metrics</h4>
 <pre>model, status, model_feasible, utility, energy, util_per_energy, runtime, gap, error</pre>
+<h4><code>results.csv</code> with <code>--online</code> &mdash; those 33 + 9 online columns</h4>
+<pre>online_utility, online_added, online_feasible,
+online_wcet_energy, online_realised_energy,
+online_trim_loss, online_trim_events, online_mean_theta, online_runtime</pre>
+<p><code>--online</code> <b>widens the schema</b>, so an online run and a plain one cannot share a
+<code>results.csv</code> &mdash; the header guard refuses rather than misaligning rows. The columns
+are written on <em>every</em> row, left blank where there was no admissible schedule to top up, so
+the header stays stable across feasible, infeasible and error rows alike.</p>
 <h4><code>results_timed.csv</code> &mdash; those 33 + 5 timing columns</h4>
 <pre>runtime_best, runtime_worst, repeats, censored, nondeterministic</pre>
 <table>
@@ -275,6 +329,20 @@ feasible, donate_ok, seed, redraws</pre>
     <code>over budget: E=&hellip;</code> (C3); or <code>C2: committed schedule misses a deadline</code> &mdash; a DBF re-check of the schedule the solver actually
     returned, added 13 Sep 2026. The last one has never fired on a real run (0 in 6300), but it is what makes the column trustworthy rather than merely plausible</td></tr>
 <tr><td><code>utility</code></td><td>total optional utility &mdash; the objective. <b>Empty when infeasible</b> (discarded, not recorded)</td></tr>
+<tr><td><code>online_added</code></td><td>utility the online phase added <b>on top of this row's own offline schedule</b> &mdash; the headline online number.
+    <code>online_utility = utility + online_added</code>. Blank when the solver produced nothing admissible to top up</td></tr>
+<tr><td><code>online_wcet_energy</code><br><code>online_realised_energy</code></td>
+    <td><b>Both are recorded deliberately, and only the second is a constraint.</b> <code>online_wcet_energy</code> is the worst-case
+    commitment and <b>may legitimately exceed B</b> &mdash; it over-counts by exactly the energy the early finishers saved, and that
+    over-commitment can never co-occur with the savings that funded it. <code>online_realised_energy</code> is actual consumption and is
+    what C3 binds on; it is <code>&le; B</code> always. Reporting only the first invites a false alarm</td></tr>
+<tr><td><code>online_mean_theta</code></td><td>mean per-task ACET multiplier actually used on this instance. This is what makes
+    &ldquo;online gain vs &theta;&rdquo; plottable straight from <code>results.csv</code>. <b>Blank</b> means the instance carried no
+    <code>theta</code> and the simulator fell back to its own ratio &mdash; treat blanks as not comparable with the rest</td></tr>
+<tr><td><code>online_trim_loss</code><br><code>online_trim_events</code></td>
+    <td>Utility the DP planned that the commit-time DBF then removed (the scalar-&Delta;t gap). Not a failure &mdash; the trim is what keeps
+    the schedule feasible &mdash; but it is large enough to matter, so any <code>online_added</code> is a <b>floor</b> on what the phase
+    could achieve, not its ceiling</td></tr>
 <tr><td><code>censored</code></td><td>1 = hit the time limit; the runtime is a LOWER BOUND. Exclude from runtime statistics</td></tr>
 <tr><td><code>nondeterministic</code></td><td>1 = repeats disagreed on utility. Should always be 0</td></tr>
 </table>
@@ -406,12 +474,21 @@ three batch directory names and the filename <code>results.csv</code>. It cannot
 cannot plot <code>results_timed.csv</code> (the timing-grade data), without editing the source.
 <b>Fix:</b> add <code>--batch</code> and <code>--results</code> arguments.</div>
 
-<div class="gap"><strong>4. The online phase has no batch runner.</strong>
-<code>usrt/solvers/online_demo.py</code> runs through <code>run.py online</code> for a single
-instance only. Generated instances already carry per-task <code>theta</code>, so online runs are
-reproducible &mdash; but there is no adapter, so the online phase has no sweep-scale evidence. The
-open design question is that its result is a distribution over the ACET realisation, not one number
-per instance.</div>
+<div class="gap" style="border-left-color:#1b5e20"><strong>4. <s>The online phase has no batch
+runner.</s> BUILT &mdash; 19 September 2026.</strong> <code>run_models.py --online</code> runs the
+online phase on top of every solver's committed schedule and writes 9 extra columns per row; see
+<a href="#online">&sect;5</a>. The open design question &mdash; &ldquo;its result is a distribution
+over the ACET realisation, not one number per instance&rdquo; &mdash; resolved rather than being
+solved: <code>--sets N</code> already provides N independently seeded instances per configuration,
+so the replicate dimension carries that variation exactly as it does for every other factor, and
+one realisation per instance is correct. Repeating realisations within an instance multiplies
+runtime by R for no gain in statistical power.
+<br><br>Two prerequisites landed with it: the ILP solvers now hand back their committed
+job&rarr;processor mapping on <code>mdl._mapping</code> (v2/v3/v4 choose it before building the
+model, v1 reads it out of its own <code>V[i,j,k,x,z]</code> solution), matching the contract the
+heuristics already had &mdash; without it the online phase cannot be given a schedule at all; and
+<code>ONLINE-FREQ</code> and <code>DP-PRUNE</code> were fixed, the latter being why the online phase
+had never actually been run end-to-end on a realistic instance before.</div>
 
 <div class="gap"><strong>5. No file locking in the runners.</strong> Running two runners over one
 batch corrupts <code>results.csv</code> (observed: 4,046 duplicate + 7 malformed rows). There is a

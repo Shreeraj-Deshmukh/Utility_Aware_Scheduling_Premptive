@@ -1,12 +1,35 @@
 """
 Phase 4b — Frequency/segment trade governed by shadow prices.
 
-The heuristic's structural weakness (measured: 40-58% below the exact optimum
-once energy binds) is that it never trades FREQUENCY for OPTIONAL SEGMENTS
-globally.  Phase 4 lowers frequency only far enough to reach energy
-feasibility, and Phase 5 spends whatever energy happens to be left.  Neither
-asks the real question: *is the energy freed by slowing a job down worth more
-than the time it costs?*
+Phase 4 lowers frequency only far enough to reach energy feasibility, and
+Phase 5 spends whatever energy happens to be left.  Neither asks the real
+question: *is the energy freed by slowing a job down worth more than the time
+it costs?*  This phase does.
+
+How much it is worth, measured
+------------------------------
+This docstring used to claim it closed a "40-58% below the exact optimum once
+energy binds" gap.  That figure predated the spec.py rewrite, was never
+re-measured against the current generator, and is NOT what this phase
+delivers.  Paired A/B on identical instances (608 comparisons, 2026-09-30,
+6b swapped for a no-op with nothing else changed):
+
+    heuristic_v5b            2/125 instances improved (1.6%),  +5.2% runtime
+    heuristic_v7             4/125 (3.2%),                    +11.1% runtime
+    heuristic_v6             2/125 (1.6%),                     +5.9% runtime
+    heuristic_claudeoptimal  1/125 (0.8%),                     +3.1% runtime
+    0 regressions in all 608 (the best-so-far restore below guarantees this)
+
+Wins run +0.9% to +6.9% utility and land ENTIRELY at rho = 0.4-0.5, so "it
+matters once energy binds" is directionally right — it is just rare.  It is
+kept for that tail: it never loses, and it pays in exactly the energy-
+constrained regime where the heuristic is furthest from the ILP.
+
+Why it is rare: `lambda > 0` needs a segment that is time-feasible but
+energy-blocked, and Phase 5's case ii.B (greedy.py) has the identical
+predicate and clears those with multi-donor stacking immediately before this
+runs.  Measured: 74% of calls exit at the `lambda <= _TOL` check below without
+evaluating a single candidate.  See ISSUES.md -> 6B-INERT.
 
 Economics
 ---------

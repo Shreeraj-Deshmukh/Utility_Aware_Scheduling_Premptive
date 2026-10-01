@@ -3,7 +3,14 @@ USRT model-runner CLI — run the offline models over generated test-cases.
 
 Runs each instance in a sweep's manifest through the selected models and writes
 a long-format results.csv (one row per instance x model) beside each manifest.
-Online is intentionally excluded (it needs actual execution times).
+
+--online additionally runs the online phase on top of each solver's committed
+schedule.  It is a MODIFIER, not a model: the online phase does not compete with
+the solvers, it tops up whatever schedule one of them produced, so its numbers
+are extra COLUMNS on that solver's row.  Every online result therefore stays
+paired with the offline schedule it came from, with no join.  ACETs come from
+the per-task `theta` the generator bakes into each instance (theta ~ U(xi, 1)),
+so runs are reproducible and `xi` is the OFAT factor that drives them.
 
 Usage
 -----
@@ -15,6 +22,7 @@ Options (defaults in brackets):
   --heur V        heuristic variant (v5b,v5a,v4,...)       [v5b]
   --time-limit S  Gurobi TimeLimit seconds per ILP solve  [30]
   --mip-gap G     stop ILP at this relative gap (0=exact)  [0]
+  --online        also run the online phase on each schedule [off]
   --no-resume     recompute rows already in results.csv   [resume on]
 
 Examples
@@ -23,6 +31,8 @@ Examples
   python run_models.py testcases/ --models ilp_v2,heuristic        # whole tree
   python run_models.py testcases/x/manifest.csv --models ilp_v2,ilp_v3  # mapping A/B
   python run_models.py testcases/util_success --models heuristic   # one sweep
+  python run_models.py tc_x --models ilp_v1,ilp_v4 --online        # + online phase
+  python run_models.py tc_x/xi --models heuristic --heur v5b --online
 
 Notes
 -----
@@ -30,6 +40,13 @@ Notes
     ILP.py file itself still hard-codes 1.0/0.5 -- fix it there for standalone use.
   * results.csv = manifest columns + {model,status,feasible,utility,energy,
     util_per_energy,runtime,gap,error}.  Join back on 'file' to plot vs any knob.
+  * --online appends {online_utility,online_added,online_feasible,
+    online_wcet_energy,online_realised_energy,online_trim_loss,
+    online_trim_events,online_mean_theta,online_runtime}.  online_wcet_energy
+    MAY exceed B and that is not a violation -- it is the worst-case commitment,
+    over-counted by exactly what the early finishers saved; online_realised_energy
+    is the one C3 binds on.  --online widens the schema, so its results.csv
+    cannot be shared with a plain run's (the header guard will refuse).
 """
 
 import sys
@@ -54,17 +71,20 @@ def main():
     ap.add_argument("--heur", default="v5b")
     ap.add_argument("--time-limit", type=float, default=30)
     ap.add_argument("--mip-gap", type=float, default=0.0)
+    ap.add_argument("--online", action="store_true",
+                    help="also run the online phase on each committed schedule")
     ap.add_argument("--no-resume", action="store_true")
     args = ap.parse_args()
 
     models = tuple(m.strip() for m in args.models.split(",") if m.strip())
     mans = find_manifests(args.target)
-    print(f"models={models}  heur={args.heur}  time_limit={args.time_limit}s")
+    print(f"models={models}  heur={args.heur}  time_limit={args.time_limit}s"
+          f"  online={'on' if args.online else 'off'}")
     print(f"found {len(mans)} manifest(s)\n")
     for m in mans:
         run_manifest(m, models=models, time_limit=args.time_limit,
                      heur_variant=args.heur, mip_gap=args.mip_gap,
-                     resume=not args.no_resume)
+                     resume=not args.no_resume, online=args.online)
 
 
 if __name__ == "__main__":

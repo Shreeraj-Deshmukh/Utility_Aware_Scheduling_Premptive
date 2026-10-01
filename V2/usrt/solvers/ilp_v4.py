@@ -193,6 +193,11 @@ def solve_ilp_v4(processors, tasks, B_BUDGET):
 
     _print_ilp_solution(mdl, Y, tasks, N_tsk, N_job, N_seg, freq_set, N_frq,
                         cum, B_BUDGET, mapping, job_r, job_d)
+    # Hand the committed job->processor mapping back with the model: a
+    # schedule is only meaningful relative to the assignment it was built
+    # on, and the online phase needs it (ISSUES.md -> NO-ONLINE-ADAPTER).
+    # Underscore-prefixed attributes are gurobipy's own idiom for this.
+    mdl._mapping = dict(mapping)
     return mdl
 
 

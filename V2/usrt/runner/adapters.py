@@ -156,8 +156,106 @@ def _cum_freq(processors, tasks):
     return cum, processors[0]['frequencies']
 
 
+# ── online phase (an ADD-ON to a solver's schedule, not a model) ─────────────
+# The online phase does not compete with the solvers; it runs on top of whatever
+# schedule one of them committed, so its numbers belong in EXTRA COLUMNS on that
+# solver's row, not in rows of its own.  That keeps every online figure paired
+# with the offline schedule it came from, with no join.
+ONLINE_COLS = ["online_utility", "online_added", "online_feasible",
+               "online_wcet_energy", "online_realised_energy",
+               "online_trim_loss", "online_trim_events",
+               "online_mean_theta", "online_runtime"]
+
+
+def online_blank():
+    """Empty online columns, so the CSV header stays stable on every row."""
+    return {c: "" for c in ONLINE_COLS}
+
+
+def _mean_theta(tasks):
+    """
+    Mean per-task ACET multiplier actually used.
+
+    Generated instances carry `theta ~ U(xi, 1)` per task (gen/generate.py), and
+    OnlineSimulator prefers it over any simulator knob, so the realisation is
+    reproducible data rather than a setting.  Recording the mean here is what
+    makes "online gain vs theta" plottable straight from results.csv; it is ""
+    for a hand-written instance with no theta, which also flags that the run
+    fell back to SimConfig's ratio.
+    """
+    ths = [t["theta"] for t in tasks if t.get("theta") is not None]
+    return round(sum(ths) / len(ths), 6) if len(ths) == len(tasks) and ths else ""
+
+
+def _online_metrics(processors, tasks, B, seg_k, freq_idx, mapping):
+    """Run the online phase over one committed schedule; return its columns."""
+    from usrt.online.simulator import OnlineSimulator, SimConfig
+    t0 = time.perf_counter()
+    with _suppress():
+        sim = OnlineSimulator(processors, tasks, B, dict(seg_k), dict(freq_idx),
+                              dict(mapping), config=SimConfig(verbose=False))
+        s = sim.run()
+    rt = time.perf_counter() - t0
+    # Both energies are recorded deliberately.  wcet_energy may exceed B and
+    # that is not a violation -- it is the WCET commitment, over-counted by
+    # exactly the energy the early finishers saved.  realised_energy is what C3
+    # actually binds on.  Reporting only the first invites a false alarm.
+    return dict(
+        online_utility=round(s["final_utility"], 6),
+        online_added=round(s["online_added"], 6),
+        online_feasible=1 if s["feasible"] else 0,
+        online_wcet_energy=round(s["wcet_energy"], 6),
+        online_realised_energy=round(s["actual_energy"], 6),
+        online_trim_loss=round(s["trim_loss"], 6),
+        online_trim_events=s["trim_events"],
+        online_mean_theta=_mean_theta(tasks),
+        online_runtime=round(rt, 4),
+    )
+
+
+def _with_online(metrics, online, processors, tasks, B,
+                 seg_k, freq_idx, mapping):
+    """Attach online columns to a solver's metrics, or blanks if not requested."""
+    if not online:
+        return metrics
+    if seg_k is None or metrics.get("model_feasible") != 1:
+        return {**metrics, **online_blank()}      # nothing admissible to top up
+    try:
+        return {**metrics, **_online_metrics(processors, tasks, B,
+                                             seg_k, freq_idx, mapping)}
+    except Exception as e:
+        # An online failure must not discard the offline result on the row.
+        return {**metrics, **online_blank(),
+                "error": (metrics.get("error") or "") + f" online:{repr(e)[:120]}"}
+
+
+def _ilp_schedule(mdl, cum, freq_set):
+    """
+    Recover (seg_k, freq_idx, mapping) from a solved ILP model.
+
+    Every ILP exposes Y[i,j,k,z] (segment + frequency).  The mapping is carried
+    on `mdl._mapping`, set by each solver: v2/v3/v4 choose it before building
+    the model, v1 reads it out of its own V[i,j,k,x,z] solution.
+    """
+    if mdl.SolCount == 0:
+        return None, None, None
+    seg_k, freq_idx = {}, {}
+    for v in mdl.getVars():
+        if v.X > 0.5:
+            m = _YRE.match(v.VarName)
+            if m:
+                i, j, k, z = map(int, m.groups())
+                seg_k[(i, j)] = k
+                freq_idx[(i, j)] = z
+    mapping = getattr(mdl, "_mapping", None)
+    if not mapping or not seg_k:
+        return None, None, None
+    return seg_k, freq_idx, mapping
+
+
 # ── ILP v1 ────────────────────────────────────────────────────────────────
-def run_ilp_v1(processors, tasks, B, time_limit=30, mip_gap=0.0):
+def run_ilp_v1(processors, tasks, B, time_limit=30, mip_gap=0.0,
+               online=False):
     import ILP                                   # root-level ILP.py
     ILP.ALPHA, ILP.BETA = ALPHA, BETA            # align energy model to models.py
     _prep_gurobi(time_limit, mip_gap)
@@ -165,40 +263,59 @@ def run_ilp_v1(processors, tasks, B, time_limit=30, mip_gap=0.0):
     t0 = time.perf_counter()
     with _suppress():
         mdl = ILP.solve(processors, tasks, B)
-    return _ilp_metrics(mdl, cum, freq_set, "ilp_v1", time.perf_counter() - t0)
+    metrics = _ilp_metrics(mdl, cum, freq_set, "ilp_v1",
+                           time.perf_counter() - t0)
+    seg_k, freq_idx, mapping = _ilp_schedule(mdl, cum, freq_set)
+    return _with_online(metrics, online, processors, tasks, B,
+                        seg_k, freq_idx, mapping)
 
 
 # ── ILP v2 ────────────────────────────────────────────────────────────────
-def run_ilp_v2(processors, tasks, B, time_limit=30, mip_gap=0.0):
+def run_ilp_v2(processors, tasks, B, time_limit=30, mip_gap=0.0,
+               online=False):
     from usrt.solvers import ilp_v2
     _prep_gurobi(time_limit, mip_gap)
     cum, freq_set = _cum_freq(processors, tasks)
     t0 = time.perf_counter()
     with _suppress():
         mdl = ilp_v2.solve_ilp_v2(processors, tasks, B)
-    return _ilp_metrics(mdl, cum, freq_set, "ilp_v2", time.perf_counter() - t0)
+    metrics = _ilp_metrics(mdl, cum, freq_set, "ilp_v2",
+                           time.perf_counter() - t0)
+    seg_k, freq_idx, mapping = _ilp_schedule(mdl, cum, freq_set)
+    return _with_online(metrics, online, processors, tasks, B,
+                        seg_k, freq_idx, mapping)
 
 
 # -- ILP v3 ----------------------------------------------------------------
-def run_ilp_v3(processors, tasks, B, time_limit=30, mip_gap=0.0):
+def run_ilp_v3(processors, tasks, B, time_limit=30, mip_gap=0.0,
+               online=False):
     from usrt.solvers import ilp_v3
     _prep_gurobi(time_limit, mip_gap)
     cum, freq_set = _cum_freq(processors, tasks)
     t0 = time.perf_counter()
     with _suppress():
         mdl = ilp_v3.solve_ilp_v3(processors, tasks, B)
-    return _ilp_metrics(mdl, cum, freq_set, "ilp_v3", time.perf_counter() - t0)
+    metrics = _ilp_metrics(mdl, cum, freq_set, "ilp_v3",
+                           time.perf_counter() - t0)
+    seg_k, freq_idx, mapping = _ilp_schedule(mdl, cum, freq_set)
+    return _with_online(metrics, online, processors, tasks, B,
+                        seg_k, freq_idx, mapping)
 
 
 # -- ILP v4 ----------------------------------------------------------------
-def run_ilp_v4(processors, tasks, B, time_limit=30, mip_gap=0.0):
+def run_ilp_v4(processors, tasks, B, time_limit=30, mip_gap=0.0,
+               online=False):
     from usrt.solvers import ilp_v4
     _prep_gurobi(time_limit, mip_gap)
     cum, freq_set = _cum_freq(processors, tasks)
     t0 = time.perf_counter()
     with _suppress():
         mdl = ilp_v4.solve_ilp_v4(processors, tasks, B)
-    return _ilp_metrics(mdl, cum, freq_set, "ilp_v4", time.perf_counter() - t0)
+    metrics = _ilp_metrics(mdl, cum, freq_set, "ilp_v4",
+                           time.perf_counter() - t0)
+    seg_k, freq_idx, mapping = _ilp_schedule(mdl, cum, freq_set)
+    return _with_online(metrics, online, processors, tasks, B,
+                        seg_k, freq_idx, mapping)
 
 
 # ── Heuristic ───────────────────────────────────────────────────────────────
@@ -244,7 +361,7 @@ def _schedule_feasible(processors, tasks, mapping, seg_k, freq_idx,
                             freq_set, cum, len(processors))
 
 
-def run_baseline(processors, tasks, B, time_limit=None):
+def run_baseline(processors, tasks, B, time_limit=None, online=False):
     """greedy_SPS_Baseline: SPS mapping, f_max fixed, greedy segments."""
     if not _mandatory_feasible(processors, tasks):
         return dict(model="greedy_sps_baseline", status="infeasible",
@@ -268,13 +385,16 @@ def run_baseline(processors, tasks, B, time_limit=None):
                     util_per_energy="", runtime=round(rt, 4), gap="",
                     error="C2: committed schedule misses a deadline")
     upe = tot_u / tot_e if tot_e > 1e-12 else ""
-    return dict(model="greedy_sps_baseline", status="solved", model_feasible=1,
-                utility=round(tot_u, 6), energy=round(tot_e, 6),
-                util_per_energy=(round(upe, 6) if upe != "" else ""),
-                runtime=round(rt, 4), gap="", error="")
+    metrics = dict(model="greedy_sps_baseline", status="solved", model_feasible=1,
+                   utility=round(tot_u, 6), energy=round(tot_e, 6),
+                   util_per_energy=(round(upe, 6) if upe != "" else ""),
+                   runtime=round(rt, 4), gap="", error="")
+    return _with_online(metrics, online, processors, tasks, B,
+                        seg_k, freq_idx, mapping)
 
 
-def run_heuristic(processors, tasks, B, variant="v5b", time_limit=None):
+def run_heuristic(processors, tasks, B, variant="v5b", time_limit=None,
+                  online=False):
     feasible = _mandatory_feasible(processors, tasks)
     if not feasible:
         return dict(model=f"heuristic_{variant}", status="infeasible", model_feasible=0,
@@ -309,31 +429,42 @@ def run_heuristic(processors, tasks, B, variant="v5b", time_limit=None):
                     error="C2: committed schedule misses a deadline")
 
     upe = tot_u / tot_e if tot_e > 1e-12 else ""
-    return dict(model=f"heuristic_{variant}", status="solved", model_feasible=1,
-                utility=round(tot_u, 6), energy=round(tot_e, 6),
-                util_per_energy=(round(upe, 6) if upe != "" else ""),
-                runtime=round(rt, 4), gap="", error="")
+    metrics = dict(model=f"heuristic_{variant}", status="solved", model_feasible=1,
+                   utility=round(tot_u, 6), energy=round(tot_e, 6),
+                   util_per_energy=(round(upe, 6) if upe != "" else ""),
+                   runtime=round(rt, 4), gap="", error="")
+    return _with_online(metrics, online, processors, tasks, B,
+                        seg_k, freq_idx, mapping)
 
 
 def run_model(name, processors, tasks, B, time_limit=30, heur_variant="v5b",
-              mip_gap=0.0):
-    """Dispatch to the right adapter; never raise — errors become a status row."""
+              mip_gap=0.0, online=False):
+    """
+    Dispatch to the right adapter; never raise — errors become a status row.
+
+    `online` is a MODIFIER, not a model: it runs the online phase on top of
+    whatever schedule the chosen solver committed and returns its numbers as
+    extra columns on the same row.  That is what keeps each online result
+    paired with the offline schedule that produced it.
+    """
     try:
         if name == "ilp_v1":
-            return run_ilp_v1(processors, tasks, B, time_limit, mip_gap)
+            return run_ilp_v1(processors, tasks, B, time_limit, mip_gap, online)
         if name == "ilp_v2":
-            return run_ilp_v2(processors, tasks, B, time_limit, mip_gap)
+            return run_ilp_v2(processors, tasks, B, time_limit, mip_gap, online)
         if name == "ilp_v3":
-            return run_ilp_v3(processors, tasks, B, time_limit, mip_gap)
+            return run_ilp_v3(processors, tasks, B, time_limit, mip_gap, online)
         if name == "ilp_v4":
-            return run_ilp_v4(processors, tasks, B, time_limit, mip_gap)
+            return run_ilp_v4(processors, tasks, B, time_limit, mip_gap, online)
         if name == "greedy_sps_baseline":
-            return run_baseline(processors, tasks, B)
+            return run_baseline(processors, tasks, B, online=online)
         if name in ("heuristic", "heuristic_v7", "heuristic_v6", "heuristic_v5b", "heuristic_v5a", "heuristic_v4",
                     "heuristic_v3", "heuristic_claudeoptimal"):
             variant = heur_variant if name == "heuristic" else name.split("_", 1)[1]
-            return run_heuristic(processors, tasks, B, variant=variant)
+            return run_heuristic(processors, tasks, B, variant=variant,
+                                 online=online)
         raise ValueError(f"unknown model {name}")
     except Exception as e:                        # keep the sweep going
-        return dict(model=name, status="error", model_feasible=0, utility="", energy="",
-                    util_per_energy="", runtime="", gap="", error=repr(e)[:200])
+        err = dict(model=name, status="error", model_feasible=0, utility="", energy="",
+                   util_per_energy="", runtime="", gap="", error=repr(e)[:200])
+        return {**err, **online_blank()} if online else err

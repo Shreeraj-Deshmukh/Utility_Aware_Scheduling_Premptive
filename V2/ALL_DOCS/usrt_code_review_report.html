@@ -118,7 +118,7 @@
   <h1>USRT &mdash; Consolidated Issue Register</h1>
   <p>Single source of truth for bugs, gaps and open questions across the V2 codebase.</p>
   <p>Verified against the live tree on <strong>12 September 2026</strong>, updated
-     <strong>19 September 2026</strong> &middot; supersedes
+     <strong>19</strong> and <strong>30 September 2026</strong> &middot; supersedes
      <code>audit_issues_22Aug.html</code>, <code>15Aug_Online_Audit.html</code> and the
      12 Jun review that previously lived at this filename.</p>
   <p style="margin-top:.7rem;padding:.6rem .9rem;background:rgba(255,255,255,.14);border-radius:7px;">
@@ -126,7 +126,11 @@
      A previously-unfiled blocker, <strong>DP-PRUNE</strong>, was found and fixed in the same pass:
      the online phase did not <em>terminate</em> on a realistic instance, so it had never actually
      been run end-to-end. It now completes in <strong>7.4&nbsp;s</strong>, which unblocks
-     NO-ONLINE-ADAPTER.</p>
+     NO-ONLINE-ADAPTER.<br><br>
+     <strong>30 Sep:</strong> <strong>6B-INERT re-measured and closed</strong> &mdash; &ldquo;never
+     fires&rdquo; was an underpowered sample, not a fact. It fires in 1&ndash;3% of instances, worth
+     up to +6.9% utility, entirely at &rho;&nbsp;=&nbsp;0.4&ndash;0.5. Kept as-is; docs corrected.
+     Knock-on: the V5AB-COMPARE confound is now <strong>real, not nominal</strong>.</p>
 </header>
 
 <main>
@@ -167,7 +171,7 @@
 <nav class="toc">
   <strong>Contents</strong>
   <ul>
-    <li><a href="#live">1. Live issues</a> &mdash; 0 critical &middot; 0 high &middot; 4 medium &middot; 4 low/latent</li>
+    <li><a href="#live">1. Live issues</a> &mdash; 0 critical &middot; 0 high &middot; 2 medium &middot; 4 low/latent<br><span class="muted">(30 Sep: 6B-INERT closed by decision &mdash; re-measured, kept as-is; ONLINE-DEMO fixed 19 Sep)</span></li>
     <li><a href="#gaps">2. Feature gaps</a> (not defects)</li>
     <li><a href="#fixed">3. Fixed &mdash; closed ledger</a></li>
     <li><a href="#notdefect">4. Examined, not defects</a></li>
@@ -249,34 +253,42 @@ means a measurement taken that day, not a claim carried from an earlier document
 </section>
 
 <section class="card">
-  <span class="badge med">Medium</span>
+  <span class="badge low">Re-measured 30 Sep &mdash; keep</span>
   <span class="loc">usrt/phases/freq_trade.py</span>
-  <h3>6B-INERT &mdash; Phase 6b never fires</h3>
-  <p>Phase 6b is the shadow-price frequency&harr;segment trade
-  (<code>&lambda;&middot;&Delta;E &gt; &mu;&middot;&Delta;T</code>), credited in its own docstring with
-  closing a gap that leaves the heuristic <strong>40&ndash;58% below the exact optimum once energy
-  binds</strong>. It does not fire.</p>
-  <div class="evidence"><strong>Evidence.</strong> 0 moves in 72 instances (4 Sep) and 0 in 20
-  instances (12 Sep re-check), across &rho; = 0.4&ndash;1.0. In the 4 Sep run &lambda; was positive
-  &mdash; something <em>was</em> energy-blocked &mdash; in 26 of 72 instances, and still no move was
-  made.</div>
-  <p>Three causes, traced on a live instance:</p>
-  <ul>
-    <li><strong>&mu; is a global price for a per-processor resource.</strong> With &mu;=0 the model
-    concludes &ldquo;time is free&rdquo;. In the traced case the chosen donor freed exactly the energy
-    the target needed and spent exactly the window slack the target needed &mdash; on the same core.
-    Net: zero segments added.</li>
-    <li><strong>Atomicity.</strong> <code>&lambda;&middot;&Delta;E &gt; &mu;&middot;&Delta;T</code> is
-    a marginal, continuous criterion, but segments are indivisible. One downshift must free an
-    entire shortfall or it yields nothing. Phase 5&rsquo;s case ii.B handles this correctly by
-    stacking donors until <code>gained &ge; need</code>; 6b makes exactly one downshift per round.</li>
-    <li><strong>It gives up immediately</strong> &mdash; <code>break</code> on the first
-    non-improving round rather than trying the next-best candidate.</li>
-  </ul>
-  <div class="fix"><strong>Not a regression risk.</strong> 6b keeps a best-so-far and restores it, so
-  it provably cannot return a worse schedule. The cost is that a documented gap is recorded as closed
-  when it is not. The 40&ndash;58% figure predates the <code>spec.py</code> rewrite and has never been
-  re-measured against the current generator.</div>
+  <h3>6B-INERT &mdash; Phase 6b fires <em>rarely</em>, not never</h3>
+  <div class="evidence"><strong>The original finding was underpowered, not wrong-headed.</strong>
+  &ldquo;0 moves in 72 instances&rdquo; and &ldquo;0 in 20&rdquo; were read as inertness. At the rate
+  since measured, zero in 72 has probability 0.984<sup>72</sup> &asymp; <strong>31%</strong> and zero
+  in 20 &asymp; <strong>72%</strong> &mdash; together ~23% likely <em>even with 6b behaving exactly
+  as it does</em>. Those samples could not detect a 1-in-60 event.</div>
+  <p><strong>Paired A/B, 608 comparisons (30 Sep)</strong> &mdash; identical instances, 6b swapped
+  for a no-op, nothing else changed; tight-energy grid &rho;&nbsp;=&nbsp;0.25&ndash;0.5:</p>
+  <table>
+    <tr><th>solver</th><th>instances improved</th><th>runtime overhead</th></tr>
+    <tr><td><code>heuristic_v5b</code></td><td>2 / 125 (1.6%)</td><td>+5.2%</td></tr>
+    <tr><td><code>heuristic_v7</code></td><td>4 / 125 (3.2%)</td><td>+11.1%</td></tr>
+    <tr><td><code>heuristic_v6</code></td><td>2 / 125 (1.6%)</td><td>+5.9%</td></tr>
+    <tr><td><code>heuristic_claudeoptimal</code></td><td>1 / 125 (0.8%)</td><td>+3.1%</td></tr>
+    <tr><td><code>heuristic_v5b</code>, full &rho;&nbsp;=&nbsp;0.2&ndash;1.0</td><td>1 / 108 (0.9%)</td><td>+0.5%</td></tr>
+  </table>
+  <p><strong>0 regressions in all 608</strong>, as the best-so-far restore guarantees. Wins run
+  <strong>+0.9% to +6.9%</strong> utility and land <strong>entirely at &rho; = 0.4&ndash;0.5</strong>
+  &mdash; so &ldquo;it matters once energy binds&rdquo; is directionally right, just rare.</p>
+  <p><strong>Why it is rare.</strong> Measured exit points over 54 instances: <strong>74% exit with
+  <code>&lambda; = 0</code> before evaluating a single candidate</strong>, 19% find no feasible
+  profitable downshift, only <strong>7%</strong> ever run a round. The root cause is structural and
+  was not among the three originally listed: <strong>6b's entry condition is exactly what Phase 5 is
+  built to destroy</strong> &mdash; <code>&lambda; &gt; 0</code> needs a segment that is
+  time-feasible but energy-blocked, and Phase 5's case ii.B has the identical predicate and clears
+  those with multi-donor stacking immediately beforehand. The three original causes (global
+  <code>&mu;</code> for a per-processor resource; one-downshift atomicity; <code>break</code> on the
+  first non-improving round) are all real but <em>secondary</em> &mdash; each only operates inside a
+  round.</p>
+  <div class="fix"><strong>Decision (30 Sep): keep as-is, correct the documentation.</strong> It
+  never loses, it wins several percent precisely where the heuristic is weakest against the ILP, and
+  the runtime cost is modest. Deleting it would trade that tail for ~5% runtime. The
+  <code>freq_trade.py</code> docstring no longer claims to close a 40&ndash;58% gap &mdash; that
+  figure predated the <code>spec.py</code> rewrite and was never re-measured.</div>
 </section>
 
 <section class="card">
@@ -305,9 +317,13 @@ means a measurement taken that day, not a claim carried from an earlier document
   <code>phase_freq_utility_trade</code> across all seven solvers.</div>
   <div class="fix"><strong>Consequence.</strong> <code>v5a</code> vs <code>v5b</code> is read as
   &ldquo;Refine 2a vs 2b&rdquo;, but it is really &ldquo;2a without 6b vs 2b with 6b&rdquo;. The
-  &ldquo;one capability per step&rdquo; reading of the ladder no longer holds. <em>Note:</em> given
-  6B-INERT above, 6b currently contributes nothing measurable, so the confound may be
-  <strong>nominal rather than actual</strong> &mdash; but the ladder should still be made honest.</div>
+  &ldquo;one capability per step&rdquo; reading of the ladder no longer holds.
+  <em><strong>Update 30 Sep:</strong> this entry used to hedge that the confound might be</em>
+  nominal <em>because 6b contributed nothing measurable. That hedge is</em>
+  <strong>falsified</strong> &mdash; the paired A/B above shows 6b improving 1.6% of v5b instances
+  and 3.2% of v7's, by up to +6.9%, concentrated at &rho; = 0.4&ndash;0.5. The confound is
+  <strong>real</strong>, and it bites in exactly the tight-energy regime the ladder is most often
+  read in.</div>
 </section>
 
 <section class="card">

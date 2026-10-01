@@ -255,6 +255,16 @@ def solve(processors, tasks, B_BUDGET):
         mdl, V, Y, tasks, N_tsk, N_job, N_seg,
         N_prc, freq_set, N_frq, cum, E, e_eff, B_BUDGET,
     )
+
+    # Hand the committed job->processor mapping back with the model.  v1 chooses
+    # the mapping itself (it is part of V), so unlike v2/v3/v4 it has to be read
+    # out of the solution.  The online phase needs it: a schedule is only
+    # meaningful relative to the assignment it was built on
+    # (ISSUES.md -> NO-ONLINE-ADAPTER).  Underscore-prefixed attributes are
+    # gurobipy's own idiom for carrying user data on a model.
+    mdl._mapping = ({(i, j): x for (i, j, k, x, z) in V_keys
+                     if V[i, j, k, x, z].X > 0.5}
+                    if mdl.SolCount else {})
     return mdl
 
 
